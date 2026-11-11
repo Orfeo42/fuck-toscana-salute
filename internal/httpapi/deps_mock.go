@@ -119,6 +119,9 @@ var _ LoginFlow = &MockLoginFlow{}
 //			StartFunc: func(ctx context.Context, portal session.Portal) error {
 //				panic("mock out the Start method")
 //			},
+//			StartAllFunc: func(ctx context.Context) error {
+//				panic("mock out the StartAll method")
+//			},
 //			StatesFunc: func() map[session.Portal]loginflow.State {
 //				panic("mock out the States method")
 //			},
@@ -132,6 +135,9 @@ type MockLoginFlow struct {
 	// StartFunc mocks the Start method.
 	StartFunc func(ctx context.Context, portal session.Portal) error
 
+	// StartAllFunc mocks the StartAll method.
+	StartAllFunc func(ctx context.Context) error
+
 	// StatesFunc mocks the States method.
 	StatesFunc func() map[session.Portal]loginflow.State
 
@@ -144,12 +150,18 @@ type MockLoginFlow struct {
 			// Portal is the portal argument value.
 			Portal session.Portal
 		}
+		// StartAll holds details about calls to the StartAll method.
+		StartAll []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 		// States holds details about calls to the States method.
 		States []struct {
 		}
 	}
-	lockStart  sync.RWMutex
-	lockStates sync.RWMutex
+	lockStart    sync.RWMutex
+	lockStartAll sync.RWMutex
+	lockStates   sync.RWMutex
 }
 
 // Start calls StartFunc.
@@ -185,6 +197,38 @@ func (mock *MockLoginFlow) StartCalls() []struct {
 	mock.lockStart.RLock()
 	calls = mock.calls.Start
 	mock.lockStart.RUnlock()
+	return calls
+}
+
+// StartAll calls StartAllFunc.
+func (mock *MockLoginFlow) StartAll(ctx context.Context) error {
+	if mock.StartAllFunc == nil {
+		panic("MockLoginFlow.StartAllFunc: method is nil but LoginFlow.StartAll was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockStartAll.Lock()
+	mock.calls.StartAll = append(mock.calls.StartAll, callInfo)
+	mock.lockStartAll.Unlock()
+	return mock.StartAllFunc(ctx)
+}
+
+// StartAllCalls gets all the calls that were made to StartAll.
+// Check the length with:
+//
+//	len(mockedLoginFlow.StartAllCalls())
+func (mock *MockLoginFlow) StartAllCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockStartAll.RLock()
+	calls = mock.calls.StartAll
+	mock.lockStartAll.RUnlock()
 	return calls
 }
 

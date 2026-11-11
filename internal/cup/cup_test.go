@@ -30,6 +30,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc, identity session.Iden
 			return "tok", nil
 		},
 		IdentityFunc: func() session.Identity { return identity },
+		StatusFunc:   func() session.Status { return session.Status{GestioneReady: true} },
 	}
 	c := New(upstream.New(srv.Client()), tokens)
 	c.cupBe = srv.URL + "/be"
@@ -197,10 +198,14 @@ func TestAppointments(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("missing tessera", func(t *testing.T) {
+	t.Run("gestione not ready", func(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			t.Fatal("no request expected")
-		}, session.Identity{CodiceFiscale: testCF})
+		}, identity)
+		c.tokens = &MockTokenSource{
+			IdentityFunc: func() session.Identity { return identity },
+			StatusFunc:   func() session.Status { return session.Status{} },
+		}
 
 		_, err := c.Appointments(context.Background(), testNRE)
 

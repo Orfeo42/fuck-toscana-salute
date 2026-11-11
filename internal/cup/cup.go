@@ -102,6 +102,7 @@ const (
 type TokenSource interface {
 	AccessToken(ctx context.Context, portal session.Portal) (string, error)
 	Identity() session.Identity
+	Status() session.Status
 }
 
 type Client struct {
@@ -255,10 +256,10 @@ func (c *Client) mapPrescription(item infoRicetta) Prescription {
 }
 
 func (c *Client) Appointments(ctx context.Context, nre string) ([]Appointment, error) {
-	id := c.tokens.Identity()
-	if id.TesseraSanitaria == "" {
+	if !c.tokens.Status().GestioneReady {
 		return nil, ErrGestioneNotReady
 	}
+	id := c.tokens.Identity()
 	if id.CodiceFiscale == "" {
 		return nil, session.ErrNotLoggedIn
 	}

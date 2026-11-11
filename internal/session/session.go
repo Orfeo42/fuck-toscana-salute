@@ -17,6 +17,8 @@ type Tokens struct {
 	Refresh          string
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
+	GestioneVerified bool
+	StartedAt        time.Time
 }
 
 type Identity struct {
@@ -52,7 +54,19 @@ const (
 	ErrNotLoggedIn     = sessionError("session: not logged in")
 	ErrSessionExpired  = sessionError("session: expired")
 	ErrRefreshRejected = sessionError("session: refresh rejected by identity provider")
+	ErrNoSnapshot      = sessionError("session: no saved snapshot")
 )
+
+type Snapshot struct {
+	Tokens   map[Portal]Tokens
+	Identity Identity
+}
+
+//go:generate moq -out persister_mock.go . Persister:MockPersister
+type Persister interface {
+	Save(ctx context.Context, snapshot Snapshot) error
+	Load(ctx context.Context) (Snapshot, error)
+}
 
 //go:generate moq -out refresher_mock.go . Refresher:MockRefresher
 type Refresher interface {

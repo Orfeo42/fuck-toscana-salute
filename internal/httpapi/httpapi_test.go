@@ -115,6 +115,34 @@ func TestRegisterStartLogin(t *testing.T) {
 	})
 }
 
+func TestRegisterStartLoginAll(t *testing.T) {
+	t.Run("accepts and starts the combined flow", func(t *testing.T) {
+		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return nil }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{})
+
+		resp := api.Post("/api/login")
+		assert.Equal(t, http.StatusAccepted, resp.Code)
+		assert.Len(t, flow.StartAllCalls(), 1)
+	})
+
+	t.Run("conflict when a login is in progress", func(t *testing.T) {
+		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return loginflow.ErrLoginInProgress }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{})
+
+		assert.Equal(t, http.StatusConflict, api.Post("/api/login").Code)
+	})
+
+	t.Run("internal error on other failures", func(t *testing.T) {
+		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return errors.New("boom") }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{})
+
+		assert.Equal(t, http.StatusInternalServerError, api.Post("/api/login").Code)
+	})
+}
+
 func TestRegisterLogout(t *testing.T) {
 	t.Run("clears the store and returns 204", func(t *testing.T) {
 		store := &MockSessionStore{ClearFunc: func() {}}
@@ -211,6 +239,7 @@ func TestRegisterListAppointments(t *testing.T) {
 		assert.Equal(t, 1, strings.Count(logged, "appointment lookups failed"))
 		assert.Contains(t, logged, "first_exception")
 		assert.Contains(t, logged, "first_error")
+		assert.Contains(t, logged, "first_shape=empty")
 		assert.NotContains(t, logged, "FAKENRE123")
 	})
 

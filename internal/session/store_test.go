@@ -1,8 +1,10 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -13,10 +15,22 @@ import (
 
 var testNow = time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
 
-func newTestStore(refresher Refresher) *Store {
-	s := NewStore(refresher, time.Minute)
+func newPersistStore(refresher Refresher, persister Persister) *Store {
+	s := NewStore(refresher, persister, time.Minute)
 	s.now = func() time.Time { return testNow }
 	return s
+}
+
+func newTestStore(refresher Refresher) *Store {
+	return newPersistStore(refresher, &MockPersister{
+		SaveFunc: func(ctx context.Context, snapshot Snapshot) error { return nil },
+	})
+}
+
+func newRecordingPersister() *MockPersister {
+	return &MockPersister{
+		SaveFunc: func(ctx context.Context, snapshot Snapshot) error { return nil },
+	}
 }
 
 func validTokens(access string) Tokens {
@@ -51,6 +65,41 @@ func TestPut(t *testing.T) {
 
 		assert.Equal(t, StateActive, s.Status().Portals[0].State)
 	})
+
+	t.Run("sets StartedAt and keeps GestioneVerified", func(t *testing.T) {
+		s := newTestStore(&MockRefresher{})
+		tokens := validTokens("access-1")
+		tokens.GestioneVerified = true
+		tokens.StartedAt = testNow.Add(-48 * time.Hour)
+		s.Put(PortalCUP, tokens)
+
+		assert.Equal(t, testNow, s.tokens[PortalCUP].StartedAt)
+		assert.True(t, s.tokens[PortalCUP].GestioneVerified)
+	})
+
+	t.Run("persists snapshot with tokens", func(t *testing.T) {
+		persister := newRecordingPersister()
+		s := newPersistStore(&MockRefresher{}, persister)
+		s.Put(PortalCUP, validTokens("access-1"))
+
+		require.Len(t, persister.SaveCalls(), 1)
+		saved := persister.SaveCalls()[0].Snapshot
+		assert.Equal(t, "access-1", saved.Tokens[PortalCUP].Access)
+		assert.Equal(t, testNow, saved.Tokens[PortalCUP].StartedAt)
+	})
+
+	t.Run("persist error does not fail the operation", func(t *testing.T) {
+		persister := &MockPersister{
+			SaveFunc: func(ctx context.Context, snapshot Snapshot) error { return errors.New("disk full") },
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+		s.Put(PortalCUP, validTokens("access-1"))
+
+		got, err := s.AccessToken(context.Background(), PortalCUP)
+		require.NoError(t, err)
+		assert.Equal(t, "access-1", got)
+		assert.Len(t, persister.SaveCalls(), 1)
+	})
 }
 
 func TestSetIdentity(t *testing.T) {
@@ -75,6 +124,15 @@ func TestSetIdentity(t *testing.T) {
 		s.SetIdentity(Identity{CodiceFiscale: "VRDLGI85B02F205X"})
 
 		assert.Equal(t, "VRDLGI85B02F205X", s.Identity().CodiceFiscale)
+	})
+
+	t.Run("persists identity", func(t *testing.T) {
+		persister := newRecordingPersister()
+		s := newPersistStore(&MockRefresher{}, persister)
+		s.SetIdentity(Identity{CodiceFiscale: "RSSMRA80A01H501U", TesseraSanitaria: "80380000000000000000"})
+
+		require.Len(t, persister.SaveCalls(), 1)
+		assert.Equal(t, Identity{CodiceFiscale: "RSSMRA80A01H501U", TesseraSanitaria: "80380000000000000000"}, persister.SaveCalls()[0].Snapshot.Identity)
 	})
 }
 
@@ -160,6 +218,49 @@ func TestAccessToken(t *testing.T) {
 		assert.Equal(t, StateExpired, s.Status().Portals[0].State)
 	})
 
+	t.Run("refresh carries GestioneVerified and StartedAt and persists", func(t *testing.T) {
+		mock := &MockRefresher{
+			RefreshFunc: func(ctx context.Context, portal Portal, refreshToken string) (Tokens, error) {
+				return validTokens("access-2"), nil
+			},
+		}
+		persister := newRecordingPersister()
+		s := newPersistStore(mock, persister)
+		old := staleTokens("access-1")
+		old.GestioneVerified = true
+		s.Put(PortalCUP, old)
+		started := s.tokens[PortalCUP].StartedAt
+		s.now = func() time.Time { return testNow.Add(10 * time.Minute) }
+
+		got, err := s.AccessToken(context.Background(), PortalCUP)
+		require.NoError(t, err)
+		assert.Equal(t, "access-2", got)
+		assert.True(t, s.tokens[PortalCUP].GestioneVerified)
+		assert.Equal(t, started, s.tokens[PortalCUP].StartedAt)
+		require.Len(t, persister.SaveCalls(), 2)
+		last := persister.SaveCalls()[1].Snapshot
+		assert.Equal(t, "access-2", last.Tokens[PortalCUP].Access)
+		assert.True(t, last.Tokens[PortalCUP].GestioneVerified)
+		assert.Equal(t, started, last.Tokens[PortalCUP].StartedAt)
+	})
+
+	t.Run("expiry persists snapshot without the portal", func(t *testing.T) {
+		mock := &MockRefresher{
+			RefreshFunc: func(ctx context.Context, portal Portal, refreshToken string) (Tokens, error) {
+				return Tokens{}, ErrRefreshRejected
+			},
+		}
+		persister := newRecordingPersister()
+		s := newPersistStore(mock, persister)
+		s.Put(PortalCUP, staleTokens("access-1"))
+
+		_, err := s.AccessToken(context.Background(), PortalCUP)
+		require.ErrorIs(t, err, ErrSessionExpired)
+
+		require.Len(t, persister.SaveCalls(), 2)
+		assert.NotContains(t, persister.SaveCalls()[1].Snapshot.Tokens, PortalCUP)
+	})
+
 	t.Run("concurrent callers trigger one refresh", func(t *testing.T) {
 		mock := &MockRefresher{
 			RefreshFunc: func(ctx context.Context, portal Portal, refreshToken string) (Tokens, error) {
@@ -226,7 +327,9 @@ func TestStatus(t *testing.T) {
 
 	t.Run("gestione not ready without identity", func(t *testing.T) {
 		s := newTestStore(&MockRefresher{})
-		s.Put(PortalCUP, validTokens("access-1"))
+		verified := validTokens("access-1")
+		verified.GestioneVerified = true
+		s.Put(PortalCUP, verified)
 
 		assert.False(t, s.Status().GestioneReady)
 	})
@@ -239,9 +342,19 @@ func TestStatus(t *testing.T) {
 		assert.False(t, s.Status().GestioneReady)
 	})
 
-	t.Run("gestione ready with CUP and tessera", func(t *testing.T) {
+	t.Run("gestione not ready when flag is false even with tessera", func(t *testing.T) {
 		s := newTestStore(&MockRefresher{})
 		s.Put(PortalCUP, validTokens("access-1"))
+		s.SetIdentity(Identity{TesseraSanitaria: "80380000000000000000"})
+
+		assert.False(t, s.Status().GestioneReady)
+	})
+
+	t.Run("gestione ready with CUP, flag and tessera", func(t *testing.T) {
+		s := newTestStore(&MockRefresher{})
+		verified := validTokens("access-1")
+		verified.GestioneVerified = true
+		s.Put(PortalCUP, verified)
 		s.SetIdentity(Identity{TesseraSanitaria: "80380000000000000000"})
 
 		assert.True(t, s.Status().GestioneReady)
@@ -264,9 +377,120 @@ func TestClear(t *testing.T) {
 		_, err := s.AccessToken(context.Background(), PortalCUP)
 		require.ErrorIs(t, err, ErrNotLoggedIn)
 	})
+
+	t.Run("saves empty snapshot", func(t *testing.T) {
+		persister := newRecordingPersister()
+		s := newPersistStore(&MockRefresher{}, persister)
+		s.Put(PortalCUP, validTokens("access-1"))
+		s.SetIdentity(Identity{CodiceFiscale: "RSSMRA80A01H501U"})
+
+		s.Clear()
+
+		calls := persister.SaveCalls()
+		require.Len(t, calls, 3)
+		assert.Empty(t, calls[2].Snapshot.Tokens)
+		assert.Equal(t, Identity{}, calls[2].Snapshot.Identity)
+	})
+}
+
+func TestRestore(t *testing.T) {
+	t.Run("loads valid tokens and identity", func(t *testing.T) {
+		started := testNow.Add(-2 * time.Hour)
+		tokens := validTokens("access-1")
+		tokens.GestioneVerified = true
+		tokens.StartedAt = started
+		persister := &MockPersister{
+			LoadFunc: func(ctx context.Context) (Snapshot, error) {
+				return Snapshot{
+					Tokens:   map[Portal]Tokens{PortalCUP: tokens},
+					Identity: Identity{CodiceFiscale: "RSSMRA80A01H501U", TesseraSanitaria: "80380000000000000000"},
+				}, nil
+			},
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+
+		require.NoError(t, s.Restore(context.Background()))
+
+		assert.Equal(t, tokens, s.tokens[PortalCUP])
+		assert.Equal(t, started, s.tokens[PortalCUP].StartedAt)
+		assert.Equal(t, Identity{CodiceFiscale: "RSSMRA80A01H501U", TesseraSanitaria: "80380000000000000000"}, s.Identity())
+		assert.True(t, s.Status().GestioneReady)
+	})
+
+	t.Run("skips portals with expired refresh token", func(t *testing.T) {
+		expired := validTokens("access-1")
+		expired.RefreshExpiresAt = testNow.Add(-time.Second)
+		persister := &MockPersister{
+			LoadFunc: func(ctx context.Context) (Snapshot, error) {
+				return Snapshot{Tokens: map[Portal]Tokens{PortalCUP: expired, PortalFSE: validTokens("access-2")}}, nil
+			},
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+
+		require.NoError(t, s.Restore(context.Background()))
+
+		assert.Equal(t, StateLoggedOut, s.Status().Portals[0].State)
+		assert.Equal(t, StateActive, s.Status().Portals[1].State)
+	})
+
+	t.Run("no snapshot returns nil", func(t *testing.T) {
+		persister := &MockPersister{
+			LoadFunc: func(ctx context.Context) (Snapshot, error) { return Snapshot{}, ErrNoSnapshot },
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+
+		require.NoError(t, s.Restore(context.Background()))
+		assert.Equal(t, StateLoggedOut, s.Status().Portals[0].State)
+	})
+
+	t.Run("other error is returned", func(t *testing.T) {
+		errBoom := errors.New("boom")
+		persister := &MockPersister{
+			LoadFunc: func(ctx context.Context) (Snapshot, error) { return Snapshot{}, errBoom },
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+
+		require.ErrorIs(t, s.Restore(context.Background()), errBoom)
+	})
+
+	t.Run("does not save", func(t *testing.T) {
+		persister := &MockPersister{
+			LoadFunc: func(ctx context.Context) (Snapshot, error) {
+				return Snapshot{Tokens: map[Portal]Tokens{PortalCUP: validTokens("access-1")}}, nil
+			},
+			SaveFunc: func(ctx context.Context, snapshot Snapshot) error { return nil },
+		}
+		s := newPersistStore(&MockRefresher{}, persister)
+
+		require.NoError(t, s.Restore(context.Background()))
+		assert.Empty(t, persister.SaveCalls())
+	})
 }
 
 func TestRun(t *testing.T) {
+	t.Run("refreshed log line contains chain_age", func(t *testing.T) {
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(prev)
+
+		mock := &MockRefresher{
+			RefreshFunc: func(ctx context.Context, portal Portal, refreshToken string) (Tokens, error) {
+				return validTokens("access-2"), nil
+			},
+		}
+		s := newTestStore(mock)
+		s.Put(PortalCUP, staleTokens("access-1"))
+		s.now = func() time.Time { return testNow.Add(90 * time.Minute) }
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		s.Run(ctx, 5*time.Millisecond)
+
+		assert.Contains(t, buf.String(), "session refreshed")
+		assert.Contains(t, buf.String(), "chain_age=1h30m0s")
+	})
+
 	t.Run("refreshes near-expiry token and stops on cancel", func(t *testing.T) {
 		mock := &MockRefresher{
 			RefreshFunc: func(ctx context.Context, portal Portal, refreshToken string) (Tokens, error) {

@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zalando/go-keyring"
 
 	"fuck-toscana-salute/internal/config"
 )
 
 func TestRun(t *testing.T) {
+	keyring.MockInit()
+
 	t.Run("stops cleanly on cancel", func(t *testing.T) {
 		t.Setenv("FTS_ADDR", "127.0.0.1:0")
 		t.Setenv("FTS_PROFILE_DIR", t.TempDir())

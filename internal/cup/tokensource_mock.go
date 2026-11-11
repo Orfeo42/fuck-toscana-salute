@@ -25,6 +25,9 @@ var _ TokenSource = &MockTokenSource{}
 //			IdentityFunc: func() session.Identity {
 //				panic("mock out the Identity method")
 //			},
+//			StatusFunc: func() session.Status {
+//				panic("mock out the Status method")
+//			},
 //		}
 //
 //		// use mockedTokenSource in code that requires TokenSource
@@ -38,6 +41,9 @@ type MockTokenSource struct {
 	// IdentityFunc mocks the Identity method.
 	IdentityFunc func() session.Identity
 
+	// StatusFunc mocks the Status method.
+	StatusFunc func() session.Status
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// AccessToken holds details about calls to the AccessToken method.
@@ -50,9 +56,13 @@ type MockTokenSource struct {
 		// Identity holds details about calls to the Identity method.
 		Identity []struct {
 		}
+		// Status holds details about calls to the Status method.
+		Status []struct {
+		}
 	}
 	lockAccessToken sync.RWMutex
 	lockIdentity    sync.RWMutex
+	lockStatus      sync.RWMutex
 }
 
 // AccessToken calls AccessTokenFunc.
@@ -115,5 +125,32 @@ func (mock *MockTokenSource) IdentityCalls() []struct {
 	mock.lockIdentity.RLock()
 	calls = mock.calls.Identity
 	mock.lockIdentity.RUnlock()
+	return calls
+}
+
+// Status calls StatusFunc.
+func (mock *MockTokenSource) Status() session.Status {
+	if mock.StatusFunc == nil {
+		panic("MockTokenSource.StatusFunc: method is nil but TokenSource.Status was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockStatus.Lock()
+	mock.calls.Status = append(mock.calls.Status, callInfo)
+	mock.lockStatus.Unlock()
+	return mock.StatusFunc()
+}
+
+// StatusCalls gets all the calls that were made to Status.
+// Check the length with:
+//
+//	len(mockedTokenSource.StatusCalls())
+func (mock *MockTokenSource) StatusCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockStatus.RLock()
+	calls = mock.calls.Status
+	mock.lockStatus.RUnlock()
 	return calls
 }

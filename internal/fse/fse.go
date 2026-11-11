@@ -79,16 +79,11 @@ type downloadRequest struct {
 }
 
 type downloadResponse struct {
-	Risposta struct {
-		ContenutoRisposta struct {
-			DatoSingolo []datoSingolo `json:"datoSingolo"`
-		} `json:"contenutoRisposta"`
-	} `json:"risposta"`
-}
-
-type datoSingolo struct {
-	NomeCampo   string `json:"nomeCampo"`
-	ValoreCampo string `json:"valoreCampo"`
+	Ricetta struct {
+		NRE        string `json:"nre"`
+		NomeFile   string `json:"nomeFile"`
+		Promemoria string `json:"promemoria"`
+	} `json:"ricetta"`
 }
 
 func New(up *upstream.Client, tokens TokenSource) *Client {
@@ -175,18 +170,12 @@ func (c *Client) PrescriptionPDF(ctx context.Context, documentRef string) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("fse download: %w", err)
 	}
-	fields := resp.Risposta.ContenutoRisposta.DatoSingolo
-	names := make([]string, 0, len(fields))
-	for _, field := range fields {
-		names = append(names, field.NomeCampo)
-		if field.NomeCampo != "ricettaBase64" && field.NomeCampo != "refertoCodificatoBase64" {
-			continue
-		}
-		pdf, err := base64.StdEncoding.DecodeString(field.ValoreCampo)
-		if err != nil {
-			return nil, fmt.Errorf("fse decode document: %w", err)
-		}
-		return pdf, nil
+	if resp.Ricetta.Promemoria == "" {
+		return nil, fmt.Errorf("%w: empty promemoria", ErrNoDocument)
 	}
-	return nil, fmt.Errorf("%w: fields [%s]", ErrNoDocument, strings.Join(names, ","))
+	pdf, err := base64.StdEncoding.DecodeString(resp.Ricetta.Promemoria)
+	if err != nil {
+		return nil, fmt.Errorf("fse decode document: %w", err)
+	}
+	return pdf, nil
 }

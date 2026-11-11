@@ -22,9 +22,15 @@ import (
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
+	"fuck-toscana-salute/internal/vault"
 )
 
-const lookupConcurrency = 4
+const (
+	lookupConcurrency = 4
+	superviseTick     = time.Minute
+	keyringService    = "fuck-toscana-salute"
+	keyringUser       = "session"
+)
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -46,10 +52,14 @@ func run(ctx context.Context) error {
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), cfg.RefreshMargin)
+	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.New(keyringService, keyringUser), cfg.RefreshMargin)
+	if err := store.Restore(ctx); err != nil {
+		slog.WarnContext(ctx, "session restore failed", slog.String("error", err.Error()))
+	}
 	go store.Run(ctx, cfg.RefreshTick)
 
 	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.ProfileDir, cfg.LoginTimeout), store)
+	go flow.Supervise(ctx, store, superviseTick)
 	up := upstream.New(httpClient)
 	fseClient := fse.New(up, store)
 	ag := agenda.New(cup.New(up, store), fseClient, lookupConcurrency)

@@ -141,3 +141,44 @@ func TestStatusErrorExceptionClass(t *testing.T) {
 		assert.Empty(t, statusErr.ExceptionClass())
 	})
 }
+
+func TestStatusErrorShape(t *testing.T) {
+	t.Run("empty body", func(t *testing.T) {
+		assert.Equal(t, "empty", (&StatusError{Status: 500}).Shape())
+	})
+
+	t.Run("object lists sorted keys without values", func(t *testing.T) {
+		statusErr := &StatusError{Status: 500, body: []byte(`{"zeta":"secret-value","alpha":{"inner":"hidden"}}`)}
+		got := statusErr.Shape()
+		assert.Equal(t, "json{alpha,zeta}", got)
+		assert.NotContains(t, got, "secret-value")
+		assert.NotContains(t, got, "inner")
+	})
+
+	t.Run("object keys are capped at 20", func(t *testing.T) {
+		body := `{"k01":1,"k02":1,"k03":1,"k04":1,"k05":1,"k06":1,"k07":1,"k08":1,"k09":1,"k10":1,"k11":1,"k12":1,"k13":1,"k14":1,"k15":1,"k16":1,"k17":1,"k18":1,"k19":1,"k20":1,"k21":1,"k22":1}`
+		got := (&StatusError{Status: 500, body: []byte(body)}).Shape()
+		assert.Equal(t, "json{k01,k02,k03,k04,k05,k06,k07,k08,k09,k10,k11,k12,k13,k14,k15,k16,k17,k18,k19,k20,…}", got)
+	})
+
+	t.Run("array reports length only", func(t *testing.T) {
+		got := (&StatusError{Status: 500, body: []byte(`["secret-a","secret-b"]`)}).Shape()
+		assert.Equal(t, "json[2]", got)
+	})
+
+	t.Run("scalar", func(t *testing.T) {
+		assert.Equal(t, "json:scalar", (&StatusError{Status: 500, body: []byte(`"secret"`)}).Shape())
+		assert.Equal(t, "json:scalar", (&StatusError{Status: 500, body: []byte(`42`)}).Shape())
+	})
+
+	t.Run("plain text reports length only", func(t *testing.T) {
+		got := (&StatusError{Status: 500, body: []byte("Internal server error")}).Shape()
+		assert.Equal(t, "text len=21", got)
+		assert.NotContains(t, got, "Internal")
+	})
+
+	t.Run("html text is flagged", func(t *testing.T) {
+		got := (&StatusError{Status: 500, body: []byte("<HTML><body>oops</body></HTML>")}).Shape()
+		assert.Equal(t, "text len=30 html", got)
+	})
+}

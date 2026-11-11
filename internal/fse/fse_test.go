@@ -160,7 +160,7 @@ func TestPrescriptionPDF(t *testing.T) {
 	t.Run("visit ref hits visit base with nre and null cf fields", func(t *testing.T) {
 		var rec []recordedRequest
 		c := newTestClient(t, newTokens("tok", nil), recordInto(t, &rec, func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"other","valoreCampo":"x"},{"nomeCampo":"ricettaBase64","valoreCampo":"` + encoded + `"}]}}}`))
+			_, err := w.Write([]byte(`{"ricetta":{"nre":"0900A0000000001","nomeFile":"r.pdf","promemoria":"` + encoded + `"}}`))
 			require.NoError(t, err)
 		}))
 
@@ -179,7 +179,7 @@ func TestPrescriptionPDF(t *testing.T) {
 	t.Run("ref without underscore uses whole string as nre", func(t *testing.T) {
 		var rec []recordedRequest
 		c := newTestClient(t, newTokens("tok", nil), recordInto(t, &rec, func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"ricettaBase64","valoreCampo":"` + encoded + `"}]}}}`))
+			_, err := w.Write([]byte(`{"ricetta":{"nre":"0900A0000000001","nomeFile":"r.pdf","promemoria":"` + encoded + `"}}`))
 			require.NoError(t, err)
 		}))
 
@@ -192,7 +192,7 @@ func TestPrescriptionPDF(t *testing.T) {
 	t.Run("prefarm ref hits drug base", func(t *testing.T) {
 		var rec []recordedRequest
 		c := newTestClient(t, newTokens("tok", nil), recordInto(t, &rec, func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"ricettaBase64","valoreCampo":"` + encoded + `"}]}}}`))
+			_, err := w.Write([]byte(`{"ricetta":{"nre":"0900A0000000001","nomeFile":"r.pdf","promemoria":"` + encoded + `"}}`))
 			require.NoError(t, err)
 		}))
 
@@ -203,35 +203,33 @@ func TestPrescriptionPDF(t *testing.T) {
 		assert.JSONEq(t, `{"cfDelegante":null,"nre":"0900A0000000003","cfAssistito":null}`, rec[0].Body)
 	})
 
-	t.Run("accepts refertoCodificatoBase64", func(t *testing.T) {
+	t.Run("empty promemoria returns ErrNoDocument", func(t *testing.T) {
 		c := newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"refertoCodificatoBase64","valoreCampo":"` + encoded + `"}]}}}`))
-			require.NoError(t, err)
-		})
-
-		got, err := c.PrescriptionPDF(context.Background(), "0900A0000000001_X")
-
-		require.NoError(t, err)
-		assert.Equal(t, []byte("%PDF-fake"), got)
-	})
-
-	t.Run("missing field returns ErrNoDocument", func(t *testing.T) {
-		c := newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"other","valoreCampo":"secret-value"}]}}}`))
+			_, err := w.Write([]byte(`{"ricetta":{"nre":"0900A0000000001","nomeFile":"r.pdf","promemoria":""}}`))
 			require.NoError(t, err)
 		})
 
 		got, err := c.PrescriptionPDF(context.Background(), "0900A0000000001_X")
 
 		require.ErrorIs(t, err, ErrNoDocument)
-		assert.ErrorContains(t, err, "fields [other]")
-		assert.NotContains(t, err.Error(), "secret-value")
 		assert.Nil(t, got)
 	})
 
-	t.Run("bad base64 returns error", func(t *testing.T) {
+	t.Run("missing ricetta returns ErrNoDocument", func(t *testing.T) {
 		c := newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"ricettaBase64","valoreCampo":"!!!not-base64"}]}}}`))
+			_, err := w.Write([]byte(`{"other":{}}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.PrescriptionPDF(context.Background(), "0900A0000000001_X")
+
+		require.ErrorIs(t, err, ErrNoDocument)
+		assert.Nil(t, got)
+	})
+
+	t.Run("bad base64 returns error without the value", func(t *testing.T) {
+		c := newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"ricetta":{"promemoria":"!!!not-base64"}}`))
 			require.NoError(t, err)
 		})
 
@@ -239,6 +237,7 @@ func TestPrescriptionPDF(t *testing.T) {
 
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNoDocument)
+		assert.NotContains(t, err.Error(), "!!!not-base64")
 		assert.Nil(t, got)
 	})
 

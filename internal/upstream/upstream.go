@@ -7,14 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 )
 
 const (
 	maxResponseBytes = 8 << 20
 	maxErrorBodyKept = 4 << 10
+	maxShapeKeys     = 20
 	userAgent        = "fuck-toscana-salute"
 )
 
@@ -102,4 +107,30 @@ func stripURL(err error) error {
 		return urlErr.Err
 	}
 	return err
+}
+
+func (e *StatusError) Shape() string {
+	if len(e.body) == 0 {
+		return "empty"
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(e.body, &object); err == nil && object != nil {
+		keys := slices.Sorted(maps.Keys(object))
+		if len(keys) > maxShapeKeys {
+			return "json{" + strings.Join(keys[:maxShapeKeys], ",") + ",…}"
+		}
+		return "json{" + strings.Join(keys, ",") + "}"
+	}
+	var array []json.RawMessage
+	if err := json.Unmarshal(e.body, &array); err == nil && array != nil {
+		return "json[" + strconv.Itoa(len(array)) + "]"
+	}
+	if json.Valid(e.body) {
+		return "json:scalar"
+	}
+	shape := "text len=" + strconv.Itoa(len(e.body))
+	if bytes.Contains(bytes.ToLower(e.body), []byte("<html")) {
+		shape += " html"
+	}
+	return shape
 }

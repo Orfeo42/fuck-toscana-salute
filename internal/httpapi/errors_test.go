@@ -79,6 +79,16 @@ func TestToHTTPError(t *testing.T) {
 		assert.Contains(t, logged, "error=")
 	})
 
+	t.Run("upstream status error logs body shape", func(t *testing.T) {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(previous)
+
+		_ = toHTTPError(ctx, "op", &upstream.StatusError{Status: 500})
+		assert.Contains(t, buf.String(), "shape=empty")
+	})
+
 	t.Run("anything else is 500", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", errors.New("boom"))
 		assert.Equal(t, http.StatusInternalServerError, statusOf(t, err))

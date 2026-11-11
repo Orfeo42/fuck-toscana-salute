@@ -77,6 +77,23 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 	})
 
 	huma.Register(api, huma.Operation{
+		OperationID:   "start-login-all",
+		Method:        http.MethodPost,
+		Path:          "/api/login",
+		DefaultStatus: http.StatusAccepted,
+	}, func(ctx context.Context, _ *struct{}) (*emptyOutput, error) {
+		err := flow.StartAll(ctx)
+		if errors.Is(err, loginflow.ErrLoginInProgress) {
+			return nil, huma.Error409Conflict("login already in progress")
+		}
+		if err != nil {
+			slog.ErrorContext(ctx, "start login failed", slog.String("portal", "all"), slog.String("error", err.Error()))
+			return nil, huma.Error500InternalServerError("cannot start login")
+		}
+		return &emptyOutput{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
 		OperationID:   "logout",
 		Method:        http.MethodPost,
 		Path:          "/api/logout",
@@ -100,14 +117,17 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 			first := result.Failed[0].Err
 			var statusErr *upstream.StatusError
 			exception := ""
+			shape := ""
 			if errors.As(first, &statusErr) {
 				exception = statusErr.ExceptionClass()
+				shape = statusErr.Shape()
 			}
 			slog.WarnContext(ctx, "appointment lookups failed",
 				slog.Int("failed", len(result.Failed)),
 				slog.Int("total", len(result.Entries)+len(result.Failed)),
 				slog.String("first_error", first.Error()),
-				slog.String("first_exception", exception))
+				slog.String("first_exception", exception),
+				slog.String("first_shape", shape))
 		}
 		return &appointmentsOutput{Body: toAppointmentsBody(result)}, nil
 	})

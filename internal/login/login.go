@@ -27,11 +27,12 @@ type loginError string
 func (e loginError) Error() string { return string(e) }
 
 const (
-	ErrLoginTimeout  = loginError("login: timed out waiting for the user")
-	ErrWindowClosed  = loginError("login: window closed before completion")
-	ErrTokensMissing = loginError("login: tokens missing from page storage")
-	ErrNoTessera     = loginError("login: tessera number not found")
-	ErrUnknownPortal = loginError("login: unknown portal")
+	ErrLoginTimeout        = loginError("login: timed out waiting for the user")
+	ErrWindowClosed        = loginError("login: window closed before completion")
+	ErrTokensMissing       = loginError("login: tokens missing from page storage")
+	ErrNoTessera           = loginError("login: tessera number not found")
+	ErrUnknownPortal       = loginError("login: unknown portal")
+	ErrInteractionRequired = loginError("login: identity provider requires user interaction")
 )
 
 const (
@@ -46,6 +47,7 @@ const (
 	storageScript   = `() => ({access: sessionStorage.getItem("access_token") || "", refresh: sessionStorage.getItem("refresh_token") || "", cf: sessionStorage.getItem("fcode") || sessionStorage.getItem("fseCf") || ""})`
 	bannerScript    = `() => { const d = document.createElement("div"); d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#fff;color:#000;border:4px solid red;padding:12px;font:16px sans-serif;text-align:center"; d.textContent = "fuck-toscana-salute: inserisci codice fiscale e tessera sanitaria, risolvi il captcha e premi Login. La finestra si chiudera' da sola."; document.body.appendChild(d); }`
 	tesseraQueryKey = "numbersTeam"
+	silentTimeout   = 45 * time.Second
 )
 
 type storageSnapshot struct {
@@ -123,131 +125,138 @@ func readSnapshot(page playwright.Page) (storageSnapshot, error) {
 	return storageSnapshot{Access: access, Refresh: refresh, CF: cf}, nil
 }
 
-func (l *Launcher) openGestione(ctx context.Context, page playwright.Page) {
-	clickErr := page.Locator(gestioneLink).First().Click(playwright.LocatorClickOptions{Timeout: playwright.Float(actionTimeoutMs)})
-	if clickErr != nil {
-		if _, gotoErr := page.Goto(cupGestioneURL); gotoErr != nil {
-			slog.WarnContext(ctx, "login gestione navigation failed", slog.String("error", gotoErr.Error()))
-		}
-	}
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateDomcontentloaded}); err != nil {
-		slog.WarnContext(ctx, "login gestione load wait failed", slog.String("error", err.Error()))
-	}
+type browser struct {
+	pw     *playwright.Playwright
+	bctx   playwright.BrowserContext
+	page   playwright.Page
+	closed chan struct{}
 }
 
-func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result, err error) {
-	var target string
-	switch portal {
-	case session.PortalCUP:
-		target = cupLoginURL
-	case session.PortalFSE:
-		target = fseLoginURL
-	default:
-		return Result{}, ErrUnknownPortal
-	}
+func (b *browser) close() error {
+	return errors.Join(b.bctx.Close(), b.pw.Stop())
+}
 
-	ctx, cancel := context.WithTimeout(ctx, l.timeout)
-	defer cancel()
-
+func (l *Launcher) open(headless bool) (*browser, error) {
 	if err := playwright.Install(&playwright.RunOptions{SkipInstallBrowsers: true}); err != nil {
-		return Result{}, fmt.Errorf("login: install driver: %w", err)
+		return nil, fmt.Errorf("login: install driver: %w", err)
 	}
 	pw, err := playwright.Run()
 	if err != nil {
-		return Result{}, fmt.Errorf("login: start driver: %w", err)
+		return nil, fmt.Errorf("login: start driver: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, pw.Stop())
-	}()
-
 	if err := os.MkdirAll(l.profileDir, 0o700); err != nil {
-		return Result{}, fmt.Errorf("login: create profile dir: %w", err)
+		return nil, errors.Join(fmt.Errorf("login: create profile dir: %w", err), pw.Stop())
 	}
 	bctx, err := pw.Chromium.LaunchPersistentContext(l.profileDir, playwright.BrowserTypeLaunchPersistentContextOptions{
 		Channel:  playwright.String(l.channel),
-		Headless: playwright.Bool(false),
+		Headless: playwright.Bool(headless),
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("login: launch browser: %w", err)
+		return nil, errors.Join(fmt.Errorf("login: launch browser: %w", err), pw.Stop())
 	}
-	defer func() {
-		err = errors.Join(err, bctx.Close())
-	}()
-
-	var page playwright.Page
+	b := &browser{pw: pw, bctx: bctx, closed: make(chan struct{}, 2)}
 	if pages := bctx.Pages(); len(pages) > 0 {
-		page = pages[0]
+		b.page = pages[0]
 	} else {
-		page, err = bctx.NewPage()
+		b.page, err = bctx.NewPage()
 		if err != nil {
-			return Result{}, fmt.Errorf("login: new page: %w", err)
+			return nil, errors.Join(fmt.Errorf("login: new page: %w", err), b.close())
 		}
 	}
-
-	closed := make(chan struct{}, 2)
-	page.OnClose(func(playwright.Page) {
+	b.page.OnClose(func(playwright.Page) {
 		select {
-		case closed <- struct{}{}:
+		case b.closed <- struct{}{}:
 		default:
 		}
 	})
 	bctx.OnClose(func(playwright.BrowserContext) {
 		select {
-		case closed <- struct{}{}:
+		case b.closed <- struct{}{}:
 		default:
 		}
 	})
+	return b, nil
+}
 
-	tesseraCh := make(chan string, 1)
-	if portal == session.PortalCUP {
-		page.OnResponse(func(r playwright.Response) {
-			if r.Status() != 200 || !strings.Contains(r.URL(), verificaTsPath) {
-				return
-			}
-			tessera, tErr := tesseraFromURL(r.URL())
-			if tErr != nil {
-				return
-			}
-			select {
-			case tesseraCh <- tessera:
-			default:
-			}
-		})
+func (b *browser) openGestione(ctx context.Context) {
+	clickErr := b.page.Locator(gestioneLink).First().Click(playwright.LocatorClickOptions{Timeout: playwright.Float(actionTimeoutMs)})
+	if clickErr != nil {
+		if _, gotoErr := b.page.Goto(cupGestioneURL); gotoErr != nil {
+			slog.WarnContext(ctx, "login gestione navigation failed", slog.String("error", gotoErr.Error()))
+		}
 	}
-
-	if _, err := page.Goto(target); err != nil {
-		return Result{}, fmt.Errorf("login: open portal: %w", err)
+	if err := b.page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateDomcontentloaded}); err != nil {
+		slog.WarnContext(ctx, "login gestione load wait failed", slog.String("error", err.Error()))
 	}
+}
 
+func (b *browser) waitTokens(ctx context.Context) (storageSnapshot, error) {
 	var snapshot storageSnapshot
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for snapshot.Access == "" || snapshot.Refresh == "" {
 		select {
 		case <-ctx.Done():
-			return Result{}, ctxError(ctx)
-		case <-closed:
-			return Result{}, ErrWindowClosed
+			return storageSnapshot{}, ctxError(ctx)
+		case <-b.closed:
+			return storageSnapshot{}, ErrWindowClosed
 		case <-ticker.C:
 		}
-		polled, pollErr := readSnapshot(page)
+		polled, pollErr := readSnapshot(b.page)
 		if pollErr != nil {
 			continue
 		}
 		snapshot = polled
 	}
+	return snapshot, nil
+}
 
-	if portal == session.PortalFSE {
-		return resultFromStorage(portal, snapshot)
+func (b *browser) tokensFlow(ctx context.Context, portal session.Portal, loginURL string) (Result, error) {
+	if _, err := b.page.Goto(loginURL); err != nil {
+		return Result{}, fmt.Errorf("login: open portal: %w", err)
+	}
+	snapshot, err := b.waitTokens(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	return resultFromStorage(portal, snapshot)
+}
+
+func (b *browser) fseFlow(ctx context.Context) (Result, error) {
+	return b.tokensFlow(ctx, session.PortalFSE, fseLoginURL)
+}
+
+func (b *browser) cupFlow(ctx context.Context) (Result, error) {
+	tesseraCh := make(chan string, 1)
+	b.page.OnResponse(func(r playwright.Response) {
+		if r.Status() != 200 || !strings.Contains(r.URL(), verificaTsPath) {
+			return
+		}
+		tessera, tErr := tesseraFromURL(r.URL())
+		if tErr != nil {
+			return
+		}
+		select {
+		case tesseraCh <- tessera:
+		default:
+		}
+	})
+
+	if _, err := b.page.Goto(cupLoginURL); err != nil {
+		return Result{}, fmt.Errorf("login: open portal: %w", err)
+	}
+	snapshot, err := b.waitTokens(ctx)
+	if err != nil {
+		return Result{}, err
 	}
 
-	l.openGestione(ctx, page)
+	b.openGestione(ctx)
 
-	if _, bannerErr := page.Evaluate(bannerScript); bannerErr != nil {
+	if _, bannerErr := b.page.Evaluate(bannerScript); bannerErr != nil {
 		slog.WarnContext(ctx, "login banner injection failed", slog.String("error", bannerErr.Error()))
 	}
 
-	if focusErr := page.Locator(textFieldSel).First().Focus(playwright.LocatorFocusOptions{Timeout: playwright.Float(actionTimeoutMs)}); focusErr != nil {
+	if focusErr := b.page.Locator(textFieldSel).First().Focus(playwright.LocatorFocusOptions{Timeout: playwright.Float(actionTimeoutMs)}); focusErr != nil {
 		slog.WarnContext(ctx, "login field focus failed", slog.String("error", focusErr.Error()))
 	}
 
@@ -255,19 +264,94 @@ func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result
 	select {
 	case <-ctx.Done():
 		return Result{}, ctxError(ctx)
-	case <-closed:
+	case <-b.closed:
 		return Result{}, ErrWindowClosed
 	case tessera = <-tesseraCh:
 	}
 
-	if latest, readErr := readSnapshot(page); readErr == nil && latest.Access != "" && latest.Refresh != "" {
+	if latest, readErr := readSnapshot(b.page); readErr == nil && latest.Access != "" && latest.Refresh != "" {
 		snapshot = latest
 	}
 
-	res, err = resultFromStorage(portal, snapshot)
+	res, err := resultFromStorage(session.PortalCUP, snapshot)
 	if err != nil {
 		return Result{}, err
 	}
 	res.Identity.TesseraSanitaria = tessera
+	res.Tokens.GestioneVerified = true
 	return res, nil
+}
+
+func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result, err error) {
+	if portal != session.PortalCUP && portal != session.PortalFSE {
+		return Result{}, ErrUnknownPortal
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, l.timeout)
+	defer cancel()
+
+	b, err := l.open(false)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() {
+		err = errors.Join(err, b.close())
+	}()
+
+	if portal == session.PortalCUP {
+		return b.cupFlow(ctx)
+	}
+	return b.fseFlow(ctx)
+}
+
+func (l *Launcher) LoginAll(ctx context.Context) (results []Result, err error) {
+	ctx, cancel := context.WithTimeout(ctx, l.timeout)
+	defer cancel()
+
+	b, err := l.open(false)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = errors.Join(err, b.close())
+	}()
+
+	cup, err := b.cupFlow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fse, err := b.fseFlow(ctx)
+	if err != nil {
+		return []Result{cup}, err
+	}
+	return []Result{cup, fse}, nil
+}
+
+func (l *Launcher) Silent(ctx context.Context, portal session.Portal) (res Result, err error) {
+	var loginURL string
+	switch portal {
+	case session.PortalCUP:
+		loginURL = cupLoginURL
+	case session.PortalFSE:
+		loginURL = fseLoginURL
+	default:
+		return Result{}, ErrUnknownPortal
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, silentTimeout)
+	defer cancel()
+
+	b, err := l.open(true)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() {
+		err = errors.Join(err, b.close())
+	}()
+
+	res, err = b.tokensFlow(ctx, portal, loginURL)
+	if errors.Is(err, ErrLoginTimeout) {
+		return Result{}, ErrInteractionRequired
+	}
+	return res, err
 }

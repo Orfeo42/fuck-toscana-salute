@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 )
@@ -14,7 +15,9 @@ var portals = []Portal{PortalCUP, PortalFSE}
 type Store struct {
 	mu        sync.Mutex
 	refreshMu sync.Mutex
+	persistMu sync.Mutex
 	refresher Refresher
+	persister Persister
 	margin    time.Duration
 	tokens    map[Portal]Tokens
 	expired   map[Portal]bool
@@ -22,9 +25,10 @@ type Store struct {
 	now       func() time.Time
 }
 
-func NewStore(refresher Refresher, refreshMargin time.Duration) *Store {
+func NewStore(refresher Refresher, persister Persister, refreshMargin time.Duration) *Store {
 	return &Store{
 		refresher: refresher,
+		persister: persister,
 		margin:    refreshMargin,
 		tokens:    map[Portal]Tokens{},
 		expired:   map[Portal]bool{},
@@ -32,22 +36,62 @@ func NewStore(refresher Refresher, refreshMargin time.Duration) *Store {
 	}
 }
 
-func (s *Store) Put(portal Portal, tokens Tokens) {
+func (s *Store) persist(ctx context.Context) {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+
+	s.mu.Lock()
+	snap := Snapshot{Tokens: maps.Clone(s.tokens), Identity: s.identity}
+	s.mu.Unlock()
+
+	if err := s.persister.Save(context.Background(), snap); err != nil {
+		slog.WarnContext(ctx, "session persist failed", slog.String("error", err.Error()))
+	}
+}
+
+func (s *Store) Restore(ctx context.Context) error {
+	snap, err := s.persister.Load(ctx)
+	if errors.Is(err, ErrNoSnapshot) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("restore session: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for portal, t := range snap.Tokens {
+		if !t.RefreshExpiresAt.After(s.now()) {
+			continue
+		}
+		s.tokens[portal] = t
+	}
+	s.identity = snap.Identity
+	return nil
+}
+
+func (s *Store) Put(portal Portal, tokens Tokens) {
+	tokens.StartedAt = s.now()
+
+	s.mu.Lock()
 	s.tokens[portal] = tokens
 	delete(s.expired, portal)
+	s.mu.Unlock()
+
+	s.persist(context.Background())
 }
 
 func (s *Store) SetIdentity(id Identity) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if id.CodiceFiscale != "" {
 		s.identity.CodiceFiscale = id.CodiceFiscale
 	}
 	if id.TesseraSanitaria != "" {
 		s.identity.TesseraSanitaria = id.TesseraSanitaria
 	}
+	s.mu.Unlock()
+
+	s.persist(context.Background())
 }
 
 func (s *Store) Identity() Identity {
@@ -116,15 +160,25 @@ func (s *Store) refresh(ctx context.Context, portal Portal) error {
 		return fmt.Errorf("refresh %s: %w", portal, err)
 	}
 
-	s.Put(portal, next)
+	next.GestioneVerified = t.GestioneVerified
+	next.StartedAt = t.StartedAt
+
+	s.mu.Lock()
+	s.tokens[portal] = next
+	delete(s.expired, portal)
+	s.mu.Unlock()
+
+	s.persist(ctx)
 	return nil
 }
 
 func (s *Store) markExpired(portal Portal) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	delete(s.tokens, portal)
 	s.expired[portal] = true
+	s.mu.Unlock()
+
+	s.persist(context.Background())
 }
 
 func (s *Store) Status() Status {
@@ -143,17 +197,19 @@ func (s *Store) Status() Status {
 		}
 		status.Portals = append(status.Portals, ps)
 	}
-	_, cupActive := s.tokens[PortalCUP]
-	status.GestioneReady = cupActive && s.identity.TesseraSanitaria != ""
+	cup, cupActive := s.tokens[PortalCUP]
+	status.GestioneReady = cupActive && cup.GestioneVerified && s.identity.TesseraSanitaria != ""
 	return status
 }
 
 func (s *Store) Clear() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.tokens = map[Portal]Tokens{}
 	s.expired = map[Portal]bool{}
 	s.identity = Identity{}
+	s.mu.Unlock()
+
+	s.persist(context.Background())
 }
 
 func (s *Store) Run(ctx context.Context, tick time.Duration) {
@@ -177,14 +233,14 @@ func (s *Store) Run(ctx context.Context, tick time.Duration) {
 
 			err := s.refresh(ctx, p)
 			if errors.Is(err, ErrSessionExpired) {
-				slog.WarnContext(ctx, "session expired", slog.String("portal", string(p)))
+				slog.WarnContext(ctx, "session expired", slog.String("portal", string(p)), slog.Duration("chain_age", s.now().Sub(t.StartedAt)))
 				continue
 			}
 			if err != nil {
 				slog.WarnContext(ctx, "session refresh failed", slog.String("portal", string(p)), slog.String("error", err.Error()))
 				continue
 			}
-			slog.InfoContext(ctx, "session refreshed", slog.String("portal", string(p)))
+			slog.InfoContext(ctx, "session refreshed", slog.String("portal", string(p)), slog.Duration("chain_age", s.now().Sub(t.StartedAt)))
 		}
 	}
 }

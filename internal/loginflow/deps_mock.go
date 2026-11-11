@@ -23,6 +23,12 @@ var _ Launcher = &MockLauncher{}
 //			LoginFunc: func(ctx context.Context, portal session.Portal) (login.Result, error) {
 //				panic("mock out the Login method")
 //			},
+//			LoginAllFunc: func(ctx context.Context) ([]login.Result, error) {
+//				panic("mock out the LoginAll method")
+//			},
+//			SilentFunc: func(ctx context.Context, portal session.Portal) (login.Result, error) {
+//				panic("mock out the Silent method")
+//			},
 //		}
 //
 //		// use mockedLauncher in code that requires Launcher
@@ -33,6 +39,12 @@ type MockLauncher struct {
 	// LoginFunc mocks the Login method.
 	LoginFunc func(ctx context.Context, portal session.Portal) (login.Result, error)
 
+	// LoginAllFunc mocks the LoginAll method.
+	LoginAllFunc func(ctx context.Context) ([]login.Result, error)
+
+	// SilentFunc mocks the Silent method.
+	SilentFunc func(ctx context.Context, portal session.Portal) (login.Result, error)
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// Login holds details about calls to the Login method.
@@ -42,8 +54,22 @@ type MockLauncher struct {
 			// Portal is the portal argument value.
 			Portal session.Portal
 		}
+		// LoginAll holds details about calls to the LoginAll method.
+		LoginAll []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+		// Silent holds details about calls to the Silent method.
+		Silent []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Portal is the portal argument value.
+			Portal session.Portal
+		}
 	}
-	lockLogin sync.RWMutex
+	lockLogin    sync.RWMutex
+	lockLoginAll sync.RWMutex
+	lockSilent   sync.RWMutex
 }
 
 // Login calls LoginFunc.
@@ -79,6 +105,74 @@ func (mock *MockLauncher) LoginCalls() []struct {
 	mock.lockLogin.RLock()
 	calls = mock.calls.Login
 	mock.lockLogin.RUnlock()
+	return calls
+}
+
+// LoginAll calls LoginAllFunc.
+func (mock *MockLauncher) LoginAll(ctx context.Context) ([]login.Result, error) {
+	if mock.LoginAllFunc == nil {
+		panic("MockLauncher.LoginAllFunc: method is nil but Launcher.LoginAll was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockLoginAll.Lock()
+	mock.calls.LoginAll = append(mock.calls.LoginAll, callInfo)
+	mock.lockLoginAll.Unlock()
+	return mock.LoginAllFunc(ctx)
+}
+
+// LoginAllCalls gets all the calls that were made to LoginAll.
+// Check the length with:
+//
+//	len(mockedLauncher.LoginAllCalls())
+func (mock *MockLauncher) LoginAllCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockLoginAll.RLock()
+	calls = mock.calls.LoginAll
+	mock.lockLoginAll.RUnlock()
+	return calls
+}
+
+// Silent calls SilentFunc.
+func (mock *MockLauncher) Silent(ctx context.Context, portal session.Portal) (login.Result, error) {
+	if mock.SilentFunc == nil {
+		panic("MockLauncher.SilentFunc: method is nil but Launcher.Silent was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		Portal session.Portal
+	}{
+		Ctx:    ctx,
+		Portal: portal,
+	}
+	mock.lockSilent.Lock()
+	mock.calls.Silent = append(mock.calls.Silent, callInfo)
+	mock.lockSilent.Unlock()
+	return mock.SilentFunc(ctx, portal)
+}
+
+// SilentCalls gets all the calls that were made to Silent.
+// Check the length with:
+//
+//	len(mockedLauncher.SilentCalls())
+func (mock *MockLauncher) SilentCalls() []struct {
+	Ctx    context.Context
+	Portal session.Portal
+} {
+	var calls []struct {
+		Ctx    context.Context
+		Portal session.Portal
+	}
+	mock.lockSilent.RLock()
+	calls = mock.calls.Silent
+	mock.lockSilent.RUnlock()
 	return calls
 }
 
@@ -195,5 +289,64 @@ func (mock *MockSink) SetIdentityCalls() []struct {
 	mock.lockSetIdentity.RLock()
 	calls = mock.calls.SetIdentity
 	mock.lockSetIdentity.RUnlock()
+	return calls
+}
+
+// Ensure, that MockStatusSource does implement StatusSource.
+// If this is not the case, regenerate this file with moq.
+var _ StatusSource = &MockStatusSource{}
+
+// MockStatusSource is a mock implementation of StatusSource.
+//
+//	func TestSomethingThatUsesStatusSource(t *testing.T) {
+//
+//		// make and configure a mocked StatusSource
+//		mockedStatusSource := &MockStatusSource{
+//			StatusFunc: func() session.Status {
+//				panic("mock out the Status method")
+//			},
+//		}
+//
+//		// use mockedStatusSource in code that requires StatusSource
+//		// and then make assertions.
+//
+//	}
+type MockStatusSource struct {
+	// StatusFunc mocks the Status method.
+	StatusFunc func() session.Status
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Status holds details about calls to the Status method.
+		Status []struct {
+		}
+	}
+	lockStatus sync.RWMutex
+}
+
+// Status calls StatusFunc.
+func (mock *MockStatusSource) Status() session.Status {
+	if mock.StatusFunc == nil {
+		panic("MockStatusSource.StatusFunc: method is nil but StatusSource.Status was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockStatus.Lock()
+	mock.calls.Status = append(mock.calls.Status, callInfo)
+	mock.lockStatus.Unlock()
+	return mock.StatusFunc()
+}
+
+// StatusCalls gets all the calls that were made to Status.
+// Check the length with:
+//
+//	len(mockedStatusSource.StatusCalls())
+func (mock *MockStatusSource) StatusCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockStatus.RLock()
+	calls = mock.calls.Status
+	mock.lockStatus.RUnlock()
 	return calls
 }

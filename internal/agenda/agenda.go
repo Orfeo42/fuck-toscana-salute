@@ -54,7 +54,6 @@ type Failure struct {
 
 type candidate struct {
 	nre string
-	cup *cup.Prescription
 	fse *fse.Prescription
 }
 
@@ -96,11 +95,11 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 	result := Result{Entries: []Entry{}, Failed: []Failure{}}
 	for i, c := range candidates {
 		if errs[i] != nil {
-			result.Failed = append(result.Failed, Failure{NRE: c.nre, CUP: c.cup, FSE: c.fse, Err: errs[i]})
+			result.Failed = append(result.Failed, Failure{NRE: c.nre, FSE: c.fse, Err: errs[i]})
 			continue
 		}
 		for _, appointment := range results[i] {
-			result.Entries = append(result.Entries, Entry{Appointment: appointment, NRE: c.nre, CUP: c.cup, FSE: c.fse})
+			result.Entries = append(result.Entries, Entry{Appointment: appointment, NRE: c.nre, FSE: c.fse})
 		}
 	}
 	slices.SortStableFunc(result.Entries, compareEntries)
@@ -126,27 +125,21 @@ func (a *Agenda) sources(ctx context.Context) ([]cup.Prescription, []fse.Prescri
 
 func (a *Agenda) candidates(cupPrescriptions []cup.Prescription, fsePrescriptions []fse.Prescription) []candidate {
 	limit := a.now().Add(-maxPrescribedAge)
+	unbooked := make(map[string]struct{}, len(cupPrescriptions))
+	for i := range cupPrescriptions {
+		unbooked[strings.ToUpper(cupPrescriptions[i].NRE)] = struct{}{}
+	}
 	candidates := []candidate{}
 	index := map[string]int{}
-	for i := range cupPrescriptions {
-		p := &cupPrescriptions[i]
-		if p.NRE == "" || isClosed(int(p.Status)) || (!p.PrescribedOn.IsZero() && p.PrescribedOn.Before(limit)) {
-			continue
-		}
-		key := strings.ToUpper(p.NRE)
-		if at, ok := index[key]; ok {
-			candidates[at].cup = p
-			continue
-		}
-		index[key] = len(candidates)
-		candidates = append(candidates, candidate{nre: p.NRE, cup: p})
-	}
 	for i := range fsePrescriptions {
 		p := &fsePrescriptions[i]
 		if p.Kind != fse.KindVisit || p.NRE == "" || isClosed(p.Status) || (!p.Date.IsZero() && p.Date.Before(limit)) {
 			continue
 		}
 		key := strings.ToUpper(p.NRE)
+		if _, ok := unbooked[key]; ok {
+			continue
+		}
 		if at, ok := index[key]; ok {
 			candidates[at].fse = p
 			continue

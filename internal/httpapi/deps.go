@@ -16,6 +16,7 @@ type SessionStore interface {
 
 type LoginFlow interface {
 	Start(ctx context.Context, portal session.Portal) error
+	StartAll(ctx context.Context) error
 	States() map[session.Portal]loginflow.State
 }
 

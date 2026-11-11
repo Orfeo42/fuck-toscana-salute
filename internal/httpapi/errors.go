@@ -29,7 +29,7 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	}
 	var statusErr *upstream.StatusError
 	if errors.As(err, &statusErr) {
-		slog.WarnContext(ctx, "upstream error", slog.String("op", op), slog.Int("status", statusErr.Status), slog.String("error", err.Error()), slog.String("exception", statusErr.ExceptionClass()))
+		slog.WarnContext(ctx, "upstream error", slog.String("op", op), slog.Int("status", statusErr.Status), slog.String("error", err.Error()), slog.String("exception", statusErr.ExceptionClass()), slog.String("shape", statusErr.Shape()))
 		return huma.Error502BadGateway("upstream error")
 	}
 	slog.ErrorContext(ctx, "request failed", slog.String("op", op), slog.String("error", err.Error()))
