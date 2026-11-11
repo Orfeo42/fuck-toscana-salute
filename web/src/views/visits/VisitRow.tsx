@@ -53,15 +53,16 @@ export function VisitRow({
       : undefined;
   const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
   const expiresOn = row.fse?.expiresOn;
+  const estimatedSuffix = row.fse?.expiryEstimated === true ? " (stimata)" : "";
   let expiryNote: string | null = null;
   if (expiresOn !== undefined && state.kind === "expired") {
-    expiryNote = `scaduta il ${formatDate(expiresOn)}`;
+    expiryNote = `scaduta il ${formatDate(expiresOn)}${estimatedSuffix}`;
   } else if (
     expiresOn !== undefined &&
     state.kind === "official" &&
     state.status === 3
   ) {
-    expiryNote = `scade il ${formatDate(expiresOn)}`;
+    expiryNote = `scade il ${formatDate(expiresOn)}${estimatedSuffix}`;
   }
   const place =
     unit === undefined
@@ -98,6 +99,11 @@ export function VisitRow({
       <Table.Td>{rowTitle(row)}</Table.Td>
       <Table.Td>
         <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+        {state.kind === "official" && state.note !== undefined ? (
+          <Text size="xs" c="dimmed">
+            {state.note}
+          </Text>
+        ) : null}
         {expiryNote === null ? null : (
           <Text size="xs" c="dimmed">
             {expiryNote}

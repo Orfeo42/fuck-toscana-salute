@@ -19,7 +19,7 @@ export interface HealthData {
   appointments: Resource<AppointmentsBody>;
   prescriptions: Resource<PrescriptionsBody>;
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
-  notInCup: ReadonlySet<string>;
+  unbooked: ReadonlySet<string>;
   prescriptionNres: ReadonlySet<string>;
 }
 

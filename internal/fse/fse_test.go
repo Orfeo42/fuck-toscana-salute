@@ -278,6 +278,49 @@ func TestPrescriptionsExpiry(t *testing.T) {
 		assert.True(t, got[0].ExpiresAt.IsZero())
 	})
 
+	t.Run("placeholder year 9999 is estimated as date plus 180 days", func(t *testing.T) {
+		var rec []recordedRequest
+		visits := `{"content":[{"id":"v1","nre":"0900A0000000001","stato":"3","dataPrestazione":"10/01/2026"}]}`
+		c := detailServer(t, &rec, visits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":"9999-12-31T00:00:00.000"}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		require.NotEmpty(t, got)
+		assert.True(t, got[0].ExpiryEstimated)
+		assert.Equal(t, got[0].Date.In(c.loc).AddDate(0, 0, 180), got[0].ExpiresAt)
+	})
+
+	t.Run("placeholder with unknown date stays zero and not estimated", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":"9999-12-31T00:00:00.000"}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, got[0].ExpiresAt.IsZero())
+		assert.False(t, got[0].ExpiryEstimated)
+	})
+
+	t.Run("normal date is parsed and not estimated", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":"2026-05-10T00:00:00.000"}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		assert.False(t, got[0].ExpiryEstimated)
+	})
+
 	t.Run("looks up every open visit with bounded concurrency", func(t *testing.T) {
 		var rec []recordedRequest
 		visits := `{"content":[`

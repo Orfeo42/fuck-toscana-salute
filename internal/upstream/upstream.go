@@ -26,8 +26,13 @@ const (
 var exceptionClassPattern = regexp.MustCompile(`\b(?:[a-z_][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*(?:Exception|Error|Fault)\b`)
 
 type StatusError struct {
-	Status int
-	body   []byte
+	Status  int
+	body    []byte
+	message string
+}
+
+type errorMessage struct {
+	Message string `json:"message"`
 }
 
 func (e *StatusError) Error() string {
@@ -35,7 +40,7 @@ func (e *StatusError) Error() string {
 }
 
 func (e *StatusError) BodyContains(substr string) bool {
-	return bytes.Contains(e.body, []byte(substr))
+	return bytes.Contains(e.body, []byte(substr)) || strings.Contains(e.message, substr)
 }
 
 func (e *StatusError) ExceptionClass() string {
@@ -91,7 +96,11 @@ func do[Resp any](ctx context.Context, c *Client, method, rawURL string, header 
 		return zero, fmt.Errorf("upstream: read %s: %w", req.URL.Path, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return zero, &StatusError{Status: resp.StatusCode, body: data[:min(len(data), maxErrorBodyKept)]}
+		var parsed errorMessage
+		if json.Unmarshal(data, &parsed) != nil {
+			parsed.Message = ""
+		}
+		return zero, &StatusError{Status: resp.StatusCode, body: data[:min(len(data), maxErrorBodyKept)], message: parsed.Message}
 	}
 
 	var decoded Resp

@@ -7,7 +7,9 @@ import { romeDay } from "./relativeDay";
 const toBookStatus = 3;
 const cancelledBooking = "DISDETTO";
 const bookedLabel = "Prenotata";
-const bookedElsewhereLabel = "Prenotata fuori dal CUP regionale";
+const fseBookedNote =
+  "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento";
+const fseBookedStatus = 30;
 const expiredLabel = "Scaduta";
 
 const officialTones: Readonly<Record<number, StatusTone>> = {
@@ -43,17 +45,12 @@ export interface BookedState {
   tone: StatusTone;
 }
 
-export interface BookedElsewhereState {
-  kind: "booked_elsewhere";
-  label: string;
-  tone: StatusTone;
-}
-
 export interface OfficialState {
   kind: "official";
   status: number;
   label: string;
   tone: StatusTone;
+  note: string | undefined;
 }
 
 export interface ExpiredState {
@@ -61,21 +58,21 @@ export interface ExpiredState {
   label: string;
   tone: StatusTone;
   expiresOn: string;
+  estimated: boolean;
 }
 
-export type EffectiveState =
-  BookedState | BookedElsewhereState | ExpiredState | OfficialState;
+export type EffectiveState = BookedState | ExpiredState | OfficialState;
 
 export interface BookingContext {
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
-  notInCup: ReadonlySet<string>;
+  unbooked: ReadonlySet<string>;
   now: Date;
 }
 
 export function effectiveState(
   row: RowBody,
   bookingByNre: ReadonlyMap<string, AppointmentBody>,
-  notInCup: ReadonlySet<string>,
+  unbooked: ReadonlySet<string>,
   now: Date,
 ): EffectiveState {
   const key = row.nre.toUpperCase();
@@ -89,14 +86,12 @@ export function effectiveState(
       tone: "booked",
     };
   }
-  if (notInCup.has(key)) {
-    return {
-      kind: "booked_elsewhere",
-      label: bookedElsewhereLabel,
-      tone: "pending",
-    };
+  let status = row.fse?.status ?? toBookStatus;
+  let fseSaysBooked = false;
+  if (status === fseBookedStatus && unbooked.has(key)) {
+    status = toBookStatus;
+    fseSaysBooked = true;
   }
-  const status = row.fse?.status ?? toBookStatus;
   const expiresOn = row.fse?.expiresOn;
   if (
     status === toBookStatus &&
@@ -108,6 +103,7 @@ export function effectiveState(
       label: expiredLabel,
       tone: "closed",
       expiresOn,
+      estimated: row.fse?.expiryEstimated === true,
     };
   }
   return {
@@ -115,6 +111,7 @@ export function effectiveState(
     status,
     label: prescriptionStatusLabel(status),
     tone: officialTones[status] ?? "closed",
+    note: fseSaysBooked ? fseBookedNote : undefined,
   };
 }
 
@@ -166,7 +163,7 @@ function upcomingAt(row: RowBody, context: BookingContext): number | undefined {
   const state = effectiveState(
     row,
     context.bookingByNre,
-    context.notInCup,
+    context.unbooked,
     context.now,
   );
   if (state.kind !== "booked" || state.at === undefined) {
@@ -183,7 +180,7 @@ function isFutureBooking(row: RowBody, context: BookingContext): boolean {
   const state = effectiveState(
     row,
     context.bookingByNre,
-    context.notInCup,
+    context.unbooked,
     context.now,
   );
   return (
@@ -197,7 +194,7 @@ function isOpen(row: RowBody, context: BookingContext): boolean {
   const state = effectiveState(
     row,
     context.bookingByNre,
-    context.notInCup,
+    context.unbooked,
     context.now,
   );
   if (state.kind === "expired") {
@@ -211,7 +208,7 @@ function isOpen(row: RowBody, context: BookingContext): boolean {
 
 function isExpired(row: RowBody, context: BookingContext): boolean {
   return (
-    effectiveState(row, context.bookingByNre, context.notInCup, context.now)
+    effectiveState(row, context.bookingByNre, context.unbooked, context.now)
       .kind === "expired"
   );
 }
@@ -228,7 +225,7 @@ function matchesStatus(
     const state = effectiveState(
       row,
       context.bookingByNre,
-      context.notInCup,
+      context.unbooked,
       context.now,
     );
     return state.kind === "official" && state.status === toBookStatus;
@@ -349,7 +346,7 @@ function sortValue(
   const state = effectiveState(
     row,
     context.bookingByNre,
-    context.notInCup,
+    context.unbooked,
     context.now,
   );
   if (key === "stato") {

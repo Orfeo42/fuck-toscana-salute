@@ -190,7 +190,8 @@ func TestRegisterListAppointments(t *testing.T) {
 				 "unit":{"name":"","description":"","address":"","city":"","province":""},
 				 "fse":{"id":"f2","nre":"n2","description":"D","kind":"visit","status":30,"documentRef":"ref"}}
 			],
-			"failed": []
+			"failed": [],
+			"unbooked": []
 		}`, resp.Body.String())
 	})
 
@@ -216,10 +217,11 @@ func TestRegisterListAppointments(t *testing.T) {
 				{"nre":"n1","reason":"session_expired"},
 				{"nre":"n2","reason":"session_expired"},
 				{"nre":"n3","reason":"gestione_not_ready"},
-				{"nre":"n4","reason":"not_in_cup"},
+				{"nre":"n4","reason":"upstream_500"},
 				{"nre":"n5","reason":"error"},
 				{"nre":"n6","reason":"upstream_502"}
-			]
+			],
+			"unbooked": []
 		}`, resp.Body.String())
 	})
 

@@ -165,6 +165,31 @@ func TestAppointments(t *testing.T) {
 		assert.Len(t, c.AppointmentsCalls(), 3)
 	})
 
+	t.Run("unbooked lists NREs with zero appointments in candidate order", func(t *testing.T) {
+		c := noCUP()
+		c.AppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			if nre == "B" {
+				return []cup.Appointment{{ID: "id-B", Status: "PRENOTATO"}}, nil
+			}
+			if nre == "D" {
+				return nil, errBoom
+			}
+			return nil, nil
+		}
+		result, err := newAgenda(c, visits("A", "B", "C", "D"), 2).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"A", "C"}, result.Unbooked)
+		require.Len(t, result.Failed, 1)
+		assert.Equal(t, "D", result.Failed[0].NRE)
+	})
+
+	t.Run("unbooked is empty non-nil without candidates", func(t *testing.T) {
+		result, err := newAgenda(noCUP(), emptyFSE(), 1).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.NotNil(t, result.Unbooked)
+		assert.Empty(t, result.Unbooked)
+	})
+
 	t.Run("all lookups failing returns failures and no error", func(t *testing.T) {
 		c := noCUP()
 		c.AppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,6 +110,41 @@ func TestGetJSON(t *testing.T) {
 		require.True(t, errors.As(err, &statusErr))
 		assert.Equal(t, http.StatusInternalServerError, statusErr.Status)
 		assert.Equal(t, "upstream: unexpected status 500", err.Error())
+	})
+}
+
+func TestGetJSONLongErrorBody(t *testing.T) {
+	t.Run("message after the kept prefix is still matched", func(t *testing.T) {
+		body := `{"stackTrace":"` + strings.Repeat("x", 3*maxErrorBodyKept) + `","message":"LATE MARKER"}`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, err := w.Write([]byte(body))
+			assert.NoError(t, err)
+		}))
+		defer srv.Close()
+
+		_, err := GetJSON[payload](context.Background(), New(srv.Client()), srv.URL, nil)
+
+		var statusErr *StatusError
+		require.ErrorAs(t, err, &statusErr)
+		assert.True(t, statusErr.BodyContains("LATE MARKER"))
+		assert.NotContains(t, err.Error(), "LATE MARKER")
+	})
+
+	t.Run("long non-JSON body only matches the kept prefix", func(t *testing.T) {
+		body := strings.Repeat("x", 2*maxErrorBodyKept) + "LATE MARKER"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, err := w.Write([]byte(body))
+			assert.NoError(t, err)
+		}))
+		defer srv.Close()
+
+		_, err := GetJSON[payload](context.Background(), New(srv.Client()), srv.URL, nil)
+
+		var statusErr *StatusError
+		require.ErrorAs(t, err, &statusErr)
+		assert.False(t, statusErr.BodyContains("LATE MARKER"))
 	})
 }
 

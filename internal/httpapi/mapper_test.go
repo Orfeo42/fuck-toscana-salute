@@ -12,6 +12,7 @@ import (
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/upstream"
 )
 
 func TestToSessionBody(t *testing.T) {
@@ -82,5 +83,36 @@ func TestToAppointmentsBodyBookingID(t *testing.T) {
 	t.Run("omits bookingId from json when empty", func(t *testing.T) {
 		got := toAppointmentsBody(agenda.Result{Entries: []agenda.Entry{{NRE: "0900A0000000001", Appointment: cup.Appointment{ID: "1"}}}})
 		assert.Empty(t, got.Appointments[0].BookingID)
+	})
+}
+
+func TestToAppointmentsBodyUnbooked(t *testing.T) {
+	t.Run("copies unbooked NREs in order", func(t *testing.T) {
+		got := toAppointmentsBody(agenda.Result{Unbooked: []string{"0900A0000000001", "0900A0000000002"}})
+		assert.Equal(t, []string{"0900A0000000001", "0900A0000000002"}, got.Unbooked)
+	})
+
+	t.Run("nil unbooked is an empty non-nil slice", func(t *testing.T) {
+		got := toAppointmentsBody(agenda.Result{})
+		assert.NotNil(t, got.Unbooked)
+		assert.Empty(t, got.Unbooked)
+	})
+}
+
+func TestToPrescriptionsBodyExpiryEstimated(t *testing.T) {
+	t.Run("sets expiryEstimated", func(t *testing.T) {
+		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001", ExpiryEstimated: true}}})
+		assert.True(t, got.Prescriptions[0].FSE.ExpiryEstimated)
+	})
+
+	t.Run("defaults to false", func(t *testing.T) {
+		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001"}}})
+		assert.False(t, got.Prescriptions[0].FSE.ExpiryEstimated)
+	})
+}
+
+func TestFailureReason(t *testing.T) {
+	t.Run("upstream 500 is a generic upstream failure", func(t *testing.T) {
+		assert.Equal(t, "upstream_500", failureReason(&upstream.StatusError{Status: 500}))
 	})
 }

@@ -204,6 +204,7 @@ export interface components {
             readonly $schema?: string;
             appointments: components["schemas"]["AppointmentBody"][] | null;
             failed: components["schemas"]["FailedBody"][] | null;
+            unbooked: string[] | null;
         };
         CalendarEventBody: {
             /**
@@ -339,6 +340,7 @@ export interface components {
             documentRef: string;
             /** Format: date-time */
             expiresOn?: string;
+            expiryEstimated?: boolean;
             id: string;
             kind: string;
             nre: string;

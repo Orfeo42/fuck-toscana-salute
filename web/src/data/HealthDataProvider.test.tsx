@@ -28,7 +28,8 @@ const appointmentsBody = {
       unit: { name: "", description: "", address: "", city: "", province: "" },
     },
   ],
-  failed: [{ nre: "0900A0000000009", reason: "not_in_cup" }],
+  failed: [],
+  unbooked: ["0900A0000000009"],
 };
 
 const prescriptionsBody = { prescriptions: [{ nre: "0900A0000000002" }] };
@@ -64,7 +65,7 @@ function Probe(): JSX.Element {
         {`${String(health.prescriptions.loading)}|${health.prescriptions.error ?? "-"}|${String(health.prescriptions.data?.prescriptions?.length ?? "-")}`}
       </p>
       <p data-testid="indexes">
-        {`${[...health.bookingByNre.keys()].join(",")}|${[...health.notInCup].join(",")}|${[...health.prescriptionNres].join(",")}`}
+        {`${[...health.bookingByNre.keys()].join(",")}|${[...health.unbooked].join(",")}|${[...health.prescriptionNres].join(",")}`}
       </p>
       <button
         type="button"

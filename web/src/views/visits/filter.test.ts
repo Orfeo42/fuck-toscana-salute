@@ -81,11 +81,11 @@ function booking(
 
 function contextOf(
   bookings: AppointmentBody[],
-  notInCup: string[] = [],
+  unbooked: string[] = [],
 ): BookingContext {
   return {
     bookingByNre: new Map(bookings.map((b) => [b.nre, b])),
-    notInCup: new Set(notInCup),
+    unbooked: new Set(unbooked),
     now,
   };
 }
@@ -130,16 +130,33 @@ describe("effectiveState", () => {
       status: 3,
       label: "Da prenotare",
       tone: "tobook",
+      note: undefined,
     });
   });
 
-  it("is booked elsewhere when the NRE is not in the CUP", () => {
+  it("turns FSE status 30 into to-book when the CUP has no appointment", () => {
+    const row = fseRow("0900A0000000010", "visit", 30, "2026-11-01T09:00:00Z");
     expect(
-      effectiveState(cupOnly, new Map(), new Set(["0900A0000000006"]), now),
+      effectiveState(row, new Map(), new Set(["0900A0000000010"]), now),
     ).toEqual({
-      kind: "booked_elsewhere",
-      label: "Prenotata fuori dal CUP regionale",
-      tone: "pending",
+      kind: "official",
+      status: 3,
+      label: "Da prenotare",
+      tone: "tobook",
+      note: "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento",
+    });
+  });
+
+  it("keeps FSE status 30 as booked without a note when not unbooked", () => {
+    const row = fseRow("0900A0000000010", "visit", 30, "2026-11-01T09:00:00Z");
+    expect(
+      effectiveState(row, new Map(), new Set(["0900A0000000099"]), now),
+    ).toEqual({
+      kind: "official",
+      status: 30,
+      label: "Prenotata",
+      tone: "booked",
+      note: undefined,
     });
   });
 
@@ -206,7 +223,27 @@ describe("effectiveState expiry", () => {
       label: "Scaduta",
       tone: "closed",
       expiresOn: yesterday,
+      estimated: false,
     });
+  });
+
+  it("flags an estimated expiry", () => {
+    const row = expiringRow("0900A0000000050", 3, yesterday);
+    const estimated: RowBody =
+      row.fse === undefined
+        ? row
+        : { nre: row.nre, fse: { ...row.fse, expiryEstimated: true } };
+    expect(effectiveState(estimated, new Map(), new Set(), now)).toMatchObject({
+      kind: "expired",
+      estimated: true,
+    });
+  });
+
+  it("expires an FSE status 30 row that is unbooked in the CUP", () => {
+    const row = expiringRow("0900A0000000058", 30, yesterday);
+    expect(
+      effectiveState(row, new Map(), new Set(["0900A0000000058"]), now).kind,
+    ).toBe("expired");
   });
 
   it("is not expired when expiresOn is today", () => {
@@ -232,13 +269,6 @@ describe("effectiveState expiry", () => {
       ],
     ]);
     expect(effectiveState(row, bookings, new Set(), now).kind).toBe("booked");
-  });
-
-  it("stays booked elsewhere for a notInCup row", () => {
-    const row = expiringRow("0900A0000000054", 3, yesterday);
-    expect(
-      effectiveState(row, new Map(), new Set(["0900A0000000054"]), now).kind,
-    ).toBe("booked_elsewhere");
   });
 
   it("stays official for a status 8 row", () => {
@@ -295,6 +325,24 @@ describe("expired rows in filters and counts", () => {
       bookable: 1,
       open: 1,
       all: 2,
+    });
+  });
+});
+
+describe("unbooked FSE status 30 rows in counts", () => {
+  const row = fseRow("0900A0000000060", "visit", 30, "2026-11-01T09:00:00Z");
+  const context = contextOf([], ["0900A0000000060"]);
+
+  it("counts as bookable and open", () => {
+    expect(countByStatus([row], "", false, context)).toMatchObject({
+      bookable: 1,
+      open: 1,
+    });
+  });
+
+  it("is not bookable when the CUP lookup did not confirm it", () => {
+    expect(countByStatus([row], "", false, empty)).toMatchObject({
+      bookable: 0,
     });
   });
 });
@@ -359,14 +407,11 @@ describe("buildRows", () => {
 
 describe("filterRows", () => {
   const rows = [toBook, pending, done, closed, cupOnly];
-  const context = contextOf(
-    [
-      booking("0900A0000000002", "PRENOTATO", "2026-11-10T14:00:00Z"),
-      booking("0900A0000000003", "PRENOTATO", "2026-11-12T14:00:00Z"),
-      booking("0900A0000000004", "PRENOTATO", "2026-11-01T14:00:00Z"),
-    ],
-    ["0900A0000000006"],
-  );
+  const context = contextOf([
+    booking("0900A0000000002", "PRENOTATO", "2026-11-10T14:00:00Z"),
+    booking("0900A0000000003", "PRENOTATO", "2026-11-12T14:00:00Z"),
+    booking("0900A0000000004", "PRENOTATO", "2026-11-01T14:00:00Z"),
+  ]);
 
   it("upcoming keeps booked rows with an at from today", () => {
     const got = filterRows(rows, { ...base, status: "upcoming" }, context);
@@ -383,7 +428,7 @@ describe("filterRows", () => {
 
   it("bookable keeps official status 3 only", () => {
     const got = filterRows(rows, { ...base, status: "bookable" }, context);
-    expect(got).toEqual([toBook]);
+    expect(got).toEqual([toBook, cupOnly]);
   });
 
   it("open keeps open rows and future booked rows, even if done", () => {

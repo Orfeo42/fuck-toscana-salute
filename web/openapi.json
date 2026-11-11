@@ -54,9 +54,15 @@
               "$ref": "#/components/schemas/FailedBody"
             },
             "type": ["array", "null"]
+          },
+          "unbooked": {
+            "items": {
+              "type": "string"
+            },
+            "type": ["array", "null"]
           }
         },
-        "required": ["appointments", "failed"],
+        "required": ["appointments", "failed", "unbooked"],
         "type": "object"
       },
       "CalendarEventBody": {
@@ -333,6 +339,9 @@
           "expiresOn": {
             "format": "date-time",
             "type": "string"
+          },
+          "expiryEstimated": {
+            "type": "boolean"
           },
           "id": {
             "type": "string"

@@ -58,8 +58,9 @@ type candidate struct {
 }
 
 type Result struct {
-	Entries []Entry
-	Failed  []Failure
+	Entries  []Entry
+	Failed   []Failure
+	Unbooked []string
 }
 
 type Row struct {
@@ -92,11 +93,14 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	result := Result{Entries: []Entry{}, Failed: []Failure{}}
+	result := Result{Entries: []Entry{}, Failed: []Failure{}, Unbooked: []string{}}
 	for i, c := range candidates {
 		if errs[i] != nil {
 			result.Failed = append(result.Failed, Failure{NRE: c.nre, FSE: c.fse, Err: errs[i]})
 			continue
+		}
+		if len(results[i]) == 0 {
+			result.Unbooked = append(result.Unbooked, c.nre)
 		}
 		for _, appointment := range results[i] {
 			result.Entries = append(result.Entries, Entry{Appointment: appointment, NRE: c.nre, FSE: c.fse})

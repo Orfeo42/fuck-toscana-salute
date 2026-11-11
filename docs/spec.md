@@ -97,6 +97,14 @@ FSE `stato` on prescriptions is NOT a reliable "booked" flag: a prescription sho
 
 FSE "Diario → Appuntamenti" is a user-maintained diary, not CUP bookings.
 
+The gestione appointment lookup answers HTTP 500 with JSON `{"message":"Non esistono richieste per il paziente"}` when the NRE has no bookings; any other HTTP 500 (non-JSON text body) is a transient upstream fault, not a missing booking.
+
+A prescription with FSE `stato` 30 and a confirmed empty CUP appointment lookup is bookable: FSE 30 alone does not mean booked.
+
+FSE `nre/dettaglio` `dataScadenza` is sometimes the placeholder year 9999 (e.g. `9999-12-31T00:00:00.000`). The app then estimates the expiry as prescription date + 180 days (observed on 6/6 prescriptions with a real expiry) and flags it as estimated. A 2024 placeholder-expiry prescription is refused by the CUP as "Ricetta non erogabile".
+
+The CUP booking flow's `GET {cupBe}/getPrescrizioneElettronica?cf&nre&numbersTeam` performs the "presa in carico" (state-changing on the national prescription system, paired with `/setRilascia`). The app must never call it automatically.
+
 ### ZeroCode (blood draws)
 
 Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zerocode.sanita.toscana.it/api/*`, own SPID login (likely cookie session, not the `rt` Keycloak). Known paths: `/api/profile`, `/api/memo/<id>` (promemoria PDF), `/api/payment-notice/<id>`, `/api/cube`. Not tested with a real session yet.

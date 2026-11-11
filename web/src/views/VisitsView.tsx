@@ -46,7 +46,7 @@ interface Props {
 
 export function VisitsView({ now }: Props = {}): JSX.Element {
   const health = useHealthData();
-  const { prescriptions, appointments, bookingByNre, notInCup } = health;
+  const { prescriptions, appointments, bookingByNre, unbooked } = health;
   const route = useRoute();
   const focus = route.tab === "visite" ? route.focus : undefined;
   const [mountedAt] = useState(() => new Date());
@@ -59,7 +59,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   const sort = useSort<VisitSortKey>("appuntamento", "asc", descFirst);
 
   const currentNow = now ?? mountedAt;
-  const context = { bookingByNre, notInCup, now: currentNow };
+  const context = { bookingByNre, unbooked, now: currentNow };
   const data = buildRows(
     prescriptions.data?.prescriptions ?? [],
     appointments.data?.appointments ?? [],
@@ -85,7 +85,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       setStatus("all");
       setSearch("");
       if (
-        effectiveState(focused, bookingByNre, notInCup, currentNow).kind ===
+        effectiveState(focused, bookingByNre, unbooked, currentNow).kind ===
         "expired"
       ) {
         setShowExpired(true);
@@ -228,7 +228,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
                   state={effectiveState(
                     row,
                     bookingByNre,
-                    notInCup,
+                    unbooked,
                     currentNow,
                   )}
                   booking={bookingByNre.get(row.nre.toUpperCase())}

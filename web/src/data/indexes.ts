@@ -6,7 +6,7 @@ import type {
 
 export interface Indexes {
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
-  notInCup: ReadonlySet<string>;
+  unbooked: ReadonlySet<string>;
   prescriptionNres: ReadonlySet<string>;
 }
 
@@ -41,11 +41,9 @@ export function buildIndexes(
     }
   }
 
-  const notInCup = new Set<string>();
-  for (const failure of appointments?.failed ?? []) {
-    if (failure.reason === "not_in_cup") {
-      notInCup.add(failure.nre.toUpperCase());
-    }
+  const unbooked = new Set<string>();
+  for (const nre of appointments?.unbooked ?? []) {
+    unbooked.add(nre.toUpperCase());
   }
 
   const prescriptionNres = new Set<string>();
@@ -53,5 +51,5 @@ export function buildIndexes(
     prescriptionNres.add(row.nre.toUpperCase());
   }
 
-  return { bookingByNre, notInCup, prescriptionNres };
+  return { bookingByNre, unbooked, prescriptionNres };
 }

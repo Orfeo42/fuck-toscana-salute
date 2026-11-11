@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
@@ -60,6 +59,7 @@ func timePtr(t time.Time) *time.Time {
 type AppointmentsBody struct {
 	Appointments []AppointmentBody `json:"appointments"`
 	Failed       []FailedBody      `json:"failed"`
+	Unbooked     []string          `json:"unbooked"`
 }
 
 type FailedBody struct {
@@ -95,14 +95,15 @@ type PrescriptionCUPBody struct {
 }
 
 type PrescriptionFSEBody struct {
-	ID          string     `json:"id"`
-	NRE         string     `json:"nre"`
-	Description string     `json:"description"`
-	Kind        string     `json:"kind"`
-	Status      int        `json:"status"`
-	Date        *time.Time `json:"date,omitempty"`
-	DocumentRef string     `json:"documentRef"`
-	ExpiresOn   *time.Time `json:"expiresOn,omitempty"`
+	ID              string     `json:"id"`
+	NRE             string     `json:"nre"`
+	Description     string     `json:"description"`
+	Kind            string     `json:"kind"`
+	Status          int        `json:"status"`
+	Date            *time.Time `json:"date,omitempty"`
+	DocumentRef     string     `json:"documentRef"`
+	ExpiresOn       *time.Time `json:"expiresOn,omitempty"`
+	ExpiryEstimated bool       `json:"expiryEstimated,omitempty"`
 }
 
 type PrescriptionsBody struct {
@@ -122,8 +123,6 @@ func failureReason(err error) string {
 		return "session_expired"
 	case errors.Is(err, cup.ErrGestioneNotReady):
 		return "gestione_not_ready"
-	case errors.As(err, &statusErr) && statusErr.Status == http.StatusInternalServerError:
-		return "not_in_cup"
 	case errors.As(err, &statusErr):
 		return fmt.Sprintf("upstream_%d", statusErr.Status)
 	}
@@ -154,7 +153,9 @@ func toAppointmentsBody(result agenda.Result) AppointmentsBody {
 	for _, f := range result.Failed {
 		failed = append(failed, FailedBody{NRE: f.NRE, Reason: failureReason(f.Err)})
 	}
-	return AppointmentsBody{Appointments: appointments, Failed: failed}
+	unbooked := make([]string, 0, len(result.Unbooked))
+	unbooked = append(unbooked, result.Unbooked...)
+	return AppointmentsBody{Appointments: appointments, Failed: failed, Unbooked: unbooked}
 }
 
 func toPrescriptionsBody(rows []agenda.Row) PrescriptionsBody {
@@ -181,14 +182,15 @@ func toPrescriptionFSEBodyPtr(p *fse.Prescription) *PrescriptionFSEBody {
 		return nil
 	}
 	return &PrescriptionFSEBody{
-		ID:          p.ID,
-		NRE:         p.NRE,
-		Description: p.Description,
-		Kind:        string(p.Kind),
-		Status:      p.Status,
-		Date:        timePtr(p.Date),
-		DocumentRef: p.DocumentRef,
-		ExpiresOn:   timePtr(p.ExpiresAt),
+		ID:              p.ID,
+		NRE:             p.NRE,
+		Description:     p.Description,
+		Kind:            string(p.Kind),
+		Status:          p.Status,
+		Date:            timePtr(p.Date),
+		DocumentRef:     p.DocumentRef,
+		ExpiresOn:       timePtr(p.ExpiresAt),
+		ExpiryEstimated: p.ExpiryEstimated,
 	}
 }
 

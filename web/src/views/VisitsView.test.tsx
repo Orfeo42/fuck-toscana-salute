@@ -160,13 +160,14 @@ function stubScroll(scroll: () => void): MockInstance {
     .mockImplementation(scroll);
 }
 
-function mockData(appointments: AppointmentBody[], notInCup: string[]): void {
+function mockData(appointments: AppointmentBody[], unbooked: string[]): void {
   mocks.get.mockImplementation((path: string) => {
     if (path === "/api/appointments") {
       return Promise.resolve({
         data: {
           appointments,
-          failed: notInCup.map((nre) => ({ nre, reason: "not_in_cup" })),
+          failed: [],
+          unbooked,
         },
       });
     }
@@ -359,18 +360,47 @@ describe("VisitsView", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the booked elsewhere badge and hides Prenota sul CUP", async () => {
-    mockData([], ["0900A0000000004"]);
+  it("shows to-book, the note and Prenota sul CUP for an unbooked FSE 30 row", async () => {
+    mockData([], ["0900A0000000005"]);
     renderView();
 
-    const badge = await screen.findByText("Prenotata fuori dal CUP regionale");
-    const row = badge.closest("tr");
+    const note = await screen.findByText(
+      "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento",
+    );
+    const row = note.closest("tr");
     expect(row).not.toBeNull();
     expect(
-      within(row as HTMLElement).queryByRole("link", {
-        name: "Prenota sul CUP",
-      }),
+      within(row as HTMLElement).getByText("Da prenotare"),
+    ).toBeInTheDocument();
+    expect(
+      within(row as HTMLElement).getByRole("link", { name: "Prenota sul CUP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Prenotata fuori dal CUP regionale"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders (stimata) for an estimated expiry", async () => {
+    const estimated: RowBody = {
+      nre: "0900A0000000070",
+      fse: {
+        id: "f70",
+        nre: "0900A0000000070",
+        description: "Visita stimata esempio",
+        kind: "visit",
+        status: 3,
+        date: "2026-11-01T09:00:00Z",
+        expiresOn: "2099-12-01T09:00:00Z",
+        expiryEstimated: true,
+        documentRef: "",
+      },
+    };
+    mockRows([estimated], []);
+    renderView();
+
+    expect(
+      await screen.findByText(/scade il .*\(stimata\)/),
+    ).toBeInTheDocument();
   });
 
   it("adds a row for an appointment without a prescription", async () => {

@@ -25,14 +25,15 @@ const (
 )
 
 type Prescription struct {
-	ID          string
-	NRE         string
-	Description string
-	Kind        Kind
-	Status      int
-	Date        time.Time
-	DocumentRef string
-	ExpiresAt   time.Time
+	ID              string
+	NRE             string
+	Description     string
+	Kind            Kind
+	Status          int
+	Date            time.Time
+	DocumentRef     string
+	ExpiresAt       time.Time
+	ExpiryEstimated bool
 }
 
 type fseError string
@@ -42,12 +43,14 @@ func (e fseError) Error() string { return string(e) }
 const ErrNoDocument = fseError("fse: document not found in response")
 
 const (
-	defaultVisitBase = "https://apit.sanita.toscana.it/C06/fse-ricette-visite/v1"
-	defaultDrugBase  = "https://apit.sanita.toscana.it/C06/fse-ricette-farmaci/v1"
-	drugRefMarker    = "_PREFARM"
-	openStatus       = 3
-	detailLimit      = 4
-	expiryLayout     = "2006-01-02T15:04:05.000"
+	defaultVisitBase      = "https://apit.sanita.toscana.it/C06/fse-ricette-visite/v1"
+	defaultDrugBase       = "https://apit.sanita.toscana.it/C06/fse-ricette-farmaci/v1"
+	drugRefMarker         = "_PREFARM"
+	openStatus            = 3
+	detailLimit           = 4
+	expiryLayout          = "2006-01-02T15:04:05.000"
+	placeholderExpiryYear = 9999
+	validityDays          = 180
 )
 
 //go:generate moq -out tokensource_mock.go . TokenSource:MockTokenSource
@@ -155,7 +158,21 @@ func (c *Client) fillExpiry(ctx context.Context, visits []Prescription) error {
 		}
 		wg.Go(func() {
 			defer func() { <-semaphore }()
-			visits[i].ExpiresAt, errs[n] = c.expiry(ctx, visits[i].NRE)
+			expiresAt, err := c.expiry(ctx, visits[i].NRE)
+			errs[n] = err
+			if err != nil {
+				return
+			}
+			visits[i].ExpiresAt = expiresAt
+			if expiresAt.Year() != placeholderExpiryYear {
+				return
+			}
+			visits[i].ExpiresAt = time.Time{}
+			if visits[i].Date.IsZero() {
+				return
+			}
+			visits[i].ExpiresAt = visits[i].Date.In(c.loc).AddDate(0, 0, validityDays)
+			visits[i].ExpiryEstimated = true
 		})
 	}
 	wg.Wait()
