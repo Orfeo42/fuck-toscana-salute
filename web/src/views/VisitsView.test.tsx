@@ -315,11 +315,8 @@ describe("VisitsView", () => {
     expect(book).toHaveAttribute("target", "_blank");
   });
 
-  it("shows a booked row with appointment, map link and calendar button", async () => {
-    mockData([appointment("0900A0000000001", "2026-11-12T09:30:00Z")], []);
-    renderView();
-
-    const row = await waitFor(() => {
+  async function bookedRowOf(): Promise<HTMLElement> {
+    return waitFor(() => {
       const found = bodyRows().find(
         (r) => within(r).queryByText("Prenotata") !== null,
       );
@@ -328,19 +325,142 @@ describe("VisitsView", () => {
       }
       return found;
     });
-    expect(within(row).getByText(/10:30/)).toBeVisible();
-    expect(within(row).getByText("tra 2 giorni")).toBeVisible();
+  }
+
+  it("shows a booked row with one-line appointment and structure and calendar button", async () => {
+    mockData([appointment("0900A0000000001", "2026-11-12T09:30:00Z")], []);
+    renderView();
+
+    const row = await bookedRowOf();
+    expect(within(row).getByText("gio 12/11 · 10:30")).toBeVisible();
+    expect(within(row).queryByText("tra 2 giorni")).not.toBeInTheDocument();
     expect(within(row).getByText("Unita esempio")).toBeVisible();
-    expect(within(row).getByText("Via Esempio 1, Firenze, FI")).toBeVisible();
-    const map = within(row).getByRole("link", { name: "Apri su mappa" });
-    expect(map.getAttribute("href")).toContain("openstreetmap.org");
-    expect(map).toHaveAttribute("target", "_blank");
-    expect(map).toHaveAttribute("rel", "noopener noreferrer");
+    expect(
+      within(row).queryByText("Via Esempio 1, Firenze, FI"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(row).queryByRole("link", { name: "Apri su mappa" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(row).getAllByRole("button", { name: "Dettagli appuntamento" }),
+    ).toHaveLength(2);
     expect(
       within(row).getByRole("button", { name: "Aggiungi a Google Calendar" }),
     ).toBeVisible();
     expect(
       within(row).queryByRole("link", { name: "Prenota sul CUP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the full structure name in a tooltip", async () => {
+    const user = userEvent.setup();
+    mockData([appointment("0900A0000000001", "2026-11-12T09:30:00Z")], []);
+    renderView();
+
+    const row = await bookedRowOf();
+    const buttons = within(row).getAllByRole("button", {
+      name: "Dettagli appuntamento",
+    });
+    const structure = buttons[1];
+    if (structure === undefined) {
+      throw new Error("no structure button");
+    }
+    await user.hover(structure);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Unita esempio",
+    );
+  });
+
+  it("opens the detail dialog with the maps links", async () => {
+    const user = userEvent.setup();
+    mockData(
+      [
+        {
+          ...appointment("0900A0000000001", "2026-11-12T09:30:00Z"),
+          unit: {
+            name: "Unita esempio",
+            description: "",
+            address: "Via A&B 1/c",
+            city: "Firenze",
+            province: "FI",
+          },
+        },
+      ],
+      [],
+    );
+    renderView();
+
+    const row = await bookedRowOf();
+    const [open] = within(row).getAllByRole("button", {
+      name: "Dettagli appuntamento",
+    });
+    if (open === undefined) {
+      throw new Error("no detail button");
+    }
+    await user.click(open);
+
+    const dialog = await screen.findByRole("dialog", { name: "Appuntamento" });
+    expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
+    expect(within(dialog).getByText("tra 2 giorni")).toBeVisible();
+    expect(within(dialog).getByText("Unita esempio")).toBeVisible();
+    expect(within(dialog).getByText("Via A&B 1/c, Firenze, FI")).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Copia NRE 0900A0000000001",
+      }),
+    ).toBeVisible();
+    const directions = within(dialog).getByRole("link", {
+      name: "Indicazioni stradali",
+    });
+    expect(directions).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/dir/?api=1&destination=Via%20A%26B%201%2Fc%2C%20Firenze",
+    );
+    expect(directions).toHaveAttribute("target", "_blank");
+    expect(directions).toHaveAttribute("rel", "noopener noreferrer");
+    expect(
+      within(dialog).getByRole("link", { name: "Apri in Google Maps" }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/search/?api=1&query=Via%20A%26B%201%2Fc%2C%20Firenze",
+    );
+  });
+
+  it("hides the maps links when the unit has no address", async () => {
+    const user = userEvent.setup();
+    mockData(
+      [
+        {
+          ...appointment("0900A0000000001", "2026-11-12T09:30:00Z"),
+          unit: {
+            name: "Unita esempio",
+            description: "",
+            address: "",
+            city: "",
+            province: "",
+          },
+        },
+      ],
+      [],
+    );
+    renderView();
+
+    const row = await bookedRowOf();
+    const [open] = within(row).getAllByRole("button", {
+      name: "Dettagli appuntamento",
+    });
+    if (open === undefined) {
+      throw new Error("no detail button");
+    }
+    await user.click(open);
+
+    const dialog = await screen.findByRole("dialog", { name: "Appuntamento" });
+    expect(
+      within(dialog).queryByRole("link", { name: "Indicazioni stradali" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("link", { name: "Apri in Google Maps" }),
     ).not.toBeInTheDocument();
   });
 

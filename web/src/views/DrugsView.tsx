@@ -18,6 +18,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate } from "../lib/format";
+import { tableBackground } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
 import {
@@ -181,6 +182,7 @@ export function DrugsView(): JSX.Element {
           striped
           highlightOnHover
           withTableBorder
+          backgroundColor={tableBackground}
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}

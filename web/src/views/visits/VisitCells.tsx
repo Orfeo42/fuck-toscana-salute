@@ -1,18 +1,16 @@
-import { Box, Group, Text } from "@mantine/core";
-import { CalendarCheck, MapPin } from "lucide-react";
+import { Box, Group, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { CalendarCheck } from "lucide-react";
 import { useState, type JSX } from "react";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
 import { IconAction } from "../../components/IconAction";
 import { PdfLink } from "../../components/PdfLink";
 import { StatusBadge } from "../../components/StatusBadge";
-import { formatDate, formatTime } from "../../lib/format";
+import { formatCompactDateTime, formatDate } from "../../lib/format";
 import { BookAction } from "./BookAction";
 import { CalendarDialog } from "./CalendarDialog";
 import { unitName, rowTitle, type EffectiveState } from "./filter";
-import { mapUrl } from "./mapUrl";
 import { PromemoriaLink } from "./PromemoriaLink";
-import { relativeDay } from "./relativeDay";
 
 const slotSize = 34;
 
@@ -55,65 +53,61 @@ interface AppointmentProps {
   state: EffectiveState;
   loading: boolean;
   failed: boolean;
-  now: Date;
+  onOpen: () => void;
 }
 
 export function AppointmentCell({
   state,
   loading,
   failed,
-  now,
+  onOpen,
 }: AppointmentProps): JSX.Element | null {
   const at = state.kind === "booked" ? state.at : undefined;
-  let content: JSX.Element | null = null;
   if (at !== undefined) {
-    content = (
-      <>
-        {formatDate(at)} {formatTime(at)}
-        <Text size="xs" c="dimmed">
-          {relativeDay(at, now)}
+    return (
+      <UnstyledButton aria-label="Dettagli appuntamento" onClick={onOpen}>
+        <Text size="sm" span>
+          {formatCompactDateTime(at)}
         </Text>
-      </>
+      </UnstyledButton>
     );
-  } else if (loading) {
-    content = <>ricerca…</>;
-  } else if (failed) {
-    content = <>—</>;
   }
-  return content;
+  if (loading) {
+    return <>ricerca…</>;
+  }
+  return failed ? <>—</> : null;
 }
 
 interface StructureProps {
   state: EffectiveState;
   booking: AppointmentBody | undefined;
+  onOpen: () => void;
 }
 
 export function StructureCell({
   state,
   booking,
+  onOpen,
 }: StructureProps): JSX.Element | null {
   const unit = state.kind === "booked" ? booking?.unit : undefined;
   if (unit === undefined) {
     return null;
   }
-  const place = [unit.address, unit.city, unit.province]
-    .filter((part) => part !== "")
-    .join(", ");
+  const name = unitName(unit);
   return (
-    <>
-      {unitName(unit)}
-      {place === "" ? null : (
-        <Text size="xs" c="dimmed">
-          {place}
+    <Tooltip label={name} withArrow openDelay={300}>
+      <UnstyledButton
+        aria-label="Dettagli appuntamento"
+        onClick={onOpen}
+        display="block"
+        w="100%"
+        ta="left"
+      >
+        <Text size="sm" truncate="end">
+          {name}
         </Text>
-      )}
-      <IconAction
-        label="Apri su mappa"
-        icon={MapPin}
-        href={mapUrl(unit.address, unit.city)}
-        external
-      />
-    </>
+      </UnstyledButton>
+    </Tooltip>
   );
 }
 

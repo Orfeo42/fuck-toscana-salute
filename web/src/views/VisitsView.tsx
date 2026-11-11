@@ -16,9 +16,11 @@ import { CopyButton } from "../components/CopyButton";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate } from "../lib/format";
+import { tableBackground } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
 import type { RowBody } from "../api/client";
+import { AppointmentDetailModal } from "./visits/AppointmentDetailModal";
 import {
   ActionsCell,
   AppointmentCell,
@@ -58,6 +60,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     defaultExcludedLabels,
   );
   const [search, setSearch] = useState("");
+  const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
   const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
 
   const currentNow = now ?? mountedAt;
@@ -146,13 +149,16 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       title: "Appuntamento",
       sortable: true,
       noWrap: true,
+      width: 170,
       customCellAttributes: () => ({ "aria-busy": appointments.loading }),
       render: (row) => (
         <AppointmentCell
           state={effectiveState(row, bookingByNre, unbooked, currentNow)}
           loading={appointments.loading}
           failed={appointments.error !== undefined}
-          now={currentNow}
+          onOpen={() => {
+            setDetailNre(row.nre);
+          }}
         />
       ),
     },
@@ -160,10 +166,15 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       accessor: "struttura",
       title: "Struttura",
       sortable: true,
+      noWrap: true,
+      width: 220,
       render: (row) => (
         <StructureCell
           state={effectiveState(row, bookingByNre, unbooked, currentNow)}
           booking={bookingByNre.get(row.nre.toUpperCase())}
+          onOpen={() => {
+            setDetailNre(row.nre);
+          }}
         />
       ),
     },
@@ -187,6 +198,15 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       ),
     },
   ];
+
+  const detailRow =
+    detailNre === undefined
+      ? undefined
+      : data.find((row) => row.nre === detailNre);
+  const detailBooking =
+    detailRow === undefined
+      ? undefined
+      : bookingByNre.get(detailRow.nre.toUpperCase());
 
   const summary = `${String(visible.length)} visite/esami`;
   const ready = !prescriptions.loading && prescriptions.error === undefined;
@@ -254,6 +274,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           striped
           highlightOnHover
           withTableBorder
+          backgroundColor={tableBackground}
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}
@@ -279,6 +300,17 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
               ? { backgroundColor: focusedBg }
               : undefined
           }
+        />
+      ) : null}
+      {detailRow !== undefined && detailBooking !== undefined ? (
+        <AppointmentDetailModal
+          row={detailRow}
+          state={effectiveState(detailRow, bookingByNre, unbooked, currentNow)}
+          booking={detailBooking}
+          now={currentNow}
+          onClose={() => {
+            setDetailNre(undefined);
+          }}
         />
       ) : null}
     </section>
