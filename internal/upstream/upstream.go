@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 )
 
 const (
@@ -16,6 +17,8 @@ const (
 	maxErrorBodyKept = 4 << 10
 	userAgent        = "fuck-toscana-salute"
 )
+
+var exceptionClassPattern = regexp.MustCompile(`\b(?:[a-z_][a-z0-9_]*\.)+[A-Z][A-Za-z0-9_$]*(?:Exception|Error|Fault)\b`)
 
 type StatusError struct {
 	Status int
@@ -28,6 +31,10 @@ func (e *StatusError) Error() string {
 
 func (e *StatusError) BodyContains(substr string) bool {
 	return bytes.Contains(e.body, []byte(substr))
+}
+
+func (e *StatusError) ExceptionClass() string {
+	return string(exceptionClassPattern.Find(e.body))
 }
 
 type Client struct {

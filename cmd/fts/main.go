@@ -49,7 +49,7 @@ func run(ctx context.Context) error {
 	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), cfg.RefreshMargin)
 	go store.Run(ctx, cfg.RefreshTick)
 
-	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.LoginTimeout), store)
+	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.ProfileDir, cfg.LoginTimeout), store)
 	up := upstream.New(httpClient)
 	fseClient := fse.New(up, store)
 	ag := agenda.New(cup.New(up, store), fseClient, lookupConcurrency)

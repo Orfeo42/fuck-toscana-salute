@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,20 +130,22 @@ func TestRegisterLogout(t *testing.T) {
 func TestRegisterListAppointments(t *testing.T) {
 	t.Run("maps fields, zero time absent and nil items empty", func(t *testing.T) {
 		at := time.Date(2026, 3, 4, 9, 30, 0, 0, time.UTC)
-		ag := &MockAgenda{AppointmentsFunc: func(context.Context) ([]agenda.Entry, error) {
-			return []agenda.Entry{
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{Entries: []agenda.Entry{
 				{
+					NRE: "n1",
+					CUP: &cup.Prescription{NRE: "n1", Kind: "visit", Status: 2, Items: []string{"x"}},
 					Appointment: cup.Appointment{
 						ID: "a1", NRE: "n1", Status: "booked", At: at,
 						Unit: cup.Unit{Name: "Unit", Description: "Desc", Address: "Via Test 1", City: "Firenze", Province: "FI"},
 					},
-					Prescription: cup.Prescription{NRE: "n1", Kind: "visit", Status: 2, Items: []string{"x"}},
 				},
 				{
-					Appointment:  cup.Appointment{ID: "a2", NRE: "n2"},
-					Prescription: cup.Prescription{NRE: "n2"},
+					NRE:         "n2",
+					FSE:         &fse.Prescription{ID: "f2", NRE: "n2", Description: "D", Kind: fse.KindVisit, Status: 30, DocumentRef: "ref"},
+					Appointment: cup.Appointment{ID: "a2"},
 				},
-			}, nil
+			}}, nil
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
@@ -150,17 +156,67 @@ func TestRegisterListAppointments(t *testing.T) {
 			"appointments": [
 				{"id":"a1","nre":"n1","status":"booked","at":"2026-03-04T09:30:00Z",
 				 "unit":{"name":"Unit","description":"Desc","address":"Via Test 1","city":"Firenze","province":"FI"},
-				 "prescription":{"nre":"n1","kind":"visit","status":2,"items":["x"]}},
+				 "cup":{"nre":"n1","kind":"visit","status":2,"items":["x"]}},
 				{"id":"a2","nre":"n2","status":"",
 				 "unit":{"name":"","description":"","address":"","city":"","province":""},
-				 "prescription":{"nre":"n2","kind":"","status":0,"items":[]}}
+				 "fse":{"id":"f2","nre":"n2","description":"D","kind":"visit","status":30,"documentRef":"ref"}}
+			],
+			"failed": []
+		}`, resp.Body.String())
+	})
+
+	t.Run("failed lists each reason kind", func(t *testing.T) {
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{Failed: []agenda.Failure{
+				{NRE: "n1", Err: fmt.Errorf("wrap: %w", session.ErrSessionExpired)},
+				{NRE: "n2", Err: session.ErrNotLoggedIn},
+				{NRE: "n3", Err: cup.ErrGestioneNotReady},
+				{NRE: "n4", Err: fmt.Errorf("wrap: %w", &upstream.StatusError{Status: 500})},
+				{NRE: "n5", Err: errors.New("boom")},
+			}}, nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
+
+		resp := api.Get("/api/appointments")
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{
+			"appointments": [],
+			"failed": [
+				{"nre":"n1","reason":"session_expired"},
+				{"nre":"n2","reason":"session_expired"},
+				{"nre":"n3","reason":"gestione_not_ready"},
+				{"nre":"n4","reason":"upstream_500"},
+				{"nre":"n5","reason":"error"}
 			]
 		}`, resp.Body.String())
 	})
 
+	t.Run("failures emit one warn without NRE", func(t *testing.T) {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(previous)
+
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{Failed: []agenda.Failure{
+				{NRE: "FAKENRE123", Err: &upstream.StatusError{Status: 500}},
+			}}, nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
+
+		require.Equal(t, http.StatusOK, api.Get("/api/appointments").Code)
+		logged := buf.String()
+		assert.Equal(t, 1, strings.Count(logged, "appointment lookups failed"))
+		assert.Contains(t, logged, "first_exception")
+		assert.Contains(t, logged, "first_error")
+		assert.NotContains(t, logged, "FAKENRE123")
+	})
+
 	t.Run("unauthorized when not logged in", func(t *testing.T) {
-		ag := &MockAgenda{AppointmentsFunc: func(context.Context) ([]agenda.Entry, error) {
-			return nil, session.ErrNotLoggedIn
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{}, session.ErrNotLoggedIn
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
@@ -169,8 +225,8 @@ func TestRegisterListAppointments(t *testing.T) {
 	})
 
 	t.Run("conflict when gestione is not ready", func(t *testing.T) {
-		ag := &MockAgenda{AppointmentsFunc: func(context.Context) ([]agenda.Entry, error) {
-			return nil, cup.ErrGestioneNotReady
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{}, cup.ErrGestioneNotReady
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
@@ -179,8 +235,8 @@ func TestRegisterListAppointments(t *testing.T) {
 	})
 
 	t.Run("bad gateway on upstream status error", func(t *testing.T) {
-		ag := &MockAgenda{AppointmentsFunc: func(context.Context) ([]agenda.Entry, error) {
-			return nil, &upstream.StatusError{Status: 503}
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{}, &upstream.StatusError{Status: 503}
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})
@@ -189,8 +245,8 @@ func TestRegisterListAppointments(t *testing.T) {
 	})
 
 	t.Run("internal error on other failures", func(t *testing.T) {
-		ag := &MockAgenda{AppointmentsFunc: func(context.Context) ([]agenda.Entry, error) {
-			return nil, errors.New("boom")
+		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) {
+			return agenda.Result{}, errors.New("boom")
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{})

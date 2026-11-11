@@ -123,3 +123,21 @@ func TestStatusError(t *testing.T) {
 		assert.False(t, statusErr.BodyContains("absent"))
 	})
 }
+
+func TestStatusErrorExceptionClass(t *testing.T) {
+	t.Run("finds class in java stack text", func(t *testing.T) {
+		body := "Caused by: it.example.sis.NoDataException: no data\n\tat it.example.Foo.bar(Foo.java:10)"
+		statusErr := &StatusError{Status: 500, body: []byte(body)}
+		assert.Equal(t, "it.example.sis.NoDataException", statusErr.ExceptionClass())
+	})
+
+	t.Run("plain text body returns empty", func(t *testing.T) {
+		statusErr := &StatusError{Status: 500, body: []byte("Internal server error")}
+		assert.Empty(t, statusErr.ExceptionClass())
+	})
+
+	t.Run("lowercase-only tokens are ignored", func(t *testing.T) {
+		statusErr := &StatusError{Status: 500, body: []byte("it.example.sis.nodata exception error")}
+		assert.Empty(t, statusErr.ExceptionClass())
+	})
+}

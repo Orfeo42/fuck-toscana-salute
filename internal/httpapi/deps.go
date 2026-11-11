@@ -21,7 +21,7 @@ type LoginFlow interface {
 
 //go:generate moq -out data_mock.go . Agenda:MockAgenda Documents:MockDocuments
 type Agenda interface {
-	Appointments(ctx context.Context) ([]agenda.Entry, error)
+	Appointments(ctx context.Context) (agenda.Result, error)
 	Prescriptions(ctx context.Context) ([]agenda.Row, error)
 }
 

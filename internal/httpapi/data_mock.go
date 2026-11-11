@@ -19,7 +19,7 @@ var _ Agenda = &MockAgenda{}
 //
 //		// make and configure a mocked Agenda
 //		mockedAgenda := &MockAgenda{
-//			AppointmentsFunc: func(ctx context.Context) ([]agenda.Entry, error) {
+//			AppointmentsFunc: func(ctx context.Context) (agenda.Result, error) {
 //				panic("mock out the Appointments method")
 //			},
 //			PrescriptionsFunc: func(ctx context.Context) ([]agenda.Row, error) {
@@ -33,7 +33,7 @@ var _ Agenda = &MockAgenda{}
 //	}
 type MockAgenda struct {
 	// AppointmentsFunc mocks the Appointments method.
-	AppointmentsFunc func(ctx context.Context) ([]agenda.Entry, error)
+	AppointmentsFunc func(ctx context.Context) (agenda.Result, error)
 
 	// PrescriptionsFunc mocks the Prescriptions method.
 	PrescriptionsFunc func(ctx context.Context) ([]agenda.Row, error)
@@ -56,7 +56,7 @@ type MockAgenda struct {
 }
 
 // Appointments calls AppointmentsFunc.
-func (mock *MockAgenda) Appointments(ctx context.Context) ([]agenda.Entry, error) {
+func (mock *MockAgenda) Appointments(ctx context.Context) (agenda.Result, error) {
 	if mock.AppointmentsFunc == nil {
 		panic("MockAgenda.AppointmentsFunc: method is nil but Agenda.Appointments was just called")
 	}

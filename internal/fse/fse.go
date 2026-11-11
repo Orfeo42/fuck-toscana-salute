@@ -175,7 +175,10 @@ func (c *Client) PrescriptionPDF(ctx context.Context, documentRef string) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("fse download: %w", err)
 	}
-	for _, field := range resp.Risposta.ContenutoRisposta.DatoSingolo {
+	fields := resp.Risposta.ContenutoRisposta.DatoSingolo
+	names := make([]string, 0, len(fields))
+	for _, field := range fields {
+		names = append(names, field.NomeCampo)
 		if field.NomeCampo != "ricettaBase64" && field.NomeCampo != "refertoCodificatoBase64" {
 			continue
 		}
@@ -185,5 +188,5 @@ func (c *Client) PrescriptionPDF(ctx context.Context, documentRef string) ([]byt
 		}
 		return pdf, nil
 	}
-	return nil, ErrNoDocument
+	return nil, fmt.Errorf("%w: fields [%s]", ErrNoDocument, strings.Join(names, ","))
 }

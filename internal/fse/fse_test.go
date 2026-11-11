@@ -217,13 +217,15 @@ func TestPrescriptionPDF(t *testing.T) {
 
 	t.Run("missing field returns ErrNoDocument", func(t *testing.T) {
 		c := newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"other","valoreCampo":"x"}]}}}`))
+			_, err := w.Write([]byte(`{"risposta":{"contenutoRisposta":{"datoSingolo":[{"nomeCampo":"other","valoreCampo":"secret-value"}]}}}`))
 			require.NoError(t, err)
 		})
 
 		got, err := c.PrescriptionPDF(context.Background(), "0900A0000000001_X")
 
 		require.ErrorIs(t, err, ErrNoDocument)
+		assert.ErrorContains(t, err, "fields [other]")
+		assert.NotContains(t, err.Error(), "secret-value")
 		assert.Nil(t, got)
 	})
 

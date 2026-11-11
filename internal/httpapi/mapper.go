@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/cup"
+	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/upstream"
 )
 
 type SessionBody struct {
@@ -54,15 +58,22 @@ func timePtr(t time.Time) *time.Time {
 
 type AppointmentsBody struct {
 	Appointments []AppointmentBody `json:"appointments"`
+	Failed       []FailedBody      `json:"failed"`
+}
+
+type FailedBody struct {
+	NRE    string `json:"nre"`
+	Reason string `json:"reason"`
 }
 
 type AppointmentBody struct {
-	ID           string              `json:"id"`
-	NRE          string              `json:"nre"`
-	Status       string              `json:"status"`
-	At           *time.Time          `json:"at,omitempty"`
-	Unit         UnitBody            `json:"unit"`
-	Prescription PrescriptionCUPBody `json:"prescription"`
+	ID     string               `json:"id"`
+	NRE    string               `json:"nre"`
+	Status string               `json:"status"`
+	At     *time.Time           `json:"at,omitempty"`
+	Unit   UnitBody             `json:"unit"`
+	CUP    *PrescriptionCUPBody `json:"cup,omitempty"`
+	FSE    *PrescriptionFSEBody `json:"fse,omitempty"`
 }
 
 type UnitBody struct {
@@ -101,12 +112,25 @@ type RowBody struct {
 	FSE *PrescriptionFSEBody `json:"fse,omitempty"`
 }
 
-func toAppointmentsBody(entries []agenda.Entry) AppointmentsBody {
-	appointments := make([]AppointmentBody, 0, len(entries))
-	for _, e := range entries {
+func failureReason(err error) string {
+	var statusErr *upstream.StatusError
+	switch {
+	case errors.Is(err, session.ErrSessionExpired), errors.Is(err, session.ErrNotLoggedIn):
+		return "session_expired"
+	case errors.Is(err, cup.ErrGestioneNotReady):
+		return "gestione_not_ready"
+	case errors.As(err, &statusErr):
+		return fmt.Sprintf("upstream_%d", statusErr.Status)
+	}
+	return "error"
+}
+
+func toAppointmentsBody(result agenda.Result) AppointmentsBody {
+	appointments := make([]AppointmentBody, 0, len(result.Entries))
+	for _, e := range result.Entries {
 		appointments = append(appointments, AppointmentBody{
 			ID:     e.Appointment.ID,
-			NRE:    e.Appointment.NRE,
+			NRE:    e.NRE,
 			Status: e.Appointment.Status,
 			At:     timePtr(e.Appointment.At),
 			Unit: UnitBody{
@@ -116,34 +140,49 @@ func toAppointmentsBody(entries []agenda.Entry) AppointmentsBody {
 				City:        e.Appointment.Unit.City,
 				Province:    e.Appointment.Unit.Province,
 			},
-			Prescription: toPrescriptionCUPBody(e.Prescription),
+			CUP: toPrescriptionCUPBodyPtr(e.CUP),
+			FSE: toPrescriptionFSEBodyPtr(e.FSE),
 		})
 	}
-	return AppointmentsBody{Appointments: appointments}
+	failed := make([]FailedBody, 0, len(result.Failed))
+	for _, f := range result.Failed {
+		failed = append(failed, FailedBody{NRE: f.NRE, Reason: failureReason(f.Err)})
+	}
+	return AppointmentsBody{Appointments: appointments, Failed: failed}
 }
 
 func toPrescriptionsBody(rows []agenda.Row) PrescriptionsBody {
 	prescriptions := make([]RowBody, 0, len(rows))
 	for _, r := range rows {
 		row := RowBody{NRE: r.NRE}
-		if r.CUP != nil {
-			body := toPrescriptionCUPBody(*r.CUP)
-			row.CUP = &body
-		}
-		if r.FSE != nil {
-			row.FSE = &PrescriptionFSEBody{
-				ID:          r.FSE.ID,
-				NRE:         r.FSE.NRE,
-				Description: r.FSE.Description,
-				Kind:        string(r.FSE.Kind),
-				Status:      r.FSE.Status,
-				Date:        timePtr(r.FSE.Date),
-				DocumentRef: r.FSE.DocumentRef,
-			}
-		}
+		row.CUP = toPrescriptionCUPBodyPtr(r.CUP)
+		row.FSE = toPrescriptionFSEBodyPtr(r.FSE)
 		prescriptions = append(prescriptions, row)
 	}
 	return PrescriptionsBody{Prescriptions: prescriptions}
+}
+
+func toPrescriptionCUPBodyPtr(p *cup.Prescription) *PrescriptionCUPBody {
+	if p == nil {
+		return nil
+	}
+	body := toPrescriptionCUPBody(*p)
+	return &body
+}
+
+func toPrescriptionFSEBodyPtr(p *fse.Prescription) *PrescriptionFSEBody {
+	if p == nil {
+		return nil
+	}
+	return &PrescriptionFSEBody{
+		ID:          p.ID,
+		NRE:         p.NRE,
+		Description: p.Description,
+		Kind:        string(p.Kind),
+		Status:      p.Status,
+		Date:        timePtr(p.Date),
+		DocumentRef: p.DocumentRef,
+	}
 }
 
 func toPrescriptionCUPBody(p cup.Prescription) PrescriptionCUPBody {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 
 func TestLoad(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
+		dataHome := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", dataHome)
 		got, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, Config{
@@ -18,7 +21,40 @@ func TestLoad(t *testing.T) {
 			LoginTimeout:   10 * time.Minute,
 			RefreshMargin:  60 * time.Second,
 			RefreshTick:    15 * time.Second,
+			ProfileDir:     filepath.Join(dataHome, "fuck-toscana-salute", "chrome-profile"),
 		}, got)
+	})
+
+	t.Run("profile dir from home when XDG_DATA_HOME empty", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", "")
+		t.Setenv("HOME", home)
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(home, ".local", "share", "fuck-toscana-salute", "chrome-profile"), got.ProfileDir)
+	})
+
+	t.Run("relative XDG_DATA_HOME ignored", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", "relative/data")
+		t.Setenv("HOME", home)
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(home, ".local", "share", "fuck-toscana-salute", "chrome-profile"), got.ProfileDir)
+	})
+
+	t.Run("explicit profile dir", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("FTS_PROFILE_DIR", dir)
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, dir, got.ProfileDir)
+	})
+
+	t.Run("relative profile dir rejected", func(t *testing.T) {
+		t.Setenv("FTS_PROFILE_DIR", "profile")
+		_, err := Load()
+		require.ErrorIs(t, err, ErrInvalidProfileDir)
 	})
 
 	t.Run("custom ipv6 loopback", func(t *testing.T) {

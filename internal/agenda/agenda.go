@@ -21,7 +21,6 @@ func (e agendaError) Error() string { return string(e) }
 const (
 	ErrCUPPrescriptions = agendaError("agenda: cup prescriptions failed")
 	ErrFSEPrescriptions = agendaError("agenda: fse prescriptions failed")
-	ErrAppointments     = agendaError("agenda: appointments lookup failed")
 )
 
 const (
@@ -40,8 +39,28 @@ type FSE interface {
 }
 
 type Entry struct {
-	Appointment  cup.Appointment
-	Prescription cup.Prescription
+	Appointment cup.Appointment
+	NRE         string
+	CUP         *cup.Prescription
+	FSE         *fse.Prescription
+}
+
+type Failure struct {
+	NRE string
+	CUP *cup.Prescription
+	FSE *fse.Prescription
+	Err error
+}
+
+type candidate struct {
+	nre string
+	cup *cup.Prescription
+	fse *fse.Prescription
+}
+
+type Result struct {
+	Entries []Entry
+	Failed  []Failure
 }
 
 type Row struct {
@@ -64,75 +83,102 @@ func New(cupClient CUP, fseClient FSE, concurrency int) *Agenda {
 	return &Agenda{cup: cupClient, fse: fseClient, concurrency: concurrency, now: time.Now}
 }
 
-func (a *Agenda) Appointments(ctx context.Context) ([]Entry, error) {
-	prescriptions, err := a.cup.Prescriptions(ctx)
+func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
+	cupPrescriptions, fsePrescriptions, err := a.sources(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrCUPPrescriptions, err)
+		return Result{}, err
 	}
-	candidates := a.candidates(prescriptions)
-	results, err := a.lookupAppointments(ctx, candidates)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAppointments, err)
+	candidates := a.candidates(cupPrescriptions, fsePrescriptions)
+	results, errs := a.lookupAppointments(ctx, candidates)
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
 	}
-	entries := []Entry{}
-	for i, appointments := range results {
-		for _, appointment := range appointments {
-			entries = append(entries, Entry{Appointment: appointment, Prescription: candidates[i]})
+	result := Result{Entries: []Entry{}, Failed: []Failure{}}
+	for i, c := range candidates {
+		if errs[i] != nil {
+			result.Failed = append(result.Failed, Failure{NRE: c.nre, CUP: c.cup, FSE: c.fse, Err: errs[i]})
+			continue
+		}
+		for _, appointment := range results[i] {
+			result.Entries = append(result.Entries, Entry{Appointment: appointment, NRE: c.nre, CUP: c.cup, FSE: c.fse})
 		}
 	}
-	slices.SortStableFunc(entries, compareEntries)
-	return entries, nil
+	slices.SortStableFunc(result.Entries, compareEntries)
+	return result, nil
 }
 
-func (a *Agenda) candidates(prescriptions []cup.Prescription) []cup.Prescription {
+func (a *Agenda) sources(ctx context.Context) ([]cup.Prescription, []fse.Prescription, error) {
+	cupPrescriptions, cupErr := a.cup.Prescriptions(ctx)
+	fsePrescriptions, fseErr := a.fse.Prescriptions(ctx)
+	cupLogin := errors.Is(cupErr, session.ErrNotLoggedIn) || errors.Is(cupErr, session.ErrSessionExpired)
+	fseLogin := errors.Is(fseErr, session.ErrNotLoggedIn) || errors.Is(fseErr, session.ErrSessionExpired)
+	if cupLogin && fseLogin {
+		return nil, nil, fmt.Errorf("%w: %w", ErrCUPPrescriptions, cupErr)
+	}
+	if cupErr != nil && !cupLogin {
+		return nil, nil, fmt.Errorf("%w: %w", ErrCUPPrescriptions, cupErr)
+	}
+	if fseErr != nil && !fseLogin {
+		return nil, nil, fmt.Errorf("%w: %w", ErrFSEPrescriptions, fseErr)
+	}
+	return cupPrescriptions, fsePrescriptions, nil
+}
+
+func (a *Agenda) candidates(cupPrescriptions []cup.Prescription, fsePrescriptions []fse.Prescription) []candidate {
 	limit := a.now().Add(-maxPrescribedAge)
-	candidates := []cup.Prescription{}
-	for _, p := range prescriptions {
-		switch p.Status {
-		case cup.StatusCancelled, cup.StatusDone, cup.StatusDoneAfterCancel:
+	candidates := []candidate{}
+	index := map[string]int{}
+	for i := range cupPrescriptions {
+		p := &cupPrescriptions[i]
+		if p.NRE == "" || isClosed(int(p.Status)) || (!p.PrescribedOn.IsZero() && p.PrescribedOn.Before(limit)) {
 			continue
 		}
-		if !p.PrescribedOn.IsZero() && p.PrescribedOn.Before(limit) {
+		key := strings.ToUpper(p.NRE)
+		if at, ok := index[key]; ok {
+			candidates[at].cup = p
 			continue
 		}
-		candidates = append(candidates, p)
+		index[key] = len(candidates)
+		candidates = append(candidates, candidate{nre: p.NRE, cup: p})
+	}
+	for i := range fsePrescriptions {
+		p := &fsePrescriptions[i]
+		if p.Kind != fse.KindVisit || p.NRE == "" || isClosed(p.Status) || (!p.Date.IsZero() && p.Date.Before(limit)) {
+			continue
+		}
+		key := strings.ToUpper(p.NRE)
+		if at, ok := index[key]; ok {
+			candidates[at].fse = p
+			continue
+		}
+		index[key] = len(candidates)
+		candidates = append(candidates, candidate{nre: p.NRE, fse: p})
 	}
 	return candidates
 }
 
-func (a *Agenda) lookupAppointments(ctx context.Context, candidates []cup.Prescription) ([][]cup.Appointment, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func isClosed(status int) bool {
+	switch cup.Status(status) {
+	case cup.StatusCancelled, cup.StatusDone, cup.StatusDoneAfterCancel:
+		return true
+	}
+	return false
+}
 
+func (a *Agenda) lookupAppointments(ctx context.Context, candidates []candidate) ([][]cup.Appointment, []error) {
 	results := make([][]cup.Appointment, len(candidates))
+	errs := make([]error, len(candidates))
 	semaphore := make(chan struct{}, a.concurrency)
-	var (
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		firstErr error
-	)
+	var wg sync.WaitGroup
 	for i := range candidates {
 		semaphore <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-semaphore }()
-			appointments, err := a.cup.Appointments(ctx, candidates[i].NRE)
-			if err != nil {
-				mu.Lock()
-				defer mu.Unlock()
-				if firstErr == nil {
-					firstErr = err
-					cancel()
-				}
-				return
-			}
-			results[i] = appointments
+			results[i], errs[i] = a.cup.Appointments(ctx, candidates[i].nre)
 		})
 	}
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
-	}
-	return results, nil
+	return results, errs
 }
 
 func compareEntries(a, b Entry) int {
@@ -162,18 +208,9 @@ func compareDatesAscZeroLast(a, b time.Time) int {
 }
 
 func (a *Agenda) Prescriptions(ctx context.Context) ([]Row, error) {
-	cupPrescriptions, cupErr := a.cup.Prescriptions(ctx)
-	fsePrescriptions, fseErr := a.fse.Prescriptions(ctx)
-	cupLogin := errors.Is(cupErr, session.ErrNotLoggedIn) || errors.Is(cupErr, session.ErrSessionExpired)
-	fseLogin := errors.Is(fseErr, session.ErrNotLoggedIn) || errors.Is(fseErr, session.ErrSessionExpired)
-	if cupLogin && fseLogin {
-		return nil, fmt.Errorf("%w: %w", ErrCUPPrescriptions, cupErr)
-	}
-	if cupErr != nil && !cupLogin {
-		return nil, fmt.Errorf("%w: %w", ErrCUPPrescriptions, cupErr)
-	}
-	if fseErr != nil && !fseLogin {
-		return nil, fmt.Errorf("%w: %w", ErrFSEPrescriptions, fseErr)
+	cupPrescriptions, fsePrescriptions, err := a.sources(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	rows := []Row{}

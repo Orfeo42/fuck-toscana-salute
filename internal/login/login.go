@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -52,12 +53,13 @@ type storageSnapshot struct {
 }
 
 type Launcher struct {
-	channel string
-	timeout time.Duration
+	channel    string
+	profileDir string
+	timeout    time.Duration
 }
 
-func New(browserChannel string, timeout time.Duration) *Launcher {
-	return &Launcher{channel: browserChannel, timeout: timeout}
+func New(browserChannel, profileDir string, timeout time.Duration) *Launcher {
+	return &Launcher{channel: browserChannel, profileDir: profileDir, timeout: timeout}
 }
 
 func resultFromStorage(portal session.Portal, s storageSnapshot) (Result, error) {
@@ -158,7 +160,10 @@ func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result
 		err = errors.Join(err, pw.Stop())
 	}()
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+	if err := os.MkdirAll(l.profileDir, 0o700); err != nil {
+		return Result{}, fmt.Errorf("login: create profile dir: %w", err)
+	}
+	bctx, err := pw.Chromium.LaunchPersistentContext(l.profileDir, playwright.BrowserTypeLaunchPersistentContextOptions{
 		Channel:  playwright.String(l.channel),
 		Headless: playwright.Bool(false),
 	})
@@ -166,16 +171,17 @@ func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result
 		return Result{}, fmt.Errorf("login: launch browser: %w", err)
 	}
 	defer func() {
-		err = errors.Join(err, browser.Close())
+		err = errors.Join(err, bctx.Close())
 	}()
 
-	bctx, err := browser.NewContext()
-	if err != nil {
-		return Result{}, fmt.Errorf("login: new context: %w", err)
-	}
-	page, err := bctx.NewPage()
-	if err != nil {
-		return Result{}, fmt.Errorf("login: new page: %w", err)
+	var page playwright.Page
+	if pages := bctx.Pages(); len(pages) > 0 {
+		page = pages[0]
+	} else {
+		page, err = bctx.NewPage()
+		if err != nil {
+			return Result{}, fmt.Errorf("login: new page: %w", err)
+		}
 	}
 
 	closed := make(chan struct{}, 2)
@@ -185,7 +191,7 @@ func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result
 		default:
 		}
 	})
-	browser.OnDisconnected(func(playwright.Browser) {
+	bctx.OnClose(func(playwright.BrowserContext) {
 		select {
 		case closed <- struct{}{}:
 		default:

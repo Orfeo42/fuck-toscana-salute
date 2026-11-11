@@ -11,6 +11,7 @@ import (
 
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/upstream"
 )
 
 type sessionOutput struct {
@@ -91,11 +92,24 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		Path:          "/api/appointments",
 		DefaultStatus: http.StatusOK,
 	}, func(ctx context.Context, _ *struct{}) (*appointmentsOutput, error) {
-		entries, err := ag.Appointments(ctx)
+		result, err := ag.Appointments(ctx)
 		if err != nil {
 			return nil, toHTTPError(ctx, "list-appointments", err)
 		}
-		return &appointmentsOutput{Body: toAppointmentsBody(entries)}, nil
+		if len(result.Failed) > 0 {
+			first := result.Failed[0].Err
+			var statusErr *upstream.StatusError
+			exception := ""
+			if errors.As(first, &statusErr) {
+				exception = statusErr.ExceptionClass()
+			}
+			slog.WarnContext(ctx, "appointment lookups failed",
+				slog.Int("failed", len(result.Failed)),
+				slog.Int("total", len(result.Entries)+len(result.Failed)),
+				slog.String("first_error", first.Error()),
+				slog.String("first_exception", exception))
+		}
+		return &appointmentsOutput{Body: toAppointmentsBody(result)}, nil
 	})
 
 	huma.Register(api, huma.Operation{

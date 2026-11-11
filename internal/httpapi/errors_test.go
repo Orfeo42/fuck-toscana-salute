@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"testing"
 
@@ -47,9 +49,34 @@ func TestToHTTPError(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
 	})
 
+	t.Run("no document logs a warn", func(t *testing.T) {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(previous)
+
+		_ = toHTTPError(ctx, "op", fse.ErrNoDocument)
+		logged := buf.String()
+		assert.Contains(t, logged, "level=WARN")
+		assert.Contains(t, logged, "document not found")
+		assert.Contains(t, logged, "op=op")
+	})
+
 	t.Run("upstream status error is 502", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", &upstream.StatusError{Status: 503}))
 		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
+	})
+
+	t.Run("upstream status error logs exception class", func(t *testing.T) {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(previous)
+
+		_ = toHTTPError(ctx, "op", &upstream.StatusError{Status: 500})
+		logged := buf.String()
+		assert.Contains(t, logged, "exception=")
+		assert.Contains(t, logged, "error=")
 	})
 
 	t.Run("anything else is 500", func(t *testing.T) {

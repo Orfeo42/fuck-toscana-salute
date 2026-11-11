@@ -14,6 +14,7 @@ import (
 func TestRun(t *testing.T) {
 	t.Run("stops cleanly on cancel", func(t *testing.T) {
 		t.Setenv("FTS_ADDR", "127.0.0.1:0")
+		t.Setenv("FTS_PROFILE_DIR", t.TempDir())
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() { done <- run(ctx) }()
