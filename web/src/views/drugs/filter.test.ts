@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { RowBody } from "../../api/client";
 import {
-  countDrugs,
+  defaultExcludedDrugLabels,
+  drugLabelCounts,
   drugRows,
   drugStatusLabel,
   drugStatusTone,
-  filterDrugs,
+  excludeDrugLabels,
   matchesSearch,
+  searchDrugs,
   sortDrugs,
   type DrugRowData,
 } from "./filter";
@@ -96,24 +98,55 @@ describe("matchesSearch", () => {
   });
 });
 
-describe("filterDrugs", () => {
-  it("keeps status 3 for pickup", () => {
-    expect(nres(filterDrugs([a, b, c], "pickup", ""))).toEqual([a.nre, c.nre]);
+describe("searchDrugs", () => {
+  it("applies the search term", () => {
+    expect(nres(searchDrugs([a, b, c], "beta"))).toEqual([b.nre]);
   });
 
-  it("keeps all for all", () => {
-    expect(filterDrugs([a, b, c], "all", "")).toHaveLength(3);
-  });
-
-  it("applies search", () => {
-    expect(nres(filterDrugs([a, b, c], "all", "beta"))).toEqual([b.nre]);
+  it("keeps everything on a blank search", () => {
+    expect(searchDrugs([a, b, c], "")).toHaveLength(3);
   });
 });
 
-describe("countDrugs", () => {
-  it("counts per filter honoring search", () => {
-    expect(countDrugs([a, b, c], "")).toEqual({ pickup: 2, all: 3 });
-    expect(countDrugs([a, b, c], "alfa")).toEqual({ pickup: 1, all: 1 });
+describe("excludeDrugLabels", () => {
+  it("drops rows whose label is excluded", () => {
+    expect(
+      nres(excludeDrugLabels([a, b, c], defaultExcludedDrugLabels)),
+    ).toEqual([a.nre, c.nre]);
+  });
+
+  it("keeps everything when nothing is excluded", () => {
+    expect(excludeDrugLabels([a, b, c], [])).toHaveLength(3);
+  });
+});
+
+describe("defaultExcludedDrugLabels", () => {
+  it("lists the labels of the closed statuses", () => {
+    expect(defaultExcludedDrugLabels).toEqual([
+      "Erogata",
+      "Erogata dopo annullamento",
+      "Annullata",
+    ]);
+  });
+});
+
+describe("drugLabelCounts", () => {
+  it("counts rows per label in the fixed order", () => {
+    expect(drugLabelCounts([b, a, c])).toEqual([
+      { label: "Da ritirare", count: 2 },
+      { label: "Erogata", count: 1 },
+    ]);
+  });
+
+  it("puts unknown labels last alphabetically", () => {
+    const x = drug("0900A0000000010", "x", 99);
+    const y = drug("0900A0000000011", "y", 50);
+    expect(drugLabelCounts([x, y, b, a])).toEqual([
+      { label: "Da ritirare", count: 1 },
+      { label: "Erogata", count: 1 },
+      { label: "Stato 50", count: 1 },
+      { label: "Stato 99", count: 1 },
+    ]);
   });
 });
 

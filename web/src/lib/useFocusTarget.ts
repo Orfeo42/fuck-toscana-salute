@@ -1,36 +1,28 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect } from "react";
 
 import { useRoute, type TabId } from "./route";
-
-export interface FocusTarget<T extends HTMLElement> {
-  id: string;
-  ref: RefObject<T | null>;
-  tabIndex: -1;
-  focused: boolean;
-}
 
 export function focusId(tab: TabId, nre: string): string {
   return `${tab}-${nre.toUpperCase()}`;
 }
 
-export function useFocusTarget<T extends HTMLElement>(
-  tab: TabId,
-  nre: string,
-): FocusTarget<T> {
+export function useFocusTarget(tab: TabId, ready: boolean): string | undefined {
   const route = useRoute();
-  const ref = useRef<T | null>(null);
-  const focused = route.tab === tab && route.focus === nre.toUpperCase();
+  const focus = route.tab === tab ? route.focus : undefined;
 
   useEffect(() => {
-    const el = ref.current;
-    if (!focused || el === null) {
+    if (focus === undefined || !ready) {
+      return;
+    }
+    const el = document.getElementById(focusId(tab, focus));
+    if (el === null) {
       return;
     }
     if (typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block: "center" });
     }
     el.focus();
-  }, [focused]);
+  }, [tab, focus, ready]);
 
-  return { id: focusId(tab, nre), ref, tabIndex: -1, focused };
+  return focus;
 }

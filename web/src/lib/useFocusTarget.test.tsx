@@ -9,18 +9,21 @@ import { render } from "../test/render";
 interface Props {
   kind: TabId;
   nre: string;
+  ready?: boolean;
 }
 
-function Card({ kind, nre }: Props): JSX.Element {
-  const { id, ref, tabIndex, focused } = useFocusTarget<HTMLDivElement>(
-    kind,
-    nre,
-  );
+function Card({ kind, nre, ready = true }: Props): JSX.Element {
+  const focus = useFocusTarget(kind, ready);
   return (
-    <div id={id} ref={ref} tabIndex={tabIndex} data-focused={String(focused)}>
+    <div id={focusId(kind, nre)} tabIndex={-1}>
+      <span>{`focus:${focus ?? "none"}`}</span>
       card
     </div>
   );
+}
+
+function cardEl(): HTMLElement | null {
+  return document.querySelector("[tabindex='-1']");
 }
 
 function go(hash: string): void {
@@ -51,12 +54,13 @@ describe("useFocusTarget", () => {
     expect(focusId("farmaci", "0900a0000000001")).toBe(
       "farmaci-0900A0000000001",
     );
-    render(<Card kind="visite" nre="0900a0000000001" />);
-    expect(screen.getByText("card")).toHaveAttribute(
-      "id",
-      "visite-0900A0000000001",
-    );
-    expect(screen.getByText("card")).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("returns the focused NRE for the matching tab", () => {
+    window.location.hash = "#/farmaci/0900a0000000001";
+    render(<Card kind="farmaci" nre="0900A0000000001" />);
+
+    expect(screen.getByText("focus:0900A0000000001")).toBeInTheDocument();
   });
 
   it("scrolls and focuses on a matching hash", () => {
@@ -64,8 +68,7 @@ describe("useFocusTarget", () => {
     render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
-    expect(screen.getByText("card")).toHaveFocus();
-    expect(screen.getByText("card")).toHaveAttribute("data-focused", "true");
+    expect(cardEl()).toHaveFocus();
   });
 
   it("reacts to a later hashchange", () => {
@@ -75,7 +78,7 @@ describe("useFocusTarget", () => {
     go("#/visite/0900a0000000001");
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("card")).toHaveFocus();
+    expect(cardEl()).toHaveFocus();
   });
 
   it("does nothing on the wrong tab", () => {
@@ -83,8 +86,7 @@ describe("useFocusTarget", () => {
     render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).not.toHaveBeenCalled();
-    expect(screen.getByText("card")).not.toHaveFocus();
-    expect(screen.getByText("card")).toHaveAttribute("data-focused", "false");
+    expect(cardEl()).not.toHaveFocus();
   });
 
   it("does nothing for another NRE", () => {
@@ -92,7 +94,19 @@ describe("useFocusTarget", () => {
     render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).not.toHaveBeenCalled();
-    expect(screen.getByText("card")).toHaveAttribute("data-focused", "false");
+    expect(cardEl()).not.toHaveFocus();
+  });
+
+  it("waits until ready before focusing", () => {
+    window.location.hash = "#/farmaci/0900A0000000001";
+    const view = render(
+      <Card kind="farmaci" nre="0900A0000000001" ready={false} />,
+    );
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    view.rerender(<Card kind="farmaci" nre="0900A0000000001" ready />);
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
   it("still focuses when scrollIntoView is missing", () => {
@@ -100,6 +114,6 @@ describe("useFocusTarget", () => {
     window.location.hash = "#/farmaci/0900A0000000001";
     render(<Card kind="farmaci" nre="0900A0000000001" />);
 
-    expect(screen.getByText("card")).toHaveFocus();
+    expect(cardEl()).toHaveFocus();
   });
 });

@@ -10,7 +10,7 @@ window.getComputedStyle = (elt: Element, pseudoElt?: string | null) =>
 HTMLElement.prototype.scrollIntoView = () => undefined;
 
 window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-  matches: false,
+  matches: query === "",
   media: query,
   onchange: null,
   addListener: vi.fn(),

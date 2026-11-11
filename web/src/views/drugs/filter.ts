@@ -5,15 +5,35 @@ import { prescriptionStatusLabel } from "../../lib/status";
 
 const pickupStatus = 3;
 
-export type DrugFilter = "pickup" | "all";
-export type DrugSortKey = "data" | "farmaco" | "stato" | "nre";
+export const drugSortKeys = ["data", "farmaco", "stato", "nre"] as const;
+
+export type DrugSortKey = (typeof drugSortKeys)[number];
 
 export interface DrugRowData {
   nre: string;
   fse: NonNullable<RowBody["fse"]>;
 }
 
-export type DrugCounts = Record<DrugFilter, number>;
+export interface DrugLabelCount {
+  label: string;
+  count: number;
+}
+
+export const defaultExcludedDrugLabels: readonly string[] = [
+  drugStatusLabel(8),
+  drugStatusLabel(9),
+  drugStatusLabel(4),
+];
+
+const labelOrder: readonly string[] = [
+  drugStatusLabel(3),
+  drugStatusLabel(5),
+  drugStatusLabel(6),
+  drugStatusLabel(7),
+  drugStatusLabel(8),
+  drugStatusLabel(9),
+  drugStatusLabel(4),
+];
 
 export function drugStatusLabel(status: number): string {
   if (status === pickupStatus) return "Da ritirare";
@@ -53,26 +73,46 @@ export function matchesSearch(row: DrugRowData, search: string): boolean {
   );
 }
 
-export function filterDrugs(
+export function searchDrugs(
   rows: readonly DrugRowData[],
-  filter: DrugFilter,
   search: string,
 ): DrugRowData[] {
+  return rows.filter((row) => matchesSearch(row, search));
+}
+
+export function excludeDrugLabels(
+  rows: readonly DrugRowData[],
+  excluded: readonly string[],
+): DrugRowData[] {
   return rows.filter(
-    (row) =>
-      matchesSearch(row, search) &&
-      (filter === "all" || row.fse.status === pickupStatus),
+    (row) => !excluded.includes(drugStatusLabel(row.fse.status)),
   );
 }
 
-export function countDrugs(
+export function drugLabelCounts(
   rows: readonly DrugRowData[],
-  search: string,
-): DrugCounts {
-  return {
-    pickup: filterDrugs(rows, "pickup", search).length,
-    all: filterDrugs(rows, "all", search).length,
-  };
+): DrugLabelCount[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const label = drugStatusLabel(row.fse.status);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => {
+      const rankA = labelOrder.indexOf(a.label);
+      const rankB = labelOrder.indexOf(b.label);
+      if (rankA === -1 && rankB === -1) {
+        return a.label.localeCompare(b.label, "it");
+      }
+      if (rankA === -1) {
+        return 1;
+      }
+      if (rankB === -1) {
+        return -1;
+      }
+      return rankA - rankB;
+    });
 }
 
 function sortValue(

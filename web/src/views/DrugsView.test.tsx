@@ -105,6 +105,20 @@ function bodyRows(): HTMLElement[] {
   return screen.getAllByRole("row").slice(1);
 }
 
+type User = ReturnType<typeof userEvent.setup>;
+
+function sortHeader(name: string): HTMLElement {
+  return screen.getByRole("button", { name: new RegExp(`^${name}`) });
+}
+
+function sortLabel(name: string): string | null {
+  return within(sortHeader(name)).getByRole("img").getAttribute("aria-label");
+}
+
+async function openStatusFilter(user: User): Promise<void> {
+  await user.click(within(sortHeader("Stato")).getByRole("button"));
+}
+
 function descriptions(): (string | null)[] {
   return bodyRows().map(
     (row) => within(row).getAllByRole("cell")[1]?.textContent ?? null,
@@ -134,7 +148,8 @@ describe("DrugsView", () => {
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
 
-    await user.click(screen.getByRole("radio", { name: /Tutte/ }));
+    await openStatusFilter(user);
+    await user.click(await screen.findByRole("button", { name: "Tutti" }));
 
     expect(screen.queryByText("Visita esempio")).not.toBeInTheDocument();
     expect(bodyRows()).toHaveLength(3);
@@ -144,9 +159,9 @@ describe("DrugsView", () => {
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
 
-    const headers = screen
-      .getAllByRole("columnheader")
-      .map((h) => h.textContent);
+    const headers = [...screen.getByRole("table").querySelectorAll("th")].map(
+      (h) => h.textContent,
+    );
     expect(headers).toEqual(["Data", "Farmaco", "Stato", "NRE", "Azioni"]);
     const cells = within(at(bodyRows(), 0)).getAllByRole("cell");
     expect(cells).toHaveLength(5);
@@ -154,7 +169,8 @@ describe("DrugsView", () => {
     expect(within(at(cells, 3)).getByText("0900A0000000002")).toBeVisible();
   });
 
-  it("shows Da ritirare by default with counts, newest first", async () => {
+  it("hides closed statuses by default, newest first", async () => {
+    const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
 
@@ -162,23 +178,45 @@ describe("DrugsView", () => {
       "Farmaco esempio",
       "Farmaco esempio antico",
     ]);
-    expect(
-      screen.getByRole("radio", { name: "Da ritirare (2)" }),
-    ).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Tutte (3)" })).toBeVisible();
     expect(screen.getByText("2 farmaci")).toBeInTheDocument();
+
+    await openStatusFilter(user);
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Da ritirare (2)" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Erogata (1)" }),
+    ).not.toBeChecked();
   });
 
-  it("switches to Tutte", async () => {
+  it("shows closed rows after ticking Erogata", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
+    await openStatusFilter(user);
 
-    await user.click(screen.getByRole("radio", { name: /Tutte/ }));
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Erogata (1)" }),
+    );
 
     expect(bodyRows()).toHaveLength(3);
-    expect(screen.getByText("Erogata")).toBeInTheDocument();
+    expect(screen.getByText("Farmaco erogato esempio")).toBeInTheDocument();
     expect(screen.getByText("3 farmaci")).toBeInTheDocument();
+  });
+
+  it("shows the empty text with Nessuno", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+    await openStatusFilter(user);
+
+    await user.click(await screen.findByRole("button", { name: "Nessuno" }));
+
+    expect(
+      screen.getByText("Nessun farmaco in questa vista."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 farmaci")).toBeInTheDocument();
   });
 
   it("narrows the list with the search box", async () => {
@@ -202,28 +240,24 @@ describe("DrugsView", () => {
     expect(descriptions()).toEqual(["Farmaco esempio"]);
   });
 
-  it("sorts by header with aria-sort", async () => {
+  it("sorts by header and shows the sort direction", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
-    const dataHeader = screen.getByRole("columnheader", { name: /Data/ });
-    expect(dataHeader).toHaveAttribute("aria-sort", "descending");
+    expect(sortLabel("Data")).toBe("Sorted descending");
 
-    await user.click(within(dataHeader).getByRole("button"));
+    await user.click(sortHeader("Data"));
 
-    expect(dataHeader).toHaveAttribute("aria-sort", "ascending");
+    expect(sortLabel("Data")).toBe("Sorted ascending");
     expect(descriptions()).toEqual([
       "Farmaco esempio antico",
       "Farmaco esempio",
     ]);
 
-    await user.click(screen.getByRole("button", { name: "NRE" }));
+    await user.click(sortHeader("NRE"));
 
-    expect(screen.getByRole("columnheader", { name: /NRE/ })).toHaveAttribute(
-      "aria-sort",
-      "ascending",
-    );
-    expect(dataHeader).toHaveAttribute("aria-sort", "none");
+    expect(sortLabel("NRE")).toBe("Sorted ascending");
+    expect(sortLabel("Data")).toBe("Not sorted");
     expect(descriptions()).toEqual([
       "Farmaco esempio antico",
       "Farmaco esempio",
@@ -320,7 +354,8 @@ describe("DrugsView", () => {
     }
   });
 
-  it("shows Tutte when the focused row is hidden", async () => {
+  it("shows and focuses a deep-linked row whose status is excluded", async () => {
+    const user = userEvent.setup();
     stubScroll(vi.fn());
     window.location.hash = "#/farmaci/0900A0000000003";
     try {
@@ -330,7 +365,13 @@ describe("DrugsView", () => {
       );
 
       expect(row).toHaveAttribute("data-focused", "true");
-      expect(screen.getByRole("radio", { name: /Tutte/ })).toBeChecked();
+      expect(row).toHaveFocus();
+
+      await openStatusFilter(user);
+
+      expect(
+        await screen.findByRole("checkbox", { name: "Erogata (1)" }),
+      ).toBeChecked();
     } finally {
       vi.restoreAllMocks();
     }

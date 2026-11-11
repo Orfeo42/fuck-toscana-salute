@@ -3,116 +3,136 @@ import {
   Button,
   Group,
   Loader,
-  SegmentedControl,
-  Table,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
+import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
 import type { JSX } from "react";
 
 import { CopyButton } from "../components/CopyButton";
 import { PdfLink } from "../components/PdfLink";
-import { SortHeader } from "../components/SortHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate } from "../lib/format";
-import { useRoute } from "../lib/route";
-import { useFocusTarget } from "../lib/useFocusTarget";
+import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
 import {
-  countDrugs,
+  defaultExcludedDrugLabels,
+  drugLabelCounts,
   drugRows,
+  drugSortKeys,
   drugStatusLabel,
   drugStatusTone,
-  filterDrugs,
+  excludeDrugLabels,
+  searchDrugs,
   sortDrugs,
-  type DrugFilter,
   type DrugRowData,
   type DrugSortKey,
 } from "./drugs/filter";
 
 const descFirst: readonly DrugSortKey[] = ["data"];
-
-const filterOptions: readonly { value: DrugFilter; label: string }[] = [
-  { value: "pickup", label: "Da ritirare" },
-  { value: "all", label: "Tutte" },
-];
-
-const nowrap = { whiteSpace: "nowrap" } as const;
 const focusedBg = "var(--mantine-primary-color-light)";
-
-interface RowProps {
-  row: DrugRowData;
-}
-
-function DrugRow({ row }: RowProps): JSX.Element {
-  const { id, ref, tabIndex, focused } = useFocusTarget<HTMLTableRowElement>(
-    "farmaci",
-    row.nre,
-  );
-  return (
-    <Table.Tr
-      id={id}
-      ref={ref}
-      tabIndex={tabIndex}
-      {...(focused ? { bg: focusedBg } : {})}
-      data-focused={focused ? "true" : undefined}
-    >
-      <Table.Td style={nowrap}>{formatDate(row.fse.date)}</Table.Td>
-      <Table.Td>{row.fse.description || "Farmaco"}</Table.Td>
-      <Table.Td>
-        <StatusBadge tone={drugStatusTone(row.fse.status)}>
-          {drugStatusLabel(row.fse.status)}
-        </StatusBadge>
-      </Table.Td>
-      <Table.Td style={nowrap}>
-        <CopyButton value={row.nre} label="Copia NRE" />
-      </Table.Td>
-      <Table.Td>
-        <Group gap={2} wrap="nowrap">
-          <PdfLink documentRef={row.fse.documentRef} />
-        </Group>
-      </Table.Td>
-    </Table.Tr>
-  );
-}
 
 export function DrugsView(): JSX.Element {
   const { data: body, error, loading, reload } = useHealthData().prescriptions;
-  const route = useRoute();
-  const focus = route.tab === "farmaci" ? route.focus : undefined;
   const [handledFocus, setHandledFocus] = useState<string | undefined>(
     undefined,
   );
-  const [filter, setFilter] = useState<DrugFilter>("pickup");
+  const [excluded, setExcluded] = useState<readonly string[]>(
+    defaultExcludedDrugLabels,
+  );
   const [search, setSearch] = useState("");
   const sort = useSort<DrugSortKey>("data", "desc", descFirst);
+  const focus = useFocusTarget("farmaci", body !== undefined);
 
   const drugs = drugRows(body?.prescriptions ?? []);
-  const counts = countDrugs(drugs, search);
+  const searched = searchDrugs(drugs, search);
+  const options = drugLabelCounts(searched);
   const visible = sortDrugs(
-    filterDrugs(drugs, filter, search),
+    excludeDrugLabels(searched, excluded),
     sort.key,
     sort.dir,
   );
 
   if (body !== undefined && focus !== handledFocus) {
     setHandledFocus(focus);
-    const exists = drugs.some((row) => row.nre.toUpperCase() === focus);
+    const focused = drugs.find((row) => row.nre.toUpperCase() === focus);
     const shown = visible.some((row) => row.nre.toUpperCase() === focus);
-    if (exists && !shown) {
-      setFilter("all");
+    if (focused !== undefined && !shown) {
+      const label = drugStatusLabel(focused.fse.status);
+      setExcluded(excluded.filter((item) => item !== label));
       setSearch("");
     }
   }
 
-  const segments = filterOptions.map((option) => ({
-    value: option.value,
-    label: `${option.label} (${String(counts[option.value])})`,
-  }));
+  const columns: DataTableColumn<DrugRowData>[] = [
+    {
+      accessor: "data",
+      title: "Data",
+      sortable: true,
+      noWrap: true,
+      render: (row) => formatDate(row.fse.date),
+    },
+    {
+      accessor: "farmaco",
+      title: "Farmaco",
+      sortable: true,
+      render: (row) => row.fse.description || "Farmaco",
+    },
+    {
+      accessor: "stato",
+      title: "Stato",
+      sortable: true,
+      filtering: excluded.length > 0,
+      filter: (
+        <StatusColumnFilter
+          options={options.map((option) => ({
+            value: option.label,
+            label: option.label,
+            count: option.count,
+          }))}
+          selected={options
+            .map((option) => option.label)
+            .filter((label) => !excluded.includes(label))}
+          onChange={(next) => {
+            setExcluded([
+              ...excluded.filter(
+                (label) => !options.some((option) => option.label === label),
+              ),
+              ...options
+                .map((option) => option.label)
+                .filter((label) => !next.includes(label)),
+            ]);
+          }}
+        />
+      ),
+      render: (row) => (
+        <StatusBadge tone={drugStatusTone(row.fse.status)}>
+          {drugStatusLabel(row.fse.status)}
+        </StatusBadge>
+      ),
+    },
+    {
+      accessor: "nre",
+      title: "NRE",
+      sortable: true,
+      noWrap: true,
+      render: (row) => <CopyButton value={row.nre} label="Copia NRE" />,
+    },
+    {
+      accessor: "azioni",
+      title: "Azioni",
+      render: (row) => (
+        <Group gap={2} wrap="nowrap">
+          <PdfLink documentRef={row.fse.documentRef} />
+        </Group>
+      ),
+    },
+  ];
 
   const ready = !loading && error === undefined;
 
@@ -122,14 +142,6 @@ export function DrugsView(): JSX.Element {
         Farmaci
       </Title>
       <Group align="flex-end" wrap="wrap" mb="md">
-        <SegmentedControl
-          aria-label="Mostra"
-          data={segments}
-          value={filter}
-          onChange={(value) => {
-            setFilter(value === "all" ? "all" : "pickup");
-          }}
-        />
         <TextInput
           label="Cerca"
           type="search"
@@ -164,28 +176,37 @@ export function DrugsView(): JSX.Element {
           Il portale regionale non risponde. Riprova tra poco.
         </Alert>
       ) : null}
-      {ready && visible.length === 0 ? (
-        <Text c="dimmed">Nessun farmaco in questa vista.</Text>
-      ) : null}
-      {ready && visible.length > 0 ? (
-        <Table.ScrollContainer minWidth={720}>
-          <Table striped highlightOnHover stickyHeader verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <SortHeader label="Data" sortKey="data" sort={sort} />
-                <SortHeader label="Farmaco" sortKey="farmaco" sort={sort} />
-                <SortHeader label="Stato" sortKey="stato" sort={sort} />
-                <SortHeader label="NRE" sortKey="nre" sort={sort} />
-                <Table.Th>Azioni</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {visible.map((row) => (
-                <DrugRow key={row.nre} row={row} />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {ready ? (
+        <DataTable
+          striped
+          highlightOnHover
+          withTableBorder
+          maxHeight="75vh"
+          idAccessor="nre"
+          records={visible}
+          columns={columns}
+          noRecordsText="Nessun farmaco in questa vista."
+          sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
+          onSortStatusChange={(status) => {
+            const key = drugSortKeys.find(
+              (item) => item === status.columnAccessor,
+            );
+            if (key !== undefined) {
+              sort.toggle(key);
+            }
+          }}
+          customRowAttributes={(row) => ({
+            id: focusId("farmaci", row.nre),
+            tabIndex: -1,
+            "data-focused":
+              row.nre.toUpperCase() === focus ? "true" : undefined,
+          })}
+          rowStyle={(row) =>
+            row.nre.toUpperCase() === focus
+              ? { backgroundColor: focusedBg }
+              : undefined
+          }
+        />
       ) : null}
     </section>
   );

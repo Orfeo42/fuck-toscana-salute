@@ -3,15 +3,17 @@ import { describe, expect, it } from "vitest";
 import type { AppointmentBody, RowBody } from "../../api/client";
 import {
   buildRows,
-  countByStatus,
+  defaultExcludedLabels,
   effectiveState,
-  filterRows,
+  excludeLabels,
+  labelCounts,
   rowDate,
+  rowLabel,
   rowTitle,
+  searchRows,
   sortRows,
   unitName,
   type BookingContext,
-  type Criteria,
 } from "./filter";
 
 function fseRow(
@@ -90,7 +92,6 @@ function contextOf(
 }
 
 const empty = contextOf([]);
-const base: Criteria = { status: "all", search: "" };
 
 describe("effectiveState", () => {
   it("is booked with the booked tone and label, beating the fse status", () => {
@@ -241,11 +242,35 @@ describe("effectiveState expiry", () => {
     });
   });
 
-  it("does not expire an FSE status 30 row that is unbooked in the CUP", () => {
+  it("expires an FSE status 30 row that is unbooked in the CUP", () => {
     const row = expiringRow("0900A0000000058", 30, yesterday);
     expect(
-      effectiveState(row, new Map(), new Set(["0900A0000000058"]), now).kind,
-    ).toBe("official");
+      effectiveState(row, new Map(), new Set(["0900A0000000058"]), now),
+    ).toEqual({
+      kind: "expired",
+      label: "Scaduta",
+      tone: "closed",
+      expiresOn: yesterday,
+      estimated: false,
+    });
+  });
+
+  it("flags an estimated expiry on an FSE status 30 row", () => {
+    const row = expiringRow("0900A0000000059", 30, yesterday);
+    const estimated: RowBody =
+      row.fse === undefined
+        ? row
+        : { nre: row.nre, fse: { ...row.fse, expiryEstimated: true } };
+    expect(
+      effectiveState(estimated, new Map(), new Set(["0900A0000000059"]), now),
+    ).toMatchObject({ kind: "expired", estimated: true });
+  });
+
+  it("keeps an unbooked FSE status 30 row to verify while not expired", () => {
+    const row = expiringRow("0900A0000000057", 30, future);
+    expect(
+      effectiveState(row, new Map(), new Set(["0900A0000000057"]), now),
+    ).toMatchObject({ kind: "official", label: "Da verificare" });
   });
 
   it("is not expired when expiresOn is today", () => {
@@ -282,109 +307,115 @@ describe("effectiveState expiry", () => {
   });
 });
 
-describe("expired rows in filters and counts", () => {
-  const expired = expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z");
-  const rows = [toBook, expired];
-
-  it("Tutte includes expired rows", () => {
-    expect(filterRows(rows, base, empty)).toEqual(rows);
+describe("rowLabel", () => {
+  it("returns the effective state label", () => {
+    expect(rowLabel(toBook, empty)).toBe("Da prenotare");
+    expect(rowLabel(done, empty)).toBe("Erogata");
+    expect(
+      rowLabel(
+        expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z"),
+        empty,
+      ),
+    ).toBe("Scaduta");
   });
 
-  it("Scadute keeps only expired rows", () => {
-    expect(filterRows(rows, { ...base, status: "expired" }, empty)).toEqual([
-      expired,
+  it("is Prenotata for a booked row", () => {
+    const booked = contextOf([
+      booking("0900A0000000001", "PRENOTATO", "2026-12-01T09:00:00Z"),
     ]);
+    expect(rowLabel(toBook, booked)).toBe("Prenotata");
   });
 
-  it("Da prenotare never shows expired rows", () => {
-    expect(filterRows(rows, { ...base, status: "bookable" }, empty)).toEqual([
-      toBook,
-    ]);
-  });
-
-  it("Aperte never shows expired rows", () => {
-    expect(filterRows(rows, { ...base, status: "open" }, empty)).toEqual([
-      toBook,
-    ]);
-  });
-
-  it("Prossimi never shows expired rows", () => {
-    expect(filterRows(rows, { ...base, status: "upcoming" }, empty)).toEqual(
-      [],
+  it("is Da verificare for an unbooked FSE 30 row", () => {
+    const row = fseRow("0900A0000000060", "visit", 30, "2026-11-01T09:00:00Z");
+    expect(rowLabel(row, contextOf([], ["0900A0000000060"]))).toBe(
+      "Da verificare",
     );
-  });
-
-  it("Erogate never shows expired rows", () => {
-    expect(filterRows(rows, { ...base, status: "done" }, empty)).toEqual([]);
-  });
-
-  it("counts expired rows in Scadute and Tutte only", () => {
-    expect(countByStatus(rows, "", empty)).toEqual({
-      upcoming: 0,
-      bookable: 1,
-      open: 1,
-      done: 0,
-      expired: 1,
-      all: 2,
-    });
-  });
-
-  it("applies the search to the Scadute count", () => {
-    expect(countByStatus(rows, "0900A0000000056", empty).expired).toBe(1);
-    expect(countByStatus(rows, "0900A0000000001", empty).expired).toBe(0);
   });
 });
 
-describe("Erogate filter", () => {
-  const after = fseRow("0900A0000000070", "visit", 9, "2026-10-02T09:00:00Z");
-  const partial = fseRow("0900A0000000071", "visit", 7, "2026-10-03T09:00:00Z");
-  const rows = [done, after, partial, toBook, closed];
+describe("defaultExcludedLabels", () => {
+  it("lists the closed labels and Scaduta", () => {
+    expect(defaultExcludedLabels).toEqual([
+      "Erogata",
+      "Erogata dopo annullamento",
+      "Annullata",
+      "Scaduta",
+    ]);
+  });
+});
 
-  it("keeps rows with FSE status 8 or 9 only", () => {
-    expect(filterRows(rows, { ...base, status: "done" }, empty)).toEqual([
-      done,
-      after,
+describe("excludeLabels", () => {
+  const expired = expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z");
+  const rows = [toBook, pending, done, closed, expired];
+
+  it("hides the default excluded labels", () => {
+    expect(excludeLabels(rows, defaultExcludedLabels, empty)).toEqual([
+      toBook,
+      pending,
     ]);
   });
 
-  it("excludes a row with an active booking", () => {
+  it("keeps everything when nothing is excluded", () => {
+    expect(excludeLabels(rows, [], empty)).toEqual(rows);
+  });
+
+  it("keeps a row with an active booking even if its status is done", () => {
     const booked = contextOf([
       booking("0900A0000000003", "PRENOTATO", "2026-12-01T09:00:00Z"),
     ]);
-    expect(filterRows(rows, { ...base, status: "done" }, booked)).toEqual([
-      after,
-    ]);
-  });
-
-  it("keeps a row whose only booking is DISDETTO", () => {
-    const cancelled = contextOf([
-      booking("0900A0000000003", "DISDETTO", "2026-12-01T09:00:00Z"),
-    ]);
-    expect(filterRows([done], { ...base, status: "done" }, cancelled)).toEqual([
+    expect(excludeLabels([done], defaultExcludedLabels, booked)).toEqual([
       done,
     ]);
   });
 
-  it("counts them", () => {
-    expect(countByStatus(rows, "", empty).done).toBe(2);
+  it("hides a row whose only booking is DISDETTO and status is done", () => {
+    const cancelled = contextOf([
+      booking("0900A0000000003", "DISDETTO", "2026-12-01T09:00:00Z"),
+    ]);
+    expect(excludeLabels([done], defaultExcludedLabels, cancelled)).toEqual([]);
   });
 });
 
-describe("unbooked FSE status 30 rows in counts", () => {
-  const row = fseRow("0900A0000000060", "visit", 30, "2026-11-01T09:00:00Z");
-  const context = contextOf([], ["0900A0000000060"]);
+describe("labelCounts", () => {
+  const expired = expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z");
+  const unknown = fseRow(
+    "0900A0000000013",
+    "visit",
+    99,
+    "2026-11-01T09:00:00Z",
+  );
+  const other = fseRow("0900A0000000014", "visit", 98, "2026-11-01T09:00:00Z");
 
-  it("counts as open but not bookable", () => {
-    expect(countByStatus([row], "", context)).toMatchObject({
-      bookable: 0,
-      open: 1,
-    });
+  it("counts rows per label in the fixed order", () => {
+    const context = contextOf([
+      booking("0900A0000000002", "PRENOTATO", "2026-11-12T14:00:00Z"),
+    ]);
+    expect(
+      labelCounts([expired, done, toBook, cupOnly, pending, closed], context),
+    ).toEqual([
+      { label: "Prenotata", count: 1 },
+      { label: "Da prenotare", count: 2 },
+      { label: "Erogata", count: 1 },
+      { label: "Annullata", count: 1 },
+      { label: "Scaduta", count: 1 },
+    ]);
   });
 
-  it("is not bookable when the CUP lookup did not confirm it", () => {
-    expect(countByStatus([row], "", empty)).toMatchObject({
-      bookable: 0,
-    });
+  it("puts unknown labels last, alphabetically", () => {
+    expect(labelCounts([unknown, other, done], empty)).toEqual([
+      { label: "Erogata", count: 1 },
+      { label: "Stato 98", count: 1 },
+      { label: "Stato 99", count: 1 },
+    ]);
+  });
+
+  it("orders Da verificare after Da prenotare", () => {
+    const row = fseRow("0900A0000000060", "visit", 30, "2026-11-01T09:00:00Z");
+    const context = contextOf([], ["0900A0000000060"]);
+    expect(
+      labelCounts([row, toBook], context).map((item) => item.label),
+    ).toEqual(["Da prenotare", "Da verificare"]);
   });
 });
 
@@ -432,105 +463,31 @@ describe("buildRows", () => {
   });
 });
 
-describe("filterRows", () => {
+describe("searchRows", () => {
   const rows = [toBook, pending, done, closed, cupOnly];
-  const context = contextOf([
-    booking("0900A0000000002", "PRENOTATO", "2026-11-10T14:00:00Z"),
-    booking("0900A0000000003", "PRENOTATO", "2026-11-12T14:00:00Z"),
-    booking("0900A0000000004", "PRENOTATO", "2026-11-01T14:00:00Z"),
-  ]);
-
-  it("upcoming keeps booked rows with an at from today", () => {
-    const got = filterRows(rows, { ...base, status: "upcoming" }, context);
-    expect(got).toEqual([pending, done]);
-  });
-
-  it("upcoming counts an appointment earlier today", () => {
-    const earlier = contextOf([
-      booking("0900A0000000002", "PRENOTATO", "2026-11-10T05:00:00Z"),
-    ]);
-    const got = filterRows([pending], { ...base, status: "upcoming" }, earlier);
-    expect(got).toEqual([pending]);
-  });
-
-  it("bookable keeps official status 3 only", () => {
-    const got = filterRows(rows, { ...base, status: "bookable" }, context);
-    expect(got).toEqual([toBook, cupOnly]);
-  });
-
-  it("open keeps open rows and future booked rows, even if done", () => {
-    const got = filterRows(rows, { ...base, status: "open" }, context);
-    expect(got).toEqual([toBook, pending, done, cupOnly]);
-  });
-
-  it("open excludes a past booked closed row", () => {
-    const got = filterRows([closed], { ...base, status: "open" }, context);
-    expect(got).toEqual([]);
-  });
-
-  it("all keeps everything", () => {
-    expect(filterRows(rows, base, context)).toEqual(rows);
-  });
 
   it("searches the title case-insensitively", () => {
-    const got = filterRows(rows, { ...base, search: "ECOGRAFIA" }, empty);
-    expect(got).toEqual([cupOnly]);
+    expect(searchRows(rows, "ECOGRAFIA", empty)).toEqual([cupOnly]);
   });
 
   it("searches the NRE", () => {
-    const got = filterRows(rows, { ...base, search: "0900a0000000002" }, empty);
-    expect(got).toEqual([pending]);
+    expect(searchRows(rows, "0900a0000000002", empty)).toEqual([pending]);
   });
 
   it("searches the unit name and city", () => {
     const withCity = contextOf([
       booking("0900A0000000002", "PRENOTATO", undefined, "Pisa"),
     ]);
-    expect(filterRows(rows, { ...base, search: "pisa" }, withCity)).toEqual([
-      pending,
-    ]);
-    expect(filterRows(rows, { ...base, search: "UNITA" }, withCity)).toEqual([
-      pending,
-    ]);
+    expect(searchRows(rows, "pisa", withCity)).toEqual([pending]);
+    expect(searchRows(rows, "UNITA", withCity)).toEqual([pending]);
   });
 
   it("ignores a blank search", () => {
-    expect(filterRows(rows, { ...base, search: "   " }, empty)).toEqual(rows);
+    expect(searchRows(rows, "   ", empty)).toEqual(rows);
   });
 
   it("handles null cup items", () => {
-    expect(filterRows([nullItems], { ...base, search: "x" }, empty)).toEqual(
-      [],
-    );
-  });
-});
-
-describe("countByStatus", () => {
-  const rows = [toBook, pending, done, cupOnly];
-  const context = contextOf([
-    booking("0900A0000000002", "PRENOTATO", "2026-11-12T14:00:00Z"),
-  ]);
-
-  it("counts each status filter", () => {
-    expect(countByStatus(rows, "", context)).toEqual({
-      upcoming: 1,
-      bookable: 2,
-      open: 3,
-      done: 1,
-      expired: 0,
-      all: 4,
-    });
-  });
-
-  it("applies the search before counting", () => {
-    expect(countByStatus(rows, "ecografia", context)).toEqual({
-      upcoming: 0,
-      bookable: 1,
-      open: 1,
-      done: 0,
-      expired: 0,
-      all: 1,
-    });
+    expect(searchRows([nullItems], "x", empty)).toEqual([]);
   });
 });
 

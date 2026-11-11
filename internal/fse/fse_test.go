@@ -198,9 +198,10 @@ func TestPrescriptionsExpiry(t *testing.T) {
 		assert.True(t, got[2].ExpiresAt.IsZero())
 	})
 
-	t.Run("only status 3 visits are looked up and drugs never", func(t *testing.T) {
+	t.Run("only status 3 and 30 visits are looked up and drugs never", func(t *testing.T) {
 		var rec []recordedRequest
-		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+		visits := `{"content":[{"id":"v1","nre":"0900A0000000001","stato":"3"},{"id":"v2","nre":"0900A0000000002","stato":"8"},{"id":"v3","nre":"0900A0000000003","stato":"30"}]}`
+		c := detailServer(t, &rec, visits, func(w http.ResponseWriter, r *http.Request) {
 			_, err := w.Write([]byte(`{}`))
 			require.NoError(t, err)
 		})
@@ -214,8 +215,9 @@ func TestPrescriptionsExpiry(t *testing.T) {
 				details = append(details, r)
 			}
 		}
-		require.Len(t, details, 1)
+		require.Len(t, details, 2)
 		assert.Equal(t, "/visite/nre/dettaglio", details[0].Path)
+		assert.Equal(t, "/visite/nre/dettaglio", details[1].Path)
 	})
 
 	t.Run("detail request body and headers", func(t *testing.T) {

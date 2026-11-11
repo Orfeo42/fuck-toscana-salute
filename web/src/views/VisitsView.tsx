@@ -3,43 +3,45 @@ import {
   Button,
   Group,
   Loader,
-  ScrollArea,
-  SegmentedControl,
-  Stack,
-  Table,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
+import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { SortHeader } from "../components/SortHeader";
+import { CopyButton } from "../components/CopyButton";
+import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
-import { useRoute } from "../lib/route";
+import { formatDate } from "../lib/format";
+import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
-import { VisitRow } from "./visits/VisitRow";
+import type { RowBody } from "../api/client";
+import {
+  ActionsCell,
+  AppointmentCell,
+  StatusCell,
+  StructureCell,
+} from "./visits/VisitCells";
 import {
   buildRows,
-  countByStatus,
+  defaultExcludedLabels,
   effectiveState,
-  filterRows,
+  excludeLabels,
+  labelCounts,
+  rowDate,
+  rowLabel,
+  rowTitle,
+  searchRows,
   sortRows,
-  type StatusFilter,
+  visitSortKeys,
   type VisitSortKey,
 } from "./visits/filter";
 
-const statusOptions: readonly { value: StatusFilter; label: string }[] = [
-  { value: "upcoming", label: "Prossimi" },
-  { value: "bookable", label: "Da prenotare" },
-  { value: "open", label: "Aperte" },
-  { value: "done", label: "Erogate" },
-  { value: "expired", label: "Scadute" },
-  { value: "all", label: "Tutte" },
-];
-
 const descFirst: readonly VisitSortKey[] = ["prescritta"];
+const focusedBg = "var(--mantine-primary-color-light)";
 
 interface Props {
   now?: Date;
@@ -48,40 +50,40 @@ interface Props {
 export function VisitsView({ now }: Props = {}): JSX.Element {
   const health = useHealthData();
   const { prescriptions, appointments, bookingByNre, unbooked } = health;
-  const route = useRoute();
-  const focus = route.tab === "visite" ? route.focus : undefined;
   const [mountedAt] = useState(() => new Date());
   const [handledFocus, setHandledFocus] = useState<string | undefined>(
     undefined,
   );
-  const [status, setStatus] = useState<StatusFilter>("open");
+  const [excluded, setExcluded] = useState<readonly string[]>(
+    defaultExcludedLabels,
+  );
   const [search, setSearch] = useState("");
   const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
 
   const currentNow = now ?? mountedAt;
   const context = { bookingByNre, unbooked, now: currentNow };
+  const dataReady = prescriptions.data !== undefined && !appointments.loading;
+  const focus = useFocusTarget("visite", dataReady);
   const data = buildRows(
     prescriptions.data?.prescriptions ?? [],
     appointments.data?.appointments ?? [],
   );
-  const counts = countByStatus(data, search, context);
+  const searched = searchRows(data, search, context);
+  const options = labelCounts(searched, context);
   const visible = sortRows(
-    filterRows(data, { status, search }, context),
+    excludeLabels(searched, excluded, context),
     sort.key,
     sort.dir,
     context,
   );
 
-  if (
-    prescriptions.data !== undefined &&
-    !appointments.loading &&
-    focus !== handledFocus
-  ) {
+  if (dataReady && focus !== handledFocus) {
     setHandledFocus(focus);
     const focused = data.find((row) => row.nre.toUpperCase() === focus);
     const shown = visible.some((row) => row.nre.toUpperCase() === focus);
     if (focused !== undefined && !shown) {
-      setStatus("all");
+      const label = rowLabel(focused, context);
+      setExcluded(excluded.filter((item) => item !== label));
       setSearch("");
     }
   }
@@ -91,10 +93,100 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     appointments.reload();
   };
 
-  const segmentData = statusOptions.map((option) => ({
-    value: option.value,
-    label: `${option.label} (${String(counts[option.value])})`,
-  }));
+  const columns: DataTableColumn<RowBody>[] = [
+    {
+      accessor: "prescritta",
+      title: "Prescritta",
+      sortable: true,
+      noWrap: true,
+      render: (row) => formatDate(rowDate(row)),
+    },
+    {
+      accessor: "prestazione",
+      title: "Prestazione",
+      sortable: true,
+      render: (row) => rowTitle(row),
+    },
+    {
+      accessor: "stato",
+      title: "Stato",
+      sortable: true,
+      filtering: excluded.length > 0,
+      filter: (
+        <StatusColumnFilter
+          options={options.map((option) => ({
+            value: option.label,
+            label: option.label,
+            count: option.count,
+          }))}
+          selected={options
+            .map((option) => option.label)
+            .filter((label) => !excluded.includes(label))}
+          onChange={(next) => {
+            setExcluded([
+              ...excluded.filter(
+                (label) => !options.some((option) => option.label === label),
+              ),
+              ...options
+                .map((option) => option.label)
+                .filter((label) => !next.includes(label)),
+            ]);
+          }}
+        />
+      ),
+      render: (row) => (
+        <StatusCell
+          row={row}
+          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+        />
+      ),
+    },
+    {
+      accessor: "appuntamento",
+      title: "Appuntamento",
+      sortable: true,
+      noWrap: true,
+      customCellAttributes: () => ({ "aria-busy": appointments.loading }),
+      render: (row) => (
+        <AppointmentCell
+          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          loading={appointments.loading}
+          failed={appointments.error !== undefined}
+          now={currentNow}
+        />
+      ),
+    },
+    {
+      accessor: "struttura",
+      title: "Struttura",
+      sortable: true,
+      render: (row) => (
+        <StructureCell
+          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          booking={bookingByNre.get(row.nre.toUpperCase())}
+        />
+      ),
+    },
+    {
+      accessor: "nre",
+      title: "NRE",
+      sortable: true,
+      noWrap: true,
+      render: (row) => <CopyButton value={row.nre} label="Copia NRE" />,
+    },
+    {
+      accessor: "azioni",
+      title: "Azioni",
+      render: (row) => (
+        <ActionsCell
+          row={row}
+          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          booking={bookingByNre.get(row.nre.toUpperCase())}
+          now={currentNow}
+        />
+      ),
+    },
+  ];
 
   const summary = `${String(visible.length)} visite/esami`;
   const ready = !prescriptions.loading && prescriptions.error === undefined;
@@ -105,26 +197,6 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
         Visite ed esami
       </Title>
       <Group align="flex-end" wrap="wrap" mb="md">
-        <Stack gap={4} maw="100%">
-          <Text id="vs-status-label" size="sm">
-            Mostra
-          </Text>
-          <ScrollArea type="never" maw="100%">
-            <SegmentedControl
-              aria-labelledby="vs-status-label"
-              data={segmentData}
-              value={status}
-              onChange={(value) => {
-                const picked = statusOptions.find(
-                  (option) => option.value === value,
-                );
-                if (picked !== undefined) {
-                  setStatus(picked.value);
-                }
-              }}
-            />
-          </ScrollArea>
-        </Stack>
         <TextInput
           label="Cerca"
           type="search"
@@ -177,55 +249,37 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           Appuntamenti non disponibili: il portale regionale non risponde.
         </Alert>
       ) : null}
-      {ready && visible.length === 0 ? (
-        <Text c="dimmed">Nessuna visita o esame in questa vista.</Text>
-      ) : null}
-      {ready && visible.length > 0 ? (
-        <Table.ScrollContainer minWidth={1000}>
-          <Table striped highlightOnHover stickyHeader verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <SortHeader
-                  label="Prescritta"
-                  sortKey="prescritta"
-                  sort={sort}
-                />
-                <SortHeader
-                  label="Prestazione"
-                  sortKey="prestazione"
-                  sort={sort}
-                />
-                <SortHeader label="Stato" sortKey="stato" sort={sort} />
-                <SortHeader
-                  label="Appuntamento"
-                  sortKey="appuntamento"
-                  sort={sort}
-                />
-                <SortHeader label="Struttura" sortKey="struttura" sort={sort} />
-                <SortHeader label="NRE" sortKey="nre" sort={sort} />
-                <Table.Th scope="col">Azioni</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {visible.map((row) => (
-                <VisitRow
-                  key={row.nre}
-                  row={row}
-                  state={effectiveState(
-                    row,
-                    bookingByNre,
-                    unbooked,
-                    currentNow,
-                  )}
-                  booking={bookingByNre.get(row.nre.toUpperCase())}
-                  appointmentsLoading={appointments.loading}
-                  appointmentsFailed={appointments.error !== undefined}
-                  now={currentNow}
-                />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {ready ? (
+        <DataTable
+          striped
+          highlightOnHover
+          withTableBorder
+          maxHeight="75vh"
+          idAccessor="nre"
+          records={visible}
+          columns={columns}
+          noRecordsText="Nessuna visita o esame in questa vista."
+          sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
+          onSortStatusChange={(status) => {
+            const key = visitSortKeys.find(
+              (item) => item === status.columnAccessor,
+            );
+            if (key !== undefined) {
+              sort.toggle(key);
+            }
+          }}
+          customRowAttributes={(row) => ({
+            id: focusId("visite", row.nre),
+            tabIndex: -1,
+            "data-focused":
+              row.nre.toUpperCase() === focus ? "true" : undefined,
+          })}
+          rowStyle={(row) =>
+            row.nre.toUpperCase() === focus
+              ? { backgroundColor: focusedBg }
+              : undefined
+          }
+        />
       ) : null}
     </section>
   );

@@ -23,20 +23,41 @@ const officialTones: Readonly<Record<number, StatusTone>> = {
   30: "booked",
 };
 
-const closedStatuses: ReadonlySet<number> = new Set([4, 8, 9]);
+export const visitSortKeys = [
+  "prescritta",
+  "prestazione",
+  "stato",
+  "appuntamento",
+  "struttura",
+  "nre",
+] as const;
 
-export type StatusFilter =
-  "upcoming" | "bookable" | "open" | "done" | "expired" | "all";
+export type VisitSortKey = (typeof visitSortKeys)[number];
 
-export type VisitSortKey =
-  "prescritta" | "prestazione" | "stato" | "appuntamento" | "struttura" | "nre";
+export const defaultExcludedLabels: readonly string[] = [
+  prescriptionStatusLabel(8),
+  prescriptionStatusLabel(9),
+  prescriptionStatusLabel(4),
+  expiredLabel,
+];
 
-export interface Criteria {
-  status: StatusFilter;
-  search: string;
+const labelOrder: readonly string[] = [
+  bookedLabel,
+  prescriptionStatusLabel(3),
+  unverifiedLabel,
+  prescriptionStatusLabel(5),
+  prescriptionStatusLabel(7),
+  prescriptionStatusLabel(6),
+  prescriptionStatusLabel(8),
+  prescriptionStatusLabel(9),
+  prescriptionStatusLabel(4),
+  expiredLabel,
+];
+
+export interface StatusLabelCount {
+  label: string;
+  count: number;
 }
-
-export type StatusCounts = Record<StatusFilter, number>;
 
 export interface BookedState {
   kind: "booked";
@@ -89,19 +110,9 @@ export function effectiveState(
     };
   }
   const status = row.fse?.status ?? toBookStatus;
-  if (status === fseBookedStatus && unbooked.has(key)) {
-    return {
-      kind: "official",
-      status,
-      label: unverifiedLabel,
-      tone: "pending",
-      note: fseBookedNote,
-      canBook: true,
-    };
-  }
   const expiresOn = row.fse?.expiresOn;
   if (
-    status === toBookStatus &&
+    (status === toBookStatus || status === fseBookedStatus) &&
     expiresOn !== undefined &&
     romeDay(new Date(expiresOn)) < romeDay(now)
   ) {
@@ -111,6 +122,16 @@ export function effectiveState(
       tone: "closed",
       expiresOn,
       estimated: row.fse?.expiryEstimated === true,
+    };
+  }
+  if (status === fseBookedStatus && unbooked.has(key)) {
+    return {
+      kind: "official",
+      status,
+      label: unverifiedLabel,
+      tone: "pending",
+      note: fseBookedNote,
+      canBook: true,
     };
   }
   return {
@@ -184,76 +205,6 @@ function upcomingAt(row: RowBody, context: BookingContext): number | undefined {
   return at.getTime();
 }
 
-function isFutureBooking(row: RowBody, context: BookingContext): boolean {
-  const state = effectiveState(
-    row,
-    context.bookingByNre,
-    context.unbooked,
-    context.now,
-  );
-  return (
-    state.kind === "booked" &&
-    state.at !== undefined &&
-    new Date(state.at).getTime() > context.now.getTime()
-  );
-}
-
-function isOpen(row: RowBody, context: BookingContext): boolean {
-  const state = effectiveState(
-    row,
-    context.bookingByNre,
-    context.unbooked,
-    context.now,
-  );
-  if (state.kind === "expired") {
-    return false;
-  }
-  if (row.fse === undefined) {
-    return true;
-  }
-  return !closedStatuses.has(row.fse.status);
-}
-
-function matchesStatus(
-  row: RowBody,
-  status: StatusFilter,
-  context: BookingContext,
-): boolean {
-  if (status === "upcoming") {
-    return upcomingAt(row, context) !== undefined;
-  }
-  if (status === "bookable") {
-    const state = effectiveState(
-      row,
-      context.bookingByNre,
-      context.unbooked,
-      context.now,
-    );
-    return state.kind === "official" && state.status === toBookStatus;
-  }
-  if (status === "open") {
-    return isFutureBooking(row, context) || isOpen(row, context);
-  }
-  if (status === "done") {
-    const state = effectiveState(
-      row,
-      context.bookingByNre,
-      context.unbooked,
-      context.now,
-    );
-    return (
-      state.kind === "official" && (state.status === 8 || state.status === 9)
-    );
-  }
-  if (status === "expired") {
-    return (
-      effectiveState(row, context.bookingByNre, context.unbooked, context.now)
-        .kind === "expired"
-    );
-  }
-  return true;
-}
-
 function matchesSearch(
   row: RowBody,
   search: string,
@@ -274,35 +225,56 @@ function matchesSearch(
   return haystack.some((text) => text.toLowerCase().includes(needle));
 }
 
-export function filterRows(
-  rows: readonly RowBody[],
-  criteria: Criteria,
-  context: BookingContext,
-): RowBody[] {
-  return rows.filter(
-    (row) =>
-      matchesStatus(row, criteria.status, context) &&
-      matchesSearch(row, criteria.search, context),
-  );
-}
-
-export function countByStatus(
+export function searchRows(
   rows: readonly RowBody[],
   search: string,
   context: BookingContext,
-): StatusCounts {
-  const base = rows.filter((row) => matchesSearch(row, search, context));
-  return {
-    upcoming: base.filter((row) => matchesStatus(row, "upcoming", context))
-      .length,
-    bookable: base.filter((row) => matchesStatus(row, "bookable", context))
-      .length,
-    open: base.filter((row) => matchesStatus(row, "open", context)).length,
-    done: base.filter((row) => matchesStatus(row, "done", context)).length,
-    expired: base.filter((row) => matchesStatus(row, "expired", context))
-      .length,
-    all: base.length,
-  };
+): RowBody[] {
+  return rows.filter((row) => matchesSearch(row, search, context));
+}
+
+export function rowLabel(row: RowBody, context: BookingContext): string {
+  return effectiveState(
+    row,
+    context.bookingByNre,
+    context.unbooked,
+    context.now,
+  ).label;
+}
+
+export function excludeLabels(
+  rows: readonly RowBody[],
+  excluded: readonly string[],
+  context: BookingContext,
+): RowBody[] {
+  return rows.filter((row) => !excluded.includes(rowLabel(row, context)));
+}
+
+export function labelCounts(
+  rows: readonly RowBody[],
+  context: BookingContext,
+): StatusLabelCount[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const label = rowLabel(row, context);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => {
+      const rankA = labelOrder.indexOf(a.label);
+      const rankB = labelOrder.indexOf(b.label);
+      if (rankA === -1 && rankB === -1) {
+        return a.label.localeCompare(b.label, "it");
+      }
+      if (rankA === -1) {
+        return 1;
+      }
+      if (rankB === -1) {
+        return -1;
+      }
+      return rankA - rankB;
+    });
 }
 
 function dateMs(row: RowBody): number | undefined {

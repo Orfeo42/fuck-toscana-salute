@@ -47,6 +47,7 @@ const (
 	defaultDrugBase       = "https://apit.sanita.toscana.it/C06/fse-ricette-farmaci/v1"
 	drugRefMarker         = "_PREFARM"
 	openStatus            = 3
+	bookedStatus          = 30
 	detailLimit           = 4
 	expiryLayout          = "2006-01-02T15:04:05.000"
 	placeholderExpiryYear = 9999
@@ -139,7 +140,7 @@ func (c *Client) Prescriptions(ctx context.Context) ([]Prescription, error) {
 func (c *Client) fillExpiry(ctx context.Context, visits []Prescription) error {
 	var open []int
 	for i := range visits {
-		if visits[i].Status == openStatus {
+		if visits[i].Status == openStatus || visits[i].Status == bookedStatus {
 			open = append(open, i)
 		}
 	}
