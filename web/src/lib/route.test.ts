@@ -18,6 +18,13 @@ describe("parseRoute", () => {
     });
   });
 
+  it("parses the collega page", () => {
+    expect(parseRoute("#/collega")).toEqual({
+      tab: "collega",
+      focus: undefined,
+    });
+  });
+
   it("parses an NRE on each tab", () => {
     expect(parseRoute("#/visite/0900A0000000001")).toEqual({
       tab: "visite",

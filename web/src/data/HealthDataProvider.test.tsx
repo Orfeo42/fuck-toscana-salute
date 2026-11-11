@@ -41,6 +41,7 @@ function sessionWith(
 ): SessionBody {
   return {
     gestioneReady,
+    loginMode: "window",
     portals: [
       { portal: "cup", state: cupState, login: { phase: "idle" } },
       { portal: "fse", state: fseState, login: { phase: "idle" } },

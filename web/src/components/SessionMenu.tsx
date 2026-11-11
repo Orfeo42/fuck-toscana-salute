@@ -13,6 +13,7 @@ import type { JSX } from "react";
 import type { PortalBody } from "../api/client";
 import { GoogleConnect } from "../google/GoogleConnect";
 import { formatDateTime } from "../lib/format";
+import { linkHref } from "../lib/route";
 import { useSession } from "../session/useSession";
 
 const portalNames: Record<PortalBody["portal"], string> = {
@@ -58,6 +59,10 @@ export function SessionMenu(): JSX.Element | null {
   }
 
   const handleLogin = (): void => {
+    if (session.loginMode === "bookmarklet") {
+      window.location.hash = linkHref;
+      return;
+    }
     void loginAll();
   };
   const handleLogout = (): void => {

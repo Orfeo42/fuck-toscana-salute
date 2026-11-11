@@ -17,6 +17,7 @@ vi.mock("../api/client", () => ({
 
 const activeSession: SessionBody = {
   gestioneReady: true,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -25,6 +26,7 @@ const activeSession: SessionBody = {
 
 const noGestioneSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -33,6 +35,7 @@ const noGestioneSession: SessionBody = {
 
 const loggedOutSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "idle" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
@@ -69,6 +72,21 @@ describe("SessionNotice", () => {
       await screen.findByText("Accedi per vedere i tuoi dati"),
     ).toBeInTheDocument();
     expect(screen.getByText(/SPID, poi Gestione Prenotazioni/)).toBeVisible();
+  });
+
+  it("points to the link page when logged out in bookmarklet mode", async () => {
+    mocks.get.mockResolvedValue({
+      data: { ...loggedOutSession, loginMode: "bookmarklet" },
+    });
+    renderNotice();
+
+    expect(
+      await screen.findByText("Accedi per vedere i tuoi dati"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Collega i portali" }),
+    ).toHaveAttribute("href", "#/collega");
+    expect(screen.queryByText(/SPID, poi Gestione/)).not.toBeInTheDocument();
   });
 
   it("warns when appointment dates are unavailable", async () => {

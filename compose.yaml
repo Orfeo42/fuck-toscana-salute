@@ -1,0 +1,25 @@
+name: fuck-toscana-salute
+
+services:
+  fts:
+    build: .
+    image: fuck-toscana-salute:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FTS_HOST_PORT:-8800}:8787"
+    volumes:
+      - fts-data:/data
+    secrets:
+      - fts_key
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  fts-data:
+
+secrets:
+  fts_key:
+    file: ${FTS_KEY_FILE:-${HOME}/.config/fuck-toscana-salute/secret.key}

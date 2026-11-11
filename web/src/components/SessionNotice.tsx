@@ -1,7 +1,8 @@
-import { Alert } from "@mantine/core";
+import { Alert, Anchor } from "@mantine/core";
 import { Info } from "lucide-react";
 import type { JSX } from "react";
 
+import { linkHref } from "../lib/route";
 import { useSession } from "../session/useSession";
 
 export function SessionNotice(): JSX.Element | null {
@@ -18,6 +19,19 @@ export function SessionNotice(): JSX.Element | null {
     return null;
   }
   if (!(session.portals ?? []).some((portal) => portal.state === "active")) {
+    if (session.loginMode === "bookmarklet") {
+      return (
+        <Alert
+          color="blue"
+          variant="light"
+          icon={<Info size={18} />}
+          title="Accedi per vedere i tuoi dati"
+        >
+          Accedi ai portali dal tuo browser e invia i dati con il segnalibro:{" "}
+          <Anchor href={linkHref}>Collega i portali</Anchor>.
+        </Alert>
+      );
+    }
     return (
       <Alert
         color="blue"

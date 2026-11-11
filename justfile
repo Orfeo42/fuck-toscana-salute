@@ -29,3 +29,26 @@ openapi addr="127.0.0.1:8787":
 
 run: build
     ./bin/fts
+
+key_file := env_var_or_default("FTS_KEY_FILE", env_var("HOME") / ".config/fuck-toscana-salute/secret.key")
+
+container-key:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    key_file="{{ key_file }}"
+    if [[ -f "${key_file}" ]]; then
+        echo "key present: ${key_file}"
+        exit 0
+    fi
+    mkdir -p "$(dirname "${key_file}")"
+    (umask 077 && openssl rand -base64 32 > "${key_file}")
+    echo "key created: ${key_file}"
+
+up: container-key
+    docker compose up -d --build
+
+down:
+    docker compose down
+
+logs:
+    docker compose logs -f

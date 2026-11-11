@@ -19,6 +19,7 @@ vi.mock("../api/client", () => ({
 
 const activeSession: SessionBody = {
   gestioneReady: true,
+  loginMode: "window",
   portals: [
     {
       portal: "cup",
@@ -32,6 +33,7 @@ const activeSession: SessionBody = {
 
 const degradedSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     {
       portal: "cup",
@@ -45,6 +47,7 @@ const degradedSession: SessionBody = {
 
 const loggedOutSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "idle" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
@@ -53,6 +56,7 @@ const loggedOutSession: SessionBody = {
 
 const waitingLoggedOutSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "waiting" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
@@ -61,6 +65,7 @@ const waitingLoggedOutSession: SessionBody = {
 
 const waitingLoggedInSession: SessionBody = {
   gestioneReady: false,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "expired", login: { phase: "waiting" } },
@@ -70,6 +75,7 @@ const waitingLoggedInSession: SessionBody = {
 function failedSession(reason: string): SessionBody {
   return {
     gestioneReady: false,
+    loginMode: "window",
     portals: [
       { portal: "cup", state: "active", login: { phase: "idle" } },
       {
@@ -258,6 +264,35 @@ describe("SessionMenu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Accedi di nuovo" }));
 
     expect(mocks.post).toHaveBeenCalledWith("/api/login");
+  });
+
+  it("navigates to the link page instead of logging in when in bookmarklet mode", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "";
+    mocks.get.mockResolvedValue({
+      data: { ...loggedOutSession, loginMode: "bookmarklet" },
+    });
+    renderMenu();
+
+    await user.click(await screen.findByRole("button", { name: "Accedi" }));
+
+    expect(window.location.hash).toBe("#/collega");
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it("navigates to the link page from Accedi di nuovo in bookmarklet mode", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "";
+    mocks.get.mockResolvedValue({
+      data: { ...degradedSession, loginMode: "bookmarklet" },
+    });
+    renderMenu();
+    await openMenu();
+
+    await user.click(screen.getByRole("menuitem", { name: "Accedi di nuovo" }));
+
+    expect(window.location.hash).toBe("#/collega");
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it("calls POST /api/logout on Esci", async () => {

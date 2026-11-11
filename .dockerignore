@@ -1,0 +1,6 @@
+.git
+bin
+fts
+*.har
+web/node_modules
+internal/webui/assets/dist

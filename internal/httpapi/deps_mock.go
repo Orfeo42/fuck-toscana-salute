@@ -5,6 +5,7 @@ package httpapi
 
 import (
 	"context"
+	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
 	"sync"
@@ -116,6 +117,9 @@ var _ LoginFlow = &MockLoginFlow{}
 //
 //		// make and configure a mocked LoginFlow
 //		mockedLoginFlow := &MockLoginFlow{
+//			ImportFunc: func(ctx context.Context, res login.Result) error {
+//				panic("mock out the Import method")
+//			},
 //			StartFunc: func(ctx context.Context, portal session.Portal) error {
 //				panic("mock out the Start method")
 //			},
@@ -132,6 +136,9 @@ var _ LoginFlow = &MockLoginFlow{}
 //
 //	}
 type MockLoginFlow struct {
+	// ImportFunc mocks the Import method.
+	ImportFunc func(ctx context.Context, res login.Result) error
+
 	// StartFunc mocks the Start method.
 	StartFunc func(ctx context.Context, portal session.Portal) error
 
@@ -143,6 +150,13 @@ type MockLoginFlow struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// Import holds details about calls to the Import method.
+		Import []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Res is the res argument value.
+			Res login.Result
+		}
 		// Start holds details about calls to the Start method.
 		Start []struct {
 			// Ctx is the ctx argument value.
@@ -159,9 +173,46 @@ type MockLoginFlow struct {
 		States []struct {
 		}
 	}
+	lockImport   sync.RWMutex
 	lockStart    sync.RWMutex
 	lockStartAll sync.RWMutex
 	lockStates   sync.RWMutex
+}
+
+// Import calls ImportFunc.
+func (mock *MockLoginFlow) Import(ctx context.Context, res login.Result) error {
+	if mock.ImportFunc == nil {
+		panic("MockLoginFlow.ImportFunc: method is nil but LoginFlow.Import was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Res login.Result
+	}{
+		Ctx: ctx,
+		Res: res,
+	}
+	mock.lockImport.Lock()
+	mock.calls.Import = append(mock.calls.Import, callInfo)
+	mock.lockImport.Unlock()
+	return mock.ImportFunc(ctx, res)
+}
+
+// ImportCalls gets all the calls that were made to Import.
+// Check the length with:
+//
+//	len(mockedLoginFlow.ImportCalls())
+func (mock *MockLoginFlow) ImportCalls() []struct {
+	Ctx context.Context
+	Res login.Result
+} {
+	var calls []struct {
+		Ctx context.Context
+		Res login.Result
+	}
+	mock.lockImport.RLock()
+	calls = mock.calls.Import
+	mock.lockImport.RUnlock()
+	return calls
 }
 
 // Start calls StartFunc.

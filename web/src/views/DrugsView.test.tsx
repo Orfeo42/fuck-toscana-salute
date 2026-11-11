@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
 }));
 
+vi.mock("../lib/pdf", () => ({
+  loadPdf: () => ({
+    promise: new Promise<never>(() => undefined),
+    destroy: () => Promise.resolve(),
+  }),
+}));
+
 vi.mock("../api/client", () => ({
   api: { GET: mocks.get },
   prescriptionPdfUrl: (ref: string) => `/api/documents/prescription?ref=${ref}`,
@@ -69,6 +76,7 @@ function stubScroll(scroll: () => void): void {
 
 const session: SessionBody = {
   gestioneReady: true,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -268,11 +276,14 @@ describe("DrugsView", () => {
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
 
-    expect(
-      within(at(bodyRows(), 0)).getByRole("link", {
+    await userEvent.setup().click(
+      within(at(bodyRows(), 0)).getByRole("button", {
         name: "Apri ricetta (PDF)",
       }),
-    ).toHaveAttribute("href", "/api/documents/prescription?ref=ref-02");
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Ricetta" }),
+    ).toBeInTheDocument();
   });
 
   it("renders the copy button", async () => {

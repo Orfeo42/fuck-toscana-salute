@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/login/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["import-login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/login/{portal}": {
         parameters: {
             query?: never;
@@ -308,6 +324,20 @@ export interface components {
             configured: boolean;
             connected: boolean;
         };
+        ImportLoginRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ImportLoginRequest.json
+             */
+            readonly $schema?: string;
+            access: string;
+            cf: string;
+            /** @enum {string} */
+            portal: "cup" | "fse";
+            refresh: string;
+            tessera?: string;
+        };
         LoginBody: {
             error?: string;
             /** @enum {string} */
@@ -369,6 +399,8 @@ export interface components {
              */
             readonly $schema?: string;
             gestioneReady: boolean;
+            /** @enum {string} */
+            loginMode: "window" | "bookmarklet";
             portals: components["schemas"]["PortalBody"][] | null;
         };
         UnitBody: {
@@ -611,6 +643,37 @@ export interface operations {
         responses: {
             /** @description Accepted */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "import-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

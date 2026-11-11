@@ -2,7 +2,9 @@ package loginflow
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -416,5 +418,94 @@ func TestStates(t *testing.T) {
 		states[session.PortalCUP] = State{Phase: PhaseFailed, Error: "error"}
 
 		assert.Equal(t, State{Phase: PhaseIdle}, f.States()[session.PortalCUP])
+	})
+}
+
+func importResult(t *testing.T, portal session.Portal, azp string, exp time.Time) login.Result {
+	t.Helper()
+	enc := base64.RawURLEncoding
+	payload := fmt.Sprintf(`{"iss":"https://auth.regione.toscana.it/auth/realms/rt","azp":%q,"exp":%d}`, azp, exp.Unix())
+	tok := enc.EncodeToString([]byte(`{"alg":"none"}`)) + "." + enc.EncodeToString([]byte(payload)) + ".sig"
+	res, err := login.ResultFromStorage(portal, tok, tok, "RSSMRA80A01H501U")
+	require.NoError(t, err)
+	return res
+}
+
+func TestImport(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	t.Run("stores tokens and identity and resets the portal to idle", func(t *testing.T) {
+		res := importResult(t, session.PortalCUP, "r_toscan__portale_cup2_0", now.Add(time.Minute))
+		res.Identity.TesseraSanitaria = "80380000000000000000"
+		res.Tokens.GestioneVerified = true
+		sink := &MockSink{
+			PutFunc:         func(portal session.Portal, tokens session.Tokens) {},
+			SetIdentityFunc: func(id session.Identity) {},
+		}
+		f := New(&MockLauncher{}, sink)
+		f.now = func() time.Time { return now }
+		f.states[session.PortalCUP] = State{Phase: PhaseFailed, Error: "timeout"}
+
+		require.NoError(t, f.Import(context.Background(), res))
+
+		require.Len(t, sink.PutCalls(), 1)
+		assert.Equal(t, session.PortalCUP, sink.PutCalls()[0].Portal)
+		assert.Equal(t, res.Tokens, sink.PutCalls()[0].Tokens)
+		require.Len(t, sink.SetIdentityCalls(), 1)
+		assert.Equal(t, res.Identity, sink.SetIdentityCalls()[0].ID)
+		assert.Equal(t, State{Phase: PhaseIdle}, stateOf(f, session.PortalCUP))
+	})
+
+	t.Run("wins over a waiting login", func(t *testing.T) {
+		res := importResult(t, session.PortalFSE, "r_toscan__fse_web", now.Add(time.Minute))
+		sink := &MockSink{
+			PutFunc:         func(portal session.Portal, tokens session.Tokens) {},
+			SetIdentityFunc: func(id session.Identity) {},
+		}
+		f := New(&MockLauncher{}, sink)
+		f.now = func() time.Time { return now }
+		f.states[session.PortalFSE] = State{Phase: PhaseWaiting}
+
+		require.NoError(t, f.Import(context.Background(), res))
+
+		assert.Equal(t, State{Phase: PhaseIdle}, stateOf(f, session.PortalFSE))
+	})
+
+	t.Run("fse import leaves the cup state untouched", func(t *testing.T) {
+		res := importResult(t, session.PortalFSE, "r_toscan__fse_web", now.Add(time.Minute))
+		sink := &MockSink{
+			PutFunc:         func(portal session.Portal, tokens session.Tokens) {},
+			SetIdentityFunc: func(id session.Identity) {},
+		}
+		f := New(&MockLauncher{}, sink)
+		f.now = func() time.Time { return now }
+		f.states[session.PortalCUP] = State{Phase: PhaseWaiting}
+
+		require.NoError(t, f.Import(context.Background(), res))
+
+		assert.Equal(t, State{Phase: PhaseWaiting}, stateOf(f, session.PortalCUP))
+	})
+
+	t.Run("mismatching token is rejected and nothing is stored", func(t *testing.T) {
+		res := importResult(t, session.PortalCUP, "r_toscan__fse_web", now.Add(time.Minute))
+		sink := &MockSink{}
+		f := New(&MockLauncher{}, sink)
+		f.now = func() time.Time { return now }
+
+		require.ErrorIs(t, f.Import(context.Background(), res), login.ErrTokenMismatch)
+
+		assert.Empty(t, sink.PutCalls())
+		assert.Empty(t, sink.SetIdentityCalls())
+	})
+
+	t.Run("expired token is rejected", func(t *testing.T) {
+		res := importResult(t, session.PortalCUP, "r_toscan__portale_cup2_0", now.Add(-time.Minute))
+		sink := &MockSink{}
+		f := New(&MockLauncher{}, sink)
+		f.now = func() time.Time { return now }
+
+		require.ErrorIs(t, f.Import(context.Background(), res), login.ErrTokenExpired)
+
+		assert.Empty(t, sink.PutCalls())
 	})
 }

@@ -18,6 +18,13 @@ const (
 	ErrNonLoopbackAddr   configError = "listen address must be loopback"
 	ErrInvalidDuration   configError = "invalid duration"
 	ErrInvalidProfileDir configError = "profile directory must be an absolute path"
+	ErrInvalidDataDir    configError = "data directory must be an absolute path"
+	ErrInvalidLoginMode  configError = "login mode must be window or bookmarklet"
+)
+
+const (
+	LoginModeWindow      = "window"
+	LoginModeBookmarklet = "bookmarklet"
 )
 
 type Config struct {
@@ -27,6 +34,10 @@ type Config struct {
 	RefreshMargin  time.Duration `env:"FTS_REFRESH_MARGIN" envDefault:"60s"`
 	RefreshTick    time.Duration `env:"FTS_REFRESH_TICK" envDefault:"15s"`
 	ProfileDir     string        `env:"FTS_PROFILE_DIR"`
+	DataDir        string        `env:"FTS_DATA_DIR"`
+	LoginMode      string        `env:"FTS_LOGIN_MODE" envDefault:"window"`
+	ListenAny      bool          `env:"FTS_LISTEN_ANY"`
+	SecretKeyFile  string        `env:"FTS_SECRET_KEY_FILE"`
 
 	GoogleClientFile string `env:"FTS_GOOGLE_CLIENT_FILE"`
 }
@@ -41,7 +52,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("split addr: %w", ErrNonLoopbackAddr)
 	}
-	if host != "127.0.0.1" && host != "::1" && host != "localhost" {
+	if !cfg.ListenAny && host != "127.0.0.1" && host != "::1" && host != "localhost" {
 		return Config{}, ErrNonLoopbackAddr
 	}
 
@@ -49,19 +60,27 @@ func Load() (Config, error) {
 		return Config{}, ErrInvalidDuration
 	}
 
-	if cfg.ProfileDir == "" {
-		dataHome := os.Getenv("XDG_DATA_HOME")
-		if !filepath.IsAbs(dataHome) {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return Config{}, fmt.Errorf("user home dir: %w", err)
-			}
-			dataHome = filepath.Join(home, ".local", "share")
+	if cfg.LoginMode != LoginModeWindow && cfg.LoginMode != LoginModeBookmarklet {
+		return Config{}, ErrInvalidLoginMode
+	}
+
+	if cfg.DataDir == "" || cfg.ProfileDir == "" {
+		appData, err := defaultDataDir()
+		if err != nil {
+			return Config{}, err
 		}
-		cfg.ProfileDir = filepath.Join(dataHome, "fuck-toscana-salute", "chrome-profile")
+		if cfg.DataDir == "" {
+			cfg.DataDir = appData
+		}
+		if cfg.ProfileDir == "" {
+			cfg.ProfileDir = filepath.Join(appData, "chrome-profile")
+		}
 	}
 	if !filepath.IsAbs(cfg.ProfileDir) {
 		return Config{}, ErrInvalidProfileDir
+	}
+	if !filepath.IsAbs(cfg.DataDir) {
+		return Config{}, ErrInvalidDataDir
 	}
 
 	if cfg.GoogleClientFile == "" {
@@ -73,4 +92,16 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func defaultDataDir() (string, error) {
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if !filepath.IsAbs(dataHome) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("user home dir: %w", err)
+		}
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(dataHome, "fuck-toscana-salute"), nil
 }

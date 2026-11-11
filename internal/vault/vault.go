@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/zalando/go-keyring"
-
 	"fuck-toscana-salute/internal/session"
 )
 
@@ -41,6 +39,7 @@ type wireSnapshot struct {
 }
 
 type Vault struct {
+	backend Backend
 	service string
 	user    string
 }
@@ -48,7 +47,11 @@ type Vault struct {
 var _ session.Persister = (*Vault)(nil)
 
 func New(service, user string) *Vault {
-	return &Vault{service: service, user: user}
+	return NewWithBackend(KeyringBackend{}, service, user)
+}
+
+func NewWithBackend(b Backend, service, user string) *Vault {
+	return &Vault{backend: b, service: service, user: user}
 }
 
 func (v *Vault) Save(ctx context.Context, snapshot session.Snapshot) error {
@@ -57,8 +60,8 @@ func (v *Vault) Save(ctx context.Context, snapshot session.Snapshot) error {
 	}
 
 	if len(snapshot.Tokens) == 0 && snapshot.Identity == (session.Identity{}) {
-		err := keyring.Delete(v.service, v.user)
-		if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		err := v.backend.Delete(v.service, v.user)
+		if err != nil && !errors.Is(err, ErrNotFound) {
 			return fmt.Errorf("vault: save: %w", err)
 		}
 		return nil
@@ -87,7 +90,7 @@ func (v *Vault) Save(ctx context.Context, snapshot session.Snapshot) error {
 	if err != nil {
 		return fmt.Errorf("vault: save: marshal failed")
 	}
-	if err := keyring.Set(v.service, v.user, string(data)); err != nil {
+	if err := v.backend.Set(v.service, v.user, string(data)); err != nil {
 		return fmt.Errorf("vault: save: %w", err)
 	}
 	return nil
@@ -98,8 +101,8 @@ func (v *Vault) Load(ctx context.Context) (session.Snapshot, error) {
 		return session.Snapshot{}, fmt.Errorf("vault: load: %w", err)
 	}
 
-	raw, err := keyring.Get(v.service, v.user)
-	if errors.Is(err, keyring.ErrNotFound) {
+	raw, err := v.backend.Get(v.service, v.user)
+	if errors.Is(err, ErrNotFound) {
 		return session.Snapshot{}, session.ErrNoSnapshot
 	}
 	if err != nil {

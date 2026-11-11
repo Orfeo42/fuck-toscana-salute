@@ -18,6 +18,13 @@ import { callsTo } from "../test/calls";
 import { VisitsView } from "./VisitsView";
 import { render } from "../test/render";
 
+vi.mock("../lib/pdf", () => ({
+  loadPdf: () => ({
+    promise: new Promise<never>(() => undefined),
+    destroy: () => Promise.resolve(),
+  }),
+}));
+
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
 }));
@@ -177,6 +184,7 @@ function mockData(appointments: AppointmentBody[], unbooked: string[]): void {
 
 const session: SessionBody = {
   gestioneReady: true,
+  loginMode: "window",
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -299,8 +307,8 @@ describe("VisitsView", () => {
       within(row).getByRole("button", { name: "Copia NRE 0900A0000000001" }),
     ).toHaveTextContent("0900A0000000001");
     expect(
-      within(row).getByRole("link", { name: "Apri ricetta (PDF)" }),
-    ).toHaveAttribute("href", "/api/documents/prescription?ref=ref-1");
+      within(row).getByRole("button", { name: "Apri ricetta (PDF)" }),
+    ).toBeInTheDocument();
     const book = within(row).getByRole("link", { name: "Prenota sul CUP" });
     expect(book).toHaveAttribute("href", "https://prenota.sanita.toscana.it/");
     expect(book).toHaveAttribute("target", "_blank");
@@ -872,11 +880,14 @@ describe("VisitsView", () => {
       }
       return found;
     });
-    expect(
-      within(row).getByRole("link", {
+    await userEvent.setup().click(
+      within(row).getByRole("button", {
         name: "Apri promemoria prenotazione (PDF)",
       }),
-    ).toHaveAttribute("href", "/api/documents/booking?id=ABC123456789");
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Promemoria" }),
+    ).toBeInTheDocument();
   });
 
   it("has no promemoria link on a booked row without a booking id", async () => {
@@ -896,7 +907,7 @@ describe("VisitsView", () => {
       return found;
     });
     expect(
-      within(row).queryByRole("link", {
+      within(row).queryByRole("button", {
         name: "Apri promemoria prenotazione (PDF)",
       }),
     ).not.toBeInTheDocument();

@@ -49,3 +49,41 @@ func TestExpiresAt(t *testing.T) {
 		require.ErrorIs(t, err, ErrNoExpiry)
 	})
 }
+
+func TestIssuer(t *testing.T) {
+	t.Run("returns iss", func(t *testing.T) {
+		got, err := Issuer(fakeToken(`{"iss":"https://auth.example/realms/rt"}`))
+		require.NoError(t, err)
+		assert.Equal(t, "https://auth.example/realms/rt", got)
+	})
+
+	t.Run("missing iss is empty", func(t *testing.T) {
+		got, err := Issuer(fakeToken(`{"exp":1}`))
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("malformed token", func(t *testing.T) {
+		_, err := Issuer("a.b")
+		require.ErrorIs(t, err, ErrMalformedToken)
+	})
+}
+
+func TestAuthorizedParty(t *testing.T) {
+	t.Run("returns azp", func(t *testing.T) {
+		got, err := AuthorizedParty(fakeToken(`{"azp":"client-x"}`))
+		require.NoError(t, err)
+		assert.Equal(t, "client-x", got)
+	})
+
+	t.Run("missing azp is empty", func(t *testing.T) {
+		got, err := AuthorizedParty(fakeToken(`{"exp":1}`))
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("malformed token", func(t *testing.T) {
+		_, err := AuthorizedParty("a.!!!.c")
+		require.ErrorIs(t, err, ErrMalformedToken)
+	})
+}

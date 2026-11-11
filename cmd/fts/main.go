@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -34,6 +35,7 @@ const (
 	keyringService    = "fuck-toscana-salute"
 	keyringUser       = "session"
 	keyringGoogleUser = "google"
+	secretsFile       = "secrets.enc"
 )
 
 type documents struct {
@@ -73,14 +75,20 @@ func run(ctx context.Context) error {
 
 func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.New(keyringService, keyringUser), cfg.RefreshMargin)
+	secrets, err := secretBackend(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.NewWithBackend(secrets, keyringService, keyringUser), cfg.RefreshMargin)
 	if err := store.Restore(ctx); err != nil {
 		slog.WarnContext(ctx, "session restore failed", slog.String("error", err.Error()))
 	}
 	go store.Run(ctx, cfg.RefreshTick)
 
 	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.ProfileDir, cfg.LoginTimeout), store)
-	go flow.Supervise(ctx, store, superviseTick)
+	if cfg.LoginMode == config.LoginModeWindow {
+		go flow.Supervise(ctx, store, superviseTick)
+	}
 	up := upstream.New(httpClient)
 	fseClient := fse.New(up, store)
 	cupClient := cup.New(up, store)
@@ -91,9 +99,9 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	} else if err != nil {
 		return fmt.Errorf("google config: %w", err)
 	}
-	googleClient := google.New(googleCfg, vault.NewTokenVault(keyringService, keyringGoogleUser), httpClient)
+	googleClient := google.New(googleCfg, vault.NewTokenVaultWithBackend(secrets, keyringService, keyringGoogleUser), httpClient)
 	mux := http.NewServeMux()
-	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient)
+	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient, cfg.LoginMode)
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}
@@ -125,4 +133,21 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	}
 	slog.InfoContext(ctx, "fts stopped")
 	return nil
+}
+
+func secretBackend(ctx context.Context, cfg config.Config) (vault.Backend, error) {
+	if cfg.SecretKeyFile == "" {
+		slog.InfoContext(ctx, "secrets in system keyring")
+		return vault.KeyringBackend{}, nil
+	}
+	key, err := vault.LoadKey(cfg.SecretKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load secret key: %w", err)
+	}
+	backend, err := vault.NewFileBackend(filepath.Join(cfg.DataDir, secretsFile), key)
+	if err != nil {
+		return nil, fmt.Errorf("open secrets file: %w", err)
+	}
+	slog.InfoContext(ctx, "secrets in encrypted file", slog.String("dir", cfg.DataDir))
+	return backend, nil
 }

@@ -18,7 +18,7 @@ import (
 func TestToSessionBody(t *testing.T) {
 	t.Run("zero times map to nil pointers", func(t *testing.T) {
 		status := session.Status{Portals: []session.PortalStatus{{Portal: session.PortalCUP, State: session.StateLoggedOut}}}
-		got := toSessionBody(status, nil)
+		got := toSessionBody(status, nil, "window")
 		require.Len(t, got.Portals, 1)
 		assert.Nil(t, got.Portals[0].AccessExpiresAt)
 		assert.Nil(t, got.Portals[0].RefreshExpiresAt)
@@ -27,14 +27,14 @@ func TestToSessionBody(t *testing.T) {
 	t.Run("non-zero times are kept", func(t *testing.T) {
 		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		status := session.Status{Portals: []session.PortalStatus{{Portal: session.PortalFSE, State: session.StateActive, AccessExpiresAt: at}}}
-		got := toSessionBody(status, nil)
+		got := toSessionBody(status, nil, "window")
 		require.NotNil(t, got.Portals[0].AccessExpiresAt)
 		assert.True(t, at.Equal(*got.Portals[0].AccessExpiresAt))
 	})
 
 	t.Run("missing login state defaults to idle", func(t *testing.T) {
 		status := session.Status{Portals: []session.PortalStatus{{Portal: session.PortalCUP}}}
-		got := toSessionBody(status, map[session.Portal]loginflow.State{})
+		got := toSessionBody(status, map[session.Portal]loginflow.State{}, "window")
 		assert.Equal(t, LoginBody{Phase: "idle"}, got.Portals[0].Login)
 	})
 
@@ -46,7 +46,7 @@ func TestToSessionBody(t *testing.T) {
 		states := map[session.Portal]loginflow.State{
 			session.PortalCUP: {Phase: loginflow.PhaseFailed, Error: "boom"},
 		}
-		got := toSessionBody(status, states)
+		got := toSessionBody(status, states, "window")
 		assert.True(t, got.GestioneReady)
 		assert.Equal(t, "fse", got.Portals[0].Portal)
 		assert.Equal(t, LoginBody{Phase: "idle"}, got.Portals[0].Login)
@@ -54,7 +54,7 @@ func TestToSessionBody(t *testing.T) {
 	})
 
 	t.Run("no portals gives empty non-nil slice", func(t *testing.T) {
-		got := toSessionBody(session.Status{}, nil)
+		got := toSessionBody(session.Status{}, nil, "window")
 		assert.NotNil(t, got.Portals)
 		assert.Empty(t, got.Portals)
 	})

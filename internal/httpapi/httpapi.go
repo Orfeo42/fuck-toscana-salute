@@ -5,10 +5,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"fuck-toscana-salute/internal/jwtclaims"
+	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
@@ -20,6 +23,18 @@ type sessionOutput struct {
 
 type startLoginInput struct {
 	Portal string `path:"portal" enum:"cup,fse"`
+}
+
+type importLoginInput struct {
+	Body ImportLoginRequest
+}
+
+type ImportLoginRequest struct {
+	Portal  string `json:"portal" required:"true" enum:"cup,fse"`
+	Access  string `json:"access" required:"true" minLength:"1"`
+	Refresh string `json:"refresh" required:"true" minLength:"1"`
+	CF      string `json:"cf" required:"true" minLength:"1"`
+	Tessera string `json:"tessera,omitempty"`
 }
 
 type emptyOutput struct{}
@@ -46,14 +61,14 @@ type bookingPDFInput struct {
 	ID string `query:"id" required:"true" minLength:"1" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
 }
 
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google) http.Handler {
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, loginMode string) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow, ag, docs, g)
+	register(api, store, flow, ag, docs, g, loginMode)
 	return mux
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google) {
+func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, loginMode string) {
 	registerGoogle(api, g, docs)
 
 	huma.Register(api, huma.Operation{
@@ -62,7 +77,51 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		Path:          "/api/session",
 		DefaultStatus: http.StatusOK,
 	}, func(_ context.Context, _ *struct{}) (*sessionOutput, error) {
-		return &sessionOutput{Body: toSessionBody(store.Status(), flow.States())}, nil
+		return &sessionOutput{Body: toSessionBody(store.Status(), flow.States(), loginMode)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "import-login",
+		Method:        http.MethodPost,
+		Path:          "/api/login/import",
+		DefaultStatus: http.StatusNoContent,
+		Middlewares: huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
+			origin, err := url.Parse(ctx.Header("Origin"))
+			if err != nil || origin.Host == "" || origin.Host != ctx.Host() {
+				slog.WarnContext(ctx.Context(), "login import rejected: origin mismatch")
+				if err := huma.WriteErr(api, ctx, http.StatusForbidden, "origin non consentito"); err != nil {
+					slog.ErrorContext(ctx.Context(), "write forbidden response failed", slog.String("error", err.Error()))
+				}
+				return
+			}
+			next(ctx)
+		}},
+	}, func(ctx context.Context, in *importLoginInput) (*emptyOutput, error) {
+		portal := session.Portal(in.Body.Portal)
+		res, err := login.ResultFromStorage(portal, in.Body.Access, in.Body.Refresh, in.Body.CF)
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity("Token non valido")
+		}
+		if portal == session.PortalCUP && in.Body.Tessera != "" {
+			res.Identity.TesseraSanitaria = in.Body.Tessera
+			res.Tokens.GestioneVerified = true
+		}
+
+		err = flow.Import(ctx, res)
+		if errors.Is(err, login.ErrTokenMismatch) {
+			return nil, huma.Error422UnprocessableEntity("I token non appartengono a questo portale")
+		}
+		if errors.Is(err, login.ErrTokenExpired) {
+			return nil, huma.Error422UnprocessableEntity("Il token è scaduto: accedi di nuovo al portale e riprova")
+		}
+		if errors.Is(err, jwtclaims.ErrMalformedToken) {
+			return nil, huma.Error422UnprocessableEntity("Token non valido")
+		}
+		if err != nil {
+			slog.ErrorContext(ctx, "import login failed", slog.String("portal", in.Body.Portal), slog.String("error", err.Error()))
+			return nil, huma.Error500InternalServerError("cannot import login")
+		}
+		return &emptyOutput{}, nil
 	})
 
 	huma.Register(api, huma.Operation{

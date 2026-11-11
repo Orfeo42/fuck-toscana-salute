@@ -11,12 +11,16 @@ import { GoogleProvider } from "./google/GoogleProvider";
 import { useRoute } from "./lib/route";
 import { SessionProvider } from "./session/SessionProvider";
 import { DrugsView } from "./views/DrugsView";
+import { LinkView } from "./views/LinkView";
 import { VisitsView } from "./views/VisitsView";
 
 const headerConfig = { height: 56 };
 
 function Content(): JSX.Element {
   const route = useRoute();
+  if (route.tab === "collega") {
+    return <LinkView />;
+  }
   return route.tab === "farmaci" ? <DrugsView /> : <VisitsView />;
 }
 

@@ -33,6 +33,8 @@ const (
 	ErrNoTessera           = loginError("login: tessera number not found")
 	ErrUnknownPortal       = loginError("login: unknown portal")
 	ErrInteractionRequired = loginError("login: identity provider requires user interaction")
+	ErrTokenMismatch       = loginError("login: token does not belong to this portal")
+	ErrTokenExpired        = loginError("login: access token already expired")
 )
 
 const (
@@ -48,6 +50,9 @@ const (
 	bannerScript    = `() => { const d = document.createElement("div"); d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#fff;color:#000;border:4px solid red;padding:12px;font:16px sans-serif;text-align:center"; d.textContent = "fuck-toscana-salute: inserisci codice fiscale e tessera sanitaria, risolvi il captcha e premi Login. La finestra si chiudera' da sola."; document.body.appendChild(d); }`
 	tesseraQueryKey = "numbersTeam"
 	silentTimeout   = 45 * time.Second
+	realmIssuer     = "https://auth.regione.toscana.it/auth/realms/rt"
+	cupClientID     = "r_toscan__portale_cup2_0"
+	fseClientID     = "r_toscan__fse_web"
 )
 
 var interactiveRestoredArgs = []string{"--disable-extensions", "--password-store=basic"}
@@ -66,28 +71,58 @@ func New(browserChannel, profileDir string, timeout time.Duration) *Launcher {
 	return &Launcher{channel: browserChannel, profileDir: profileDir, timeout: timeout}
 }
 
-func resultFromStorage(portal session.Portal, s storageSnapshot) (Result, error) {
-	if s.Access == "" || s.Refresh == "" {
+func ResultFromStorage(portal session.Portal, access, refresh, cf string) (Result, error) {
+	if access == "" || refresh == "" {
 		return Result{}, ErrTokensMissing
 	}
-	accessExp, err := jwtclaims.ExpiresAt(s.Access)
+	accessExp, err := jwtclaims.ExpiresAt(access)
 	if err != nil {
 		return Result{}, fmt.Errorf("login: access token expiry: %w", err)
 	}
-	refreshExp, err := jwtclaims.ExpiresAt(s.Refresh)
+	refreshExp, err := jwtclaims.ExpiresAt(refresh)
 	if err != nil {
 		return Result{}, fmt.Errorf("login: refresh token expiry: %w", err)
 	}
 	return Result{
 		Portal: portal,
 		Tokens: session.Tokens{
-			Access:           s.Access,
-			Refresh:          s.Refresh,
+			Access:           access,
+			Refresh:          refresh,
 			AccessExpiresAt:  accessExp,
 			RefreshExpiresAt: refreshExp,
 		},
-		Identity: session.Identity{CodiceFiscale: strings.ToUpper(s.CF)},
+		Identity: session.Identity{CodiceFiscale: strings.ToUpper(cf)},
 	}, nil
+}
+
+func Validate(res Result, now time.Time) error {
+	clientID := cupClientID
+	switch res.Portal {
+	case session.PortalCUP:
+	case session.PortalFSE:
+		clientID = fseClientID
+	default:
+		return ErrUnknownPortal
+	}
+
+	for _, token := range []string{res.Tokens.Access, res.Tokens.Refresh} {
+		iss, err := jwtclaims.Issuer(token)
+		if err != nil {
+			return fmt.Errorf("login: token issuer: %w", err)
+		}
+		azp, err := jwtclaims.AuthorizedParty(token)
+		if err != nil {
+			return fmt.Errorf("login: token authorized party: %w", err)
+		}
+		if iss != realmIssuer || azp != clientID {
+			return ErrTokenMismatch
+		}
+	}
+
+	if !res.Tokens.AccessExpiresAt.After(now) {
+		return ErrTokenExpired
+	}
+	return nil
 }
 
 func tesseraFromURL(raw string) (string, error) {
@@ -225,7 +260,7 @@ func (b *browser) tokensFlow(ctx context.Context, portal session.Portal, loginUR
 	if err != nil {
 		return Result{}, err
 	}
-	return resultFromStorage(portal, snapshot)
+	return ResultFromStorage(portal, snapshot.Access, snapshot.Refresh, snapshot.CF)
 }
 
 func (b *browser) fseFlow(ctx context.Context) (Result, error) {
@@ -279,7 +314,7 @@ func (b *browser) cupFlow(ctx context.Context) (Result, error) {
 		snapshot = latest
 	}
 
-	res, err := resultFromStorage(session.PortalCUP, snapshot)
+	res, err := ResultFromStorage(session.PortalCUP, snapshot.Access, snapshot.Refresh, snapshot.CF)
 	if err != nil {
 		return Result{}, err
 	}

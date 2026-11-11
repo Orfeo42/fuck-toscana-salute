@@ -24,6 +24,8 @@ func TestLoad(t *testing.T) {
 			RefreshMargin:  60 * time.Second,
 			RefreshTick:    15 * time.Second,
 			ProfileDir:     filepath.Join(dataHome, "fuck-toscana-salute", "chrome-profile"),
+			DataDir:        filepath.Join(dataHome, "fuck-toscana-salute"),
+			LoginMode:      LoginModeWindow,
 
 			GoogleClientFile: filepath.Join(configHome, "fuck-toscana-salute", "google-client.json"),
 		}, got)
@@ -112,6 +114,43 @@ func TestLoad(t *testing.T) {
 		t.Setenv("FTS_ADDR", "127.0.0.1")
 		_, err := Load()
 		require.ErrorIs(t, err, ErrNonLoopbackAddr)
+	})
+
+	t.Run("unspecified address allowed with listen any", func(t *testing.T) {
+		t.Setenv("FTS_ADDR", "0.0.0.0:8787")
+		t.Setenv("FTS_LISTEN_ANY", "true")
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "0.0.0.0:8787", got.Addr)
+	})
+
+	t.Run("bookmarklet login mode", func(t *testing.T) {
+		t.Setenv("FTS_LOGIN_MODE", "bookmarklet")
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, LoginModeBookmarklet, got.LoginMode)
+	})
+
+	t.Run("unknown login mode rejected", func(t *testing.T) {
+		t.Setenv("FTS_LOGIN_MODE", "popup")
+		_, err := Load()
+		require.ErrorIs(t, err, ErrInvalidLoginMode)
+	})
+
+	t.Run("explicit data dir and secret key file", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("FTS_DATA_DIR", dir)
+		t.Setenv("FTS_SECRET_KEY_FILE", "/run/secrets/fts-key")
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, dir, got.DataDir)
+		assert.Equal(t, "/run/secrets/fts-key", got.SecretKeyFile)
+	})
+
+	t.Run("relative data dir rejected", func(t *testing.T) {
+		t.Setenv("FTS_DATA_DIR", "data")
+		_, err := Load()
+		require.ErrorIs(t, err, ErrInvalidDataDir)
 	})
 
 	t.Run("zero login timeout", func(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 
 	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
 )
@@ -18,6 +19,7 @@ type SessionStore interface {
 type LoginFlow interface {
 	Start(ctx context.Context, portal session.Portal) error
 	StartAll(ctx context.Context) error
+	Import(ctx context.Context, res login.Result) error
 	States() map[session.Portal]loginflow.State
 }
 

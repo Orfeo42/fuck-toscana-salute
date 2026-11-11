@@ -6,17 +6,21 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
 type TokenVault struct {
+	backend Backend
 	service string
 	user    string
 }
 
 func NewTokenVault(service, user string) *TokenVault {
-	return &TokenVault{service: service, user: user}
+	return NewTokenVaultWithBackend(KeyringBackend{}, service, user)
+}
+
+func NewTokenVaultWithBackend(b Backend, service, user string) *TokenVault {
+	return &TokenVault{backend: b, service: service, user: user}
 }
 
 func (v *TokenVault) Load(ctx context.Context) (*oauth2.Token, error) {
@@ -24,8 +28,8 @@ func (v *TokenVault) Load(ctx context.Context) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("vault: load token: %w", err)
 	}
 
-	raw, err := keyring.Get(v.service, v.user)
-	if errors.Is(err, keyring.ErrNotFound) {
+	raw, err := v.backend.Get(v.service, v.user)
+	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -48,7 +52,7 @@ func (v *TokenVault) Save(ctx context.Context, token *oauth2.Token) error {
 	if err != nil {
 		return errors.New("vault: save token: marshal failed")
 	}
-	if err := keyring.Set(v.service, v.user, string(data)); err != nil {
+	if err := v.backend.Set(v.service, v.user, string(data)); err != nil {
 		return fmt.Errorf("vault: save token: %w", err)
 	}
 	return nil
@@ -59,8 +63,8 @@ func (v *TokenVault) Delete(ctx context.Context) error {
 		return fmt.Errorf("vault: delete token: %w", err)
 	}
 
-	err := keyring.Delete(v.service, v.user)
-	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+	err := v.backend.Delete(v.service, v.user)
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("vault: delete token: %w", err)
 	}
 	return nil

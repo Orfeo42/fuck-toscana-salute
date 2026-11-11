@@ -118,6 +118,20 @@ func (f *Flow) Start(ctx context.Context, portal session.Portal) error {
 	return nil
 }
 
+func (f *Flow) Import(ctx context.Context, res login.Result) error {
+	if err := login.Validate(res, f.now()); err != nil {
+		return err
+	}
+
+	f.sink.Put(res.Portal, res.Tokens)
+	f.sink.SetIdentity(res.Identity)
+	f.mu.Lock()
+	f.states[res.Portal] = State{Phase: PhaseIdle}
+	f.mu.Unlock()
+	slog.InfoContext(ctx, "login imported", slog.String("portal", string(res.Portal)))
+	return nil
+}
+
 func (f *Flow) States() map[session.Portal]State {
 	f.mu.Lock()
 	defer f.mu.Unlock()

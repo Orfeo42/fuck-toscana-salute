@@ -2,6 +2,7 @@ package login
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func fakeJWT(payload string) string {
 func TestResultFromStorage(t *testing.T) {
 	t.Run("valid snapshot", func(t *testing.T) {
 		tok := fakeJWT(`{"exp":1700000000}`)
-		got, err := resultFromStorage(session.PortalFSE, storageSnapshot{Access: tok, Refresh: tok, CF: "rssmra80a01h501u"})
+		got, err := ResultFromStorage(session.PortalFSE, tok, tok, "rssmra80a01h501u")
 		require.NoError(t, err)
 		assert.Equal(t, session.PortalFSE, got.Portal)
 		assert.Equal(t, tok, got.Tokens.Access)
@@ -31,18 +32,70 @@ func TestResultFromStorage(t *testing.T) {
 	})
 
 	t.Run("missing access", func(t *testing.T) {
-		_, err := resultFromStorage(session.PortalCUP, storageSnapshot{Refresh: fakeJWT(`{"exp":1700000000}`)})
+		_, err := ResultFromStorage(session.PortalCUP, "", fakeJWT(`{"exp":1700000000}`), "")
 		require.ErrorIs(t, err, ErrTokensMissing)
 	})
 
 	t.Run("missing refresh", func(t *testing.T) {
-		_, err := resultFromStorage(session.PortalCUP, storageSnapshot{Access: fakeJWT(`{"exp":1700000000}`)})
+		_, err := ResultFromStorage(session.PortalCUP, fakeJWT(`{"exp":1700000000}`), "", "")
 		require.ErrorIs(t, err, ErrTokensMissing)
 	})
 
 	t.Run("malformed access token", func(t *testing.T) {
-		_, err := resultFromStorage(session.PortalCUP, storageSnapshot{Access: "not-a-jwt", Refresh: fakeJWT(`{"exp":1700000000}`)})
+		_, err := ResultFromStorage(session.PortalCUP, "not-a-jwt", fakeJWT(`{"exp":1700000000}`), "")
 		require.Error(t, err)
+	})
+}
+
+func TestValidate(t *testing.T) {
+	now := time.Unix(1700000000, 0)
+	build := func(portal session.Portal, iss, azp string, exp int64) Result {
+		tok := fakeJWT(fmt.Sprintf(`{"iss":%q,"azp":%q,"exp":%d}`, iss, azp, exp))
+		res, err := ResultFromStorage(portal, tok, tok, "RSSMRA80A01H501U")
+		require.NoError(t, err)
+		return res
+	}
+	future := now.Add(time.Hour).Unix()
+
+	t.Run("valid cup", func(t *testing.T) {
+		require.NoError(t, Validate(build(session.PortalCUP, realmIssuer, cupClientID, future), now))
+	})
+
+	t.Run("valid fse", func(t *testing.T) {
+		require.NoError(t, Validate(build(session.PortalFSE, realmIssuer, fseClientID, future), now))
+	})
+
+	t.Run("wrong issuer", func(t *testing.T) {
+		err := Validate(build(session.PortalCUP, "https://evil.example/realms/rt", cupClientID, future), now)
+		require.ErrorIs(t, err, ErrTokenMismatch)
+	})
+
+	t.Run("fse token on cup portal", func(t *testing.T) {
+		err := Validate(build(session.PortalCUP, realmIssuer, fseClientID, future), now)
+		require.ErrorIs(t, err, ErrTokenMismatch)
+	})
+
+	t.Run("refresh token mismatch", func(t *testing.T) {
+		res := build(session.PortalCUP, realmIssuer, cupClientID, future)
+		res.Tokens.Refresh = fakeJWT(`{"iss":"x","azp":"y","exp":1}`)
+		require.ErrorIs(t, Validate(res, now), ErrTokenMismatch)
+	})
+
+	t.Run("expired access token", func(t *testing.T) {
+		err := Validate(build(session.PortalCUP, realmIssuer, cupClientID, now.Add(-time.Minute).Unix()), now)
+		require.ErrorIs(t, err, ErrTokenExpired)
+	})
+
+	t.Run("malformed token", func(t *testing.T) {
+		res := build(session.PortalCUP, realmIssuer, cupClientID, future)
+		res.Tokens.Access = "not-a-jwt"
+		require.Error(t, Validate(res, now))
+	})
+
+	t.Run("unknown portal", func(t *testing.T) {
+		res := build(session.PortalCUP, realmIssuer, cupClientID, future)
+		res.Portal = "xyz"
+		require.ErrorIs(t, Validate(res, now), ErrUnknownPortal)
 	})
 }
 

@@ -256,6 +256,39 @@
         "required": ["configured", "connected"],
         "type": "object"
       },
+      "ImportLoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/ImportLoginRequest.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "access": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "cf": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "portal": {
+            "enum": ["cup", "fse"],
+            "type": "string"
+          },
+          "refresh": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "tessera": {
+            "type": "string"
+          }
+        },
+        "required": ["portal", "access", "refresh", "cf"],
+        "type": "object"
+      },
       "LoginBody": {
         "additionalProperties": false,
         "properties": {
@@ -416,6 +449,10 @@
           "gestioneReady": {
             "type": "boolean"
           },
+          "loginMode": {
+            "enum": ["window", "bookmarklet"],
+            "type": "string"
+          },
           "portals": {
             "items": {
               "$ref": "#/components/schemas/PortalBody"
@@ -423,7 +460,7 @@
             "type": ["array", "null"]
           }
         },
-        "required": ["portals", "gestioneReady"],
+        "required": ["portals", "gestioneReady", "loginMode"],
         "type": "object"
       },
       "UnitBody": {
@@ -705,6 +742,36 @@
         "responses": {
           "202": {
             "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/login/import": {
+      "post": {
+        "operationId": "import-login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
