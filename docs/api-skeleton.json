@@ -1,0 +1,1479 @@
+[
+ {
+  "method": "POST",
+  "host": "sessions.bugsnag.com",
+  "path": "/",
+  "query": {},
+  "req_headers": [
+   "content-type=application/json"
+  ],
+  "req_body": {
+   "notifier": {
+    "name": "str",
+    "version": "str",
+    "url": "str"
+   },
+   "device": {
+    "locale": "str",
+    "userAgent": "str",
+    "orientation": "str"
+   },
+   "app": {
+    "releaseStage": "str",
+    "version": "str",
+    "type": "str"
+   },
+   "sessions": [
+    {
+     "id": "str",
+     "startedAt": "str:date",
+     "user": {}
+    },
+    "len=1"
+   ]
+  },
+  "status": 0,
+  "resp_mime": "x-unknown",
+  "resp_headers": {},
+  "resp_body": null,
+  "count": 22,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "posteid.poste.it",
+  "path": "/jod-login-schema/secureholder/generateqrcode",
+  "query": {
+   "b": "<redacted>",
+   "_": "<redacted>"
+  },
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "x-requested-with"
+  ],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "image": "str:base64",
+   "HOST": "str",
+   "ID": "str",
+   "datapush": {
+    "PollingKey": "str",
+    "PollingMode": "str"
+   },
+   "pushtype": "str"
+  },
+  "count": 4,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "posteid.poste.it",
+  "path": "/jod-login-schema/polling/v4/app",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json",
+   "origin=https://posteid.poste.it",
+   "x-requested-with"
+  ],
+  "req_body": {
+   "ID": "str"
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "content-type": "application/json;charset=ISO-8859-1"
+  },
+  "resp_body": {
+   "status": "str"
+  },
+  "count": 9,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "auth.regione.toscana.it",
+  "path": "/auth/realms/rt/protocol/openid-connect/token",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/plain, */*",
+   "content-type=application/x-www-form-urlencoded",
+   "origin=https://prenota.sanita.toscana.it"
+  ],
+  "req_body": {
+   "form": {
+    "grant_type": "authorization_code",
+    "code": "<redacted>",
+    "responseType": "<redacted>",
+    "client_id": "r_toscan__portale_cup2_0",
+    "scope": "profile rtroles",
+    "redirect_uri": "https://prenota.sanita.toscana.it"
+   }
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-credentials": "true",
+   "access-control-allow-origin": "https://prenota.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "access_token": "str",
+   "expires_in": 300,
+   "refresh_expires_in": 1800,
+   "refresh_token": "str",
+   "token_type": "str",
+   "not-before-policy": 0,
+   "session_state": "str",
+   "scope": "str"
+  },
+  "count": 2,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "auth.regione.toscana.it",
+  "path": "/auth/realms/rt/protocol/openid-connect/userinfo",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/plain, */*",
+   "content-type=application/json",
+   "origin=https://prenota.sanita.toscana.it"
+  ],
+  "req_body": {
+   "headers": {
+    "normalizedNames": {},
+    "lazyUpdate": "null"
+   }
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-credentials": "true",
+   "access-control-allow-origin": "https://prenota.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "sub": "str",
+   "auth_type": "str",
+   "auth_level": "str:int",
+   "extras": {
+    "familyName": "str",
+    "name": "str",
+    "spidCode": "str",
+    "fiscalNumber": "str"
+   },
+   "preferred_username": "str",
+   "given_name": "str",
+   "family_name": "str"
+  },
+  "count": 1,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/sanita/{id}/nre-prenotazione-api/v1/{id}/api/nre",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/plain, */*",
+   "content-type=application/json",
+   "origin=https://prenota.sanita.toscana.it"
+  ],
+  "req_body": {
+   "dataInizio": "str:date",
+   "dataFine": "str:date",
+   "page": "num",
+   "size": "num",
+   "cf": "str"
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://prenota.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "infoRicetta": [
+    {
+     "nre": "str",
+     "dataPrescrizione": "str:date",
+     "tipoRicetta": "str",
+     "stato": "str:int",
+     "dataScadenza": "null",
+     "jsonPrescrizione": "str",
+     "parsedJsonPrescrizione": "null"
+    },
+    "len=10"
+   ],
+   "codiceEsito": "str:int",
+   "descrizioneEsito": "str",
+   "estrazione": "num"
+  },
+  "count": 5,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/sanita/{id}/nre-prenotazione-api/v1/{id}/api/{id}",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/plain, */*",
+   "content-type=application/json",
+   "origin=https://prenota.sanita.toscana.it"
+  ],
+  "req_body": {
+   "cf": "str",
+   "nre": "str"
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://prenota.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "response": {
+    "paziente": {
+     "siglaRegole": "null",
+     "idPaziente": "str:int",
+     "idPazienteSGP": "null",
+     "idPazienteCUP": "null",
+     "nome": "str",
+     "cognome": "str",
+     "dataNascita": "str:int",
+     "idComuneNascita": "str:int",
+     "comuneNascita": "str:int",
+     "comuneNascitaDesc": "str",
+     "sesso": "str",
+     "codiceFiscale": "str",
+     "indirizzoDomicilio": "str",
+     "idComuneDomicilio": "str:int",
+     "comuneDomicilio": "str:int",
+     "comuneDomicilioDesc": "str",
+     "capDomicilio": "str:int",
+     "indirizzoResidenza": "str",
+     "idComuneResidenza": "str:int",
+     "comuneResidenza": "str:int",
+     "comuneResidenzaDesc": "str",
+     "capResidenza": "str:int",
+     "idAslAppartenenza": "str:int",
+     "aslAppartenenza": "str:int",
+     "aslAppartenenzaDesc": "str",
+     "idAslAssistenza": "str:int",
+     "aslAssistenza": "str:int",
+     "aslAssistenzaDesc": "str:int",
+     "idCittadinanza": "str:int",
+     "cittadinanza": "str:int",
+     "cittadinanzaDesc": "str",
+     "tel1": "str:int",
+     "tel2": "str:int",
+     "tel3": "null",
+     "tesseraTeam": {
+      "numeroTessera": "null",
+      "numeroPersonale": "null",
+      "numeroIstituzione": "null",
+      "dataScadenza": "null",
+      "idSiglaNazione": "null",
+      "siglaNazione": "null"
+     },
+     "codiceSTP": "null",
+     "dataRilascioSTP": "null",
+     "dataScadenzaSTP": "null",
+     "codiceENI": "null",
+     "dataRilascioENI": "null",
+     "dataScadenzaENI": "null",
+     "email": "null",
+     "codiceEsterno": "null",
+     "vincoliProfilo": "null",
+     "tokenRegistrazione": "null",
+     "rapprLegale": "null",
+     "rapprLegaleTipoDocumento": "null",
+     "rapprLegaleNumDocumento": "null",
+     "rapprLegaleRilascioDocumento": "null",
+     "rapprLegaleDataRilascioDocumento": "null",
+     "ncivicoDomicilio": "null",
+     "ncivicoResidenza": "null",
+     "tsan": "null"
+    },
+    "listaPrescrizioni": {
+     "prescrizione": [
+      {
+       "numPrescrizione": "null",
+       "idEpisodio": "null",
+       "idPrescrizione": "str:int",
+       "idPrescrizioneRmt": "null",
+       "nome": "null",
+       "convenzione": "str:int",
+       "codiceConvenzione": "null",
+       "descrizioneConvenzione": "str",
+       "tipoPrescrizione": "str",
+       "codiceTipoPrescrizione": "null",
+       "descrizioneTipoPrescrizione": "str",
+       "tipoErogazione": "str:int",
+       "tipoRicetta": "null",
+       "fasciaReddito": "null",
+       "descrizioneFasciaReddito": "null",
+       "numeroImpegnativa": "null",
+       "numeroImpegnativaRossa": "null",
+       "numeroNRE": "str",
+       "dataImpegnativa": "str:int",
+       "dataContatto": "null",
+       "esenzione": "null",
+       "codiceEsenzione": "null",
+       "descrizioneEsenzione": "null",
+       "datiSPA": {
+        "tipoAccesso": "null",
+        "tipoPrescrittore": "null",
+        "verificaCF": "null",
+        "stampaPC": "str",
+        "suggerita": "str",
+        "classePriorita": "null",
+        "finalita": "null"
+       },
+       "cfPrescrittore": "str",
+       "codiceRegPrescrittore": "null",
+       "calcoloImporto": "null",
+       "classePriorita": "str",
+       "descrizioneClassePriorita": "str",
+       "tipoAccessoPriorita": "null",
+       "costoPrescrizione": "null",
+       "quotaRicetta": "null",
+       "quotaCD": "null",
+       "statoPagamento": "null",
+       "listaPrestazioni": {
+        "prestazione": [
+         {
+          "numPrescrizione": "null",
+          "idPrestazione": "str:int",
+          "idPrestazioneRmt": "null",
+          "idPrestazioneExt": "null",
+          "nome": "null",
+          "statoPrestazione": "null",
+          "idPrestazioneAnagrafica": "str:int",
+          "codicePrestazione": "str",
+          "codicePrestazioneExt": "null",
+          "codProdPrest": "null",
+          "codiceCatalogoRegionale": "str",
+          "descrizioneCatalogoRegionale": "null",
+          "codiceNomenclatoreRegionale": "str",
+          "descrizioneNomenclatoreRegionale": "str",
+          "costoPrestazione": "null",
+          "compEsePatologia": "null",
+          "descrizionePrestazione": "str",
+          "dataModificaStatoPre": "null",
+          "idDisdettaPre": "null",
+          "codiceInvio": "null",
+          "codiceBranca": "null",
+          "statoPagamento": "null",
+          "notaOperatore": "null",
+          "notaPaziente": "null",
+          "intervalloPrestazione": "null",
+          "listaPrestazioniCUP": [
+           "empty"
+          ],
+          "unitaPrimoAppuntamento": "null",
+          "dataPrimoAppuntamento": "null",
+          "tipoAccessoPriorita": "null",
+          "dataAttivita": "null",
+          "oraAttivita": "null",
+          "unitaAttivita": "null",
+          "codicePacchetto": "null",
+          "inserimentoListaAttesaPossibile": "null",
+          "tipoListaAttesa": "null",
+          "canaleNotificaReminder": "null",
+          "numeroChiamata": "null",
+          "letteraChiamata": "null",
+          "distrettiAnatomici": [
+           "empty"
+          ],
+          "indirizzoErogazione": "null"
+         },
+         "len=1"
+        ]
+       },
+       "listaAppuntamenti": "null",
+       "statoCorrettezzaAmministrativa": "null",
+       "esitoPrescrizione": "null",
+       "inviaMailPromemoria": "null",
+       "iuv": "null",
+       "valoreStatoPagamento": "null",
+       "listaConsensi": "null",
+       "visualizzaErogatoRicevuta": "null",
+       "descrizioneDiagnosi": "str",
+       "listaReportDisponibili": "null",
+       "notePrescrizione": "null",
+       "quesitoDiagnostico": "null",
+       "invioSMSAbilitato": "null",
+       "codiceCUP": "null",
+       "promemoriaRicettaDema": "null",
+       "modalitaTrascodifiche": "null",
+       "datiTamponiCovid": "null",
+       "richiedente": "null",
+       "codiceRichiedente": "null",
+       "descrizioneRichiedente": "null",
+       "cdcRichiedente": "null",
+       "codiceCDCRichiedente": "null",
+       "descrizioneCDCRichiedente": "null",
+       "datiPagoPA": "null",
+       "listaLink": "null",
+       "inviante": "null",
+       "terzoPagante": "null",
+       "tipoConvenzione": "str:int",
+       "codiceTipoConvenzione": "str",
+       "descrizioneTipoConvenzione": "str"
+      },
+      "len=1"
+     ]
+    },
+    "esito": [
+     {
+      "codice": "str",
+      "descrizione": "str",
+      "tipo": "str"
+     },
+     "len=1"
+    ]
+   },
+   "message": {
+    "description": "str",
+    "code": "str:int",
+    "level": "str"
+   }
+  },
+  "count": 1,
+  "source": "prenota.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/timeline.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/timeline-group.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/focus_paziente.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/tools.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/diario.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/sintesi.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/topten.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/privacy.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/summary.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/summary-vuoto.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/contatti.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/dashboard.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/eventi-sanitari.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/evento-sanitario.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/charts.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/libretto_vaccinale.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/deleghe.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/lista_deleghe.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/lista_delegati.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/dgc.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/edit_delega.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/piani-terapeutici.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "fse.sanita.toscana.it",
+  "path": "/templates/table_detail.html",
+  "query": {
+   "r": "<redacted>"
+  },
+  "req_headers": [],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/html",
+  "resp_headers": {
+   "content-type": "text/html; charset=UTF-8"
+  },
+  "resp_body": "html",
+  "count": 3,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/SDM-NOFLAT-RS/v1",
+  "query": {
+   "idDominio": "<redacted>",
+   "client-type": "<redacted>",
+   "ts": "<redacted>"
+  },
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {
+   "inputParameters": [
+    {
+     "parameterName": "str",
+     "parameterValue": "str"
+    },
+    "len=1"
+   ]
+  },
+  "status": 401,
+  "resp_mime": "application/problem+json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/problem+json"
+  },
+  "resp_body": {
+   "type": "str",
+   "title": "str",
+   "status": "num",
+   "detail": "str",
+   "cart_id": "str"
+  },
+  "count": 2,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/SDM-NOFLAT-RS/v1",
+  "query": {
+   "uuid": "<redacted>",
+   "idDominio": "<redacted>",
+   "client-type": "<redacted>",
+   "ts": "<redacted>"
+  },
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {
+   "inputParameters": [
+    {
+     "parameterName": "str",
+     "parameterValue": "str"
+    },
+    "len=1"
+   ]
+  },
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-headers": "Origin, X-Requested-With, Content-Type, Accept",
+   "access-control-allow-methods": "PUT, GET, POST, UPDATE, OPTIONS",
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "risposta": {
+    "infoServizio": {
+     "nome": "str",
+     "descrizione": "str",
+     "formatiDisponibiliRisposta": {
+      "formato": [
+       "str",
+       "len=2"
+      ]
+     }
+    },
+    "contenutoRisposta": {
+     "datoSingolo": [
+      {
+       "nomeCampo": "str",
+       "valoreCampo": "str:date",
+       "tipoCampo": "str",
+       "descrizioneCampo": "str",
+       "visibile": "str",
+       "regularExpressions": "null",
+       "dataInfo": "null"
+      },
+      "len=6"
+     ],
+     "datoComplesso": [
+      {
+       "nomeDatoComplesso": "str",
+       "valoreDatoComplesso": {
+        "datoSingolo": [
+         {
+          "nomeCampo": "str",
+          "valoreCampo": "str",
+          "tipoCampo": "str",
+          "descrizioneCampo": "str",
+          "visibile": "str",
+          "regularExpressions": "null",
+          "dataInfo": "null"
+         },
+         "len=2"
+        ]
+       }
+      },
+      "len=3"
+     ]
+    },
+    "errore": "null"
+   }
+  },
+  "count": 4,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "api.regione.toscana.it",
+  "path": "/sanita/{id}/ANAGFSE/v1/getInfoUtenteFromCf/{id}",
+  "query": {},
+  "req_headers": [
+   "accept=*/*",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "internalId": "str",
+   "idUniversale": "str",
+   "nome": "str",
+   "cognome": "str",
+   "sesso": "str:int",
+   "dataNascita": "str:date",
+   "dataMorte": "null",
+   "comuneNascita": "str",
+   "codComuneNascita": "str:int",
+   "statoNascita": "str:int",
+   "descStatoNascita": "str",
+   "indirizzoResidenza": "str",
+   "capResidenza": "str:int",
+   "cf": "str",
+   "livelloCertificazione": "num",
+   "comuneResidenza": "str",
+   "codComuneResidenza": "str:int",
+   "statoResidenza": "str:int",
+   "descStatoResidenza": "str",
+   "provincia": "str",
+   "codProvincia": "str:int",
+   "id": "null",
+   "tipo": "null",
+   "dataScadenza": "null"
+  },
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/Deleghe/v1/lista-deleganti",
+  "query": {},
+  "req_headers": [
+   "accept=*/*",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "text/plain",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it"
+  },
+  "resp_body": null,
+  "count": 2,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "GET",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/Sisorchestrator-RS/v1/services/rest/fse/consensi",
+  "query": {
+   "idDominio": "<redacted>",
+   "client-type": "<redacted>"
+  },
+  "req_headers": [
+   "accept=*/*",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": null,
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "informativa": {
+    "codice": "str",
+    "dataPresaVisione": "str:date"
+   },
+   "consensi": {
+    "data": "str:date",
+    "alimentazione": {
+     "accettato": "bool"
+    },
+    "recuperoDatiPregressi": {
+     "accettato": "bool",
+     "oscuramento": "bool"
+    },
+    "terzi": {
+     "accettato": "bool",
+     "emailNotifica": "str"
+    }
+   }
+  },
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-lab/v1/lab/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int"
+   },
+   "len=13"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/sanita/{id}/Farmaci/v1/farmaci/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int",
+    "itemExternalIdDettaglio": "str",
+    "regimeErogazione": "str",
+    "tipoQuery": "str"
+   },
+   "len=17"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-labtrasf/v1/labtrasf/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int"
+   },
+   "len=6"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/RSA/v1/rsa/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int"
+   },
+   "len=1"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-ps/v1/ps/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int",
+    "tipoQuery": "null"
+   },
+   "len=2"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-ris/v1/ris/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   "empty"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "apit.sanita.toscana.it",
+  "path": "/{id}/fse-ricette-visite/v1/listanew",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "content": [
+    {
+     "id": "str:int",
+     "dataAggiornamentoPrestazione": "str:date",
+     "actInternalIdAbstract": "str",
+     "actInternalIdDettaglio": "str",
+     "repCode": "str",
+     "aziendaErogante": "null",
+     "dataPrestazione": "str:date",
+     "statoConsultazione": "str:int",
+     "statoVisibilita": "str:int",
+     "idActConsent": "str:int",
+     "description": "str",
+     "stato": "str:int",
+     "dataCompilazioneRicetta": "null",
+     "nomeMedico": "null",
+     "cognomeMedico": "null",
+     "nre": "str"
+    },
+    "len=56"
+   ],
+   "page": "num",
+   "size": "num",
+   "totalElements": "num",
+   "totalPages": "num",
+   "first": "bool",
+   "last": "bool",
+   "empty": "bool"
+  },
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "apit.sanita.toscana.it",
+  "path": "/{id}/fse-ricette-farmaci/v1/listanew",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": {
+   "content": [
+    {
+     "id": "str:int",
+     "dataAggiornamentoPrestazione": "str:date",
+     "actInternalIdAbstract": "str",
+     "actInternalIdDettaglio": "str",
+     "repCode": "str",
+     "aziendaErogante": "null",
+     "dataPrestazione": "str:date",
+     "statoConsultazione": "str:int",
+     "statoVisibilita": "str:int",
+     "idActConsent": "str:int",
+     "description": "str",
+     "stato": "str:int",
+     "dataCompilazioneRicetta": "null",
+     "nomeMedico": "null",
+     "cognomeMedico": "null",
+     "nre": "str"
+    },
+    "len=15"
+   ],
+   "page": "num",
+   "size": "num",
+   "totalElements": "num",
+   "totalPages": "num",
+   "first": "bool",
+   "last": "bool",
+   "empty": "bool"
+  },
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-ldo/v1/ldo/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   "empty"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "api.regione.toscana.it",
+  "path": "/{id}/fse-vacc/v1/vacc/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   {
+    "id": "str:int",
+    "dataAggiornamentoPrestazione": "str:date",
+    "actInternalIdAbstract": "str",
+    "actInternalIdDettaglio": "str",
+    "repCode": "str",
+    "aziendaErogante": "str",
+    "dataPrestazione": "str:date",
+    "statoConsultazione": "str:int",
+    "statoVisibilita": "str:int",
+    "idActConsent": "str:int"
+   },
+   "len=3"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ },
+ {
+  "method": "POST",
+  "host": "apit.sanita.toscana.it",
+  "path": "/{id}/fse-rap/v1/lista",
+  "query": {},
+  "req_headers": [
+   "accept=application/json, text/javascript, */*; q=0.01",
+   "content-type=application/json; charset=UTF-8",
+   "origin=https://fse.sanita.toscana.it"
+  ],
+  "req_body": {},
+  "status": 200,
+  "resp_mime": "application/json",
+  "resp_headers": {
+   "access-control-allow-origin": "https://fse.sanita.toscana.it",
+   "content-type": "application/json"
+  },
+  "resp_body": [
+   "empty"
+  ],
+  "count": 1,
+  "source": "fse.sanita.toscana.it.har"
+ }
+]
