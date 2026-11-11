@@ -1,3 +1,5 @@
+import { Box, Group, Table, Text } from "@mantine/core";
+import type { CSSProperties } from "react";
 import { CalendarCheck, MapPin } from "lucide-react";
 import { useState, type JSX } from "react";
 
@@ -14,6 +16,10 @@ import { CalendarDialog } from "./CalendarDialog";
 import { mapUrl } from "./mapUrl";
 import { PromemoriaLink } from "./PromemoriaLink";
 import { relativeDay } from "./relativeDay";
+
+const nowrap: CSSProperties = { whiteSpace: "nowrap" };
+const focusedBg = "var(--mantine-primary-color-light)";
+const slotSize = 34;
 
 interface Props {
   row: RowBody;
@@ -69,7 +75,9 @@ export function VisitRow({
     appointmentCell = (
       <>
         {formatDate(at)} {formatTime(at)}
-        <small className="vs-sub">{relativeDay(at, now)}</small>
+        <Text size="xs" c="dimmed">
+          {relativeDay(at, now)}
+        </Text>
       </>
     );
   } else if (appointmentsLoading) {
@@ -79,34 +87,35 @@ export function VisitRow({
   }
 
   return (
-    <tr
+    <Table.Tr
       id={id}
       ref={ref}
       tabIndex={tabIndex}
-      className={focused ? "is-focused" : undefined}
+      data-focused={focused ? "true" : undefined}
+      {...(focused ? { bg: focusedBg } : {})}
     >
-      <td data-label="Prescritta" className="col-nowrap">
-        {formatDate(rowDate(row))}
-      </td>
-      <td data-label="Prestazione">{rowTitle(row)}</td>
-      <td data-label="Stato">
+      <Table.Td style={nowrap}>{formatDate(rowDate(row))}</Table.Td>
+      <Table.Td>{rowTitle(row)}</Table.Td>
+      <Table.Td>
         <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
         {expiryNote === null ? null : (
-          <small className="vs-sub">{expiryNote}</small>
+          <Text size="xs" c="dimmed">
+            {expiryNote}
+          </Text>
         )}
-      </td>
-      <td
-        data-label="Appuntamento"
-        className="col-nowrap"
-        aria-busy={appointmentsLoading}
-      >
+      </Table.Td>
+      <Table.Td style={nowrap} aria-busy={appointmentsLoading}>
         {appointmentCell}
-      </td>
-      <td data-label="Struttura">
+      </Table.Td>
+      <Table.Td>
         {unit === undefined ? null : (
           <>
             {unitName(unit)}
-            {place === "" ? null : <small className="vs-sub">{place}</small>}
+            {place === "" ? null : (
+              <Text size="xs" c="dimmed">
+                {place}
+              </Text>
+            )}
             <IconAction
               label="Apri su mappa"
               icon={MapPin}
@@ -115,16 +124,16 @@ export function VisitRow({
             />
           </>
         )}
-      </td>
-      <td data-label="NRE" className="col-nowrap">
+      </Table.Td>
+      <Table.Td style={nowrap}>
         <CopyButton value={row.nre} label="Copia NRE" />
-      </td>
-      <td data-label="Azioni">
-        <div className="col-actions">
-          <span className="action-slot">
+      </Table.Td>
+      <Table.Td>
+        <Group gap={2} wrap="nowrap">
+          <Box w={slotSize} h={slotSize}>
             <PromemoriaLink bookingId={bookingId} />
-          </span>
-          <span className="action-slot">
+          </Box>
+          <Box w={slotSize} h={slotSize}>
             {calendarBooking === undefined ? null : (
               <IconAction
                 label="Aggiungi a Google Calendar"
@@ -134,7 +143,7 @@ export function VisitRow({
                 }}
               />
             )}
-          </span>
+          </Box>
           {calendarBooking !== undefined && calendarOpen ? (
             <CalendarDialog
               appointment={calendarBooking}
@@ -144,16 +153,16 @@ export function VisitRow({
               }}
             />
           ) : null}
-          <span className="action-slot">
+          <Box w={slotSize} h={slotSize}>
             <PdfLink documentRef={row.fse?.documentRef} />
-          </span>
-          <span className="action-slot">
+          </Box>
+          <Box w={slotSize} h={slotSize}>
             {state.kind === "official" && state.status === 3 ? (
               <BookAction />
             ) : null}
-          </span>
-        </div>
-      </td>
-    </tr>
+          </Box>
+        </Group>
+      </Table.Td>
+    </Table.Tr>
   );
 }

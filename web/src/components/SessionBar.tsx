@@ -1,3 +1,4 @@
+import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import type { JSX } from "react";
 
 import type { PortalBody } from "../api/client";
@@ -14,6 +15,12 @@ const stateLabels: Record<PortalBody["state"], string> = {
   active: "attivo",
   expired: "scaduto",
   logged_out: "non connesso",
+};
+
+const stateColors: Record<PortalBody["state"], string> = {
+  active: "teal",
+  expired: "orange",
+  logged_out: "gray",
 };
 
 const failureLabels: Record<string, string> = {
@@ -47,47 +54,62 @@ export function SessionBar(): JSX.Element {
   };
 
   return (
-    <section className="session-bar" aria-label="Sessione">
-      <ul className="session-portals">
-        {portals.map((portal) => (
-          <li key={portal.portal} className={`portal portal-${portal.state}`}>
-            <span className="portal-name">{portalNames[portal.portal]}</span>
-            <span className="portal-state">{statusText(portal)}</span>
-            {portal.refreshExpiresAt !== undefined && (
-              <span className="portal-expiry">
-                scade {formatDateTime(portal.refreshExpiresAt)}
-              </span>
+    <Paper
+      component="section"
+      aria-label="Sessione"
+      withBorder
+      p="sm"
+      radius="md"
+    >
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="wrap">
+          <Group gap="md" wrap="wrap">
+            {portals.map((portal) => (
+              <Group key={portal.portal} gap="xs">
+                <Text fw={600}>{portalNames[portal.portal]}</Text>
+                <Badge color={stateColors[portal.state]} variant="light">
+                  {statusText(portal)}
+                </Badge>
+                {portal.refreshExpiresAt !== undefined && (
+                  <Text size="sm" c="dimmed">
+                    scade {formatDateTime(portal.refreshExpiresAt)}
+                  </Text>
+                )}
+              </Group>
+            ))}
+            {session !== undefined && (
+              <Group gap="xs">
+                <Text fw={600}>Date appuntamenti</Text>
+                <Badge
+                  color={session.gestioneReady ? "teal" : "gray"}
+                  variant="light"
+                >
+                  {session.gestioneReady ? "disponibile" : "non disponibile"}
+                </Badge>
+              </Group>
             )}
-          </li>
-        ))}
-        {session !== undefined && (
-          <li className="portal">
-            <span className="portal-name">Date appuntamenti</span>
-            <span className="portal-state">
-              {session.gestioneReady ? "disponibile" : "non disponibile"}
-            </span>
-          </li>
+          </Group>
+          <Group gap="xs">
+            <Button variant="filled" onClick={handleLogin} disabled={waiting}>
+              Accedi
+            </Button>
+            <Button variant="default" onClick={handleLogout}>
+              Esci
+            </Button>
+          </Group>
+        </Group>
+        {error !== undefined && (
+          <Text c="red" role="alert">
+            {error}
+          </Text>
         )}
-      </ul>
-      {error !== undefined && (
-        <p className="session-error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="session-actions">
-        <button type="button" onClick={handleLogin} disabled={waiting}>
-          Accedi
-        </button>
-        <button type="button" className="secondary" onClick={handleLogout}>
-          Esci
-        </button>
-      </div>
-      <GoogleConnect />
-      <p className="session-help">
-        Accedi apre una finestra: SPID, poi Gestione Prenotazioni (codice
-        fiscale, tessera, captcha). La sessione resta attiva anche dopo un
-        riavvio.
-      </p>
-    </section>
+        <GoogleConnect />
+        <Text size="sm" c="dimmed">
+          Accedi apre una finestra: SPID, poi Gestione Prenotazioni (codice
+          fiscale, tessera, captcha). La sessione resta attiva anche dopo un
+          riavvio.
+        </Text>
+      </Stack>
+    </Paper>
   );
 }

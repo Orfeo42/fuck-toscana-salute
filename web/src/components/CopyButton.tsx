@@ -1,16 +1,11 @@
+import { Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { Check, Copy, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type JSX } from "react";
-import { createPortal } from "react-dom";
 
 type CopyState = "idle" | "copied" | "failed";
 
 const resetMs = 2000;
-
-const messages: Readonly<Record<CopyState, string>> = {
-  idle: "",
-  copied: "Copiato",
-  failed: "Copia non riuscita",
-};
 
 const icons: Readonly<Record<CopyState, LucideIcon>> = {
   idle: Copy,
@@ -45,40 +40,42 @@ export function CopyButton({ value, label }: Props): JSX.Element {
     try {
       await navigator.clipboard.writeText(value);
       show("copied");
+      notifications.show({
+        message: "NRE copiato",
+        color: "teal",
+        autoClose: resetMs,
+        withCloseButton: false,
+      });
     } catch {
       show("failed");
+      notifications.show({
+        message: "Copia non riuscita",
+        color: "red",
+        autoClose: resetMs,
+        withCloseButton: false,
+      });
     }
   };
 
   const Icon = icons[state];
 
   return (
-    <span className="copy-button">
-      <button
-        type="button"
-        className="nre-copy"
+    <Tooltip label={label} withArrow openDelay={150}>
+      <UnstyledButton
         aria-label={`${label} ${value}`}
         onClick={() => {
           void copy();
         }}
+        display="inline-flex"
+        style={buttonStyle}
       >
-        <span className="nre-text">{value}</span>
+        <Text ff="monospace" span miw="15ch">
+          {value}
+        </Text>
         <Icon aria-hidden="true" size={14} />
-        <span className="icon-tip" aria-hidden="true">
-          {label}
-        </span>
-      </button>
-      <span role="status" className="sr-only">
-        {messages[state]}
-      </span>
-      {state === "idle"
-        ? null
-        : createPortal(
-            <div className={`toast toast-${state}`} aria-hidden="true">
-              {messages[state]}
-            </div>,
-            document.body,
-          )}
-    </span>
+      </UnstyledButton>
+    </Tooltip>
   );
 }
+
+const buttonStyle = { alignItems: "center", gap: 6 };

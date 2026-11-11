@@ -1,8 +1,9 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CopyButton } from "./CopyButton";
+import { render } from "../test/render";
 
 describe("CopyButton", () => {
   afterEach(() => {
@@ -18,9 +19,19 @@ describe("CopyButton", () => {
       name: "Copia NRE 0900A0000000001",
     });
     expect(button).toHaveTextContent("0900A0000000001");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
     expect(button.querySelector("svg")).toHaveClass("lucide-copy");
-    expect(document.body.querySelector(".toast")).toBeNull();
+    expect(screen.queryByText("NRE copiato")).not.toBeInTheDocument();
+  });
+
+  it("shows the label as a tooltip on hover", async () => {
+    const user = userEvent.setup();
+    render(<CopyButton value="0900A0000000001" label="Copia NRE" />);
+
+    await user.hover(
+      screen.getByRole("button", { name: "Copia NRE 0900A0000000001" }),
+    );
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Copia NRE");
   });
 
   it("copies the value and confirms", async () => {
@@ -36,10 +47,8 @@ describe("CopyButton", () => {
 
     const button = screen.getByRole("button", { name: /Copia NRE/ });
     expect(writeText).toHaveBeenCalledWith("0900A0000000001");
-    expect(screen.getByRole("status")).toHaveTextContent("Copiato");
+    expect(await screen.findByText("NRE copiato")).toBeInTheDocument();
     expect(button.querySelector("svg")).toHaveClass("lucide-check");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
-    expect(document.body.querySelector(".toast")).toHaveTextContent("Copiato");
   });
 
   it("reverts to the idle state after 2 seconds", async () => {
@@ -63,9 +72,6 @@ describe("CopyButton", () => {
     });
 
     expect(button.querySelector("svg")).toHaveClass("lucide-copy");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
-    expect(screen.getByRole("status")).toBeEmptyDOMElement();
-    expect(document.body.querySelector(".toast")).toBeNull();
   });
 
   it("reports a failed copy", async () => {
@@ -80,11 +86,7 @@ describe("CopyButton", () => {
     );
 
     const button = screen.getByRole("button", { name: /Copia NRE/ });
-    expect(screen.getByRole("status")).toHaveTextContent("Copia non riuscita");
+    expect(await screen.findByText("Copia non riuscita")).toBeInTheDocument();
     expect(button.querySelector("svg")).toHaveClass("lucide-x");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
-    expect(document.body.querySelector(".toast-failed")).toHaveTextContent(
-      "Copia non riuscita",
-    );
   });
 });

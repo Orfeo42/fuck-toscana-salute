@@ -1,3 +1,4 @@
+import { ActionIcon, Tooltip } from "@mantine/core";
 import type { LucideIcon } from "lucide-react";
 import type { JSX } from "react";
 
@@ -22,37 +23,36 @@ type Props = LinkProps | ButtonProps;
 
 export function IconAction(props: Props): JSX.Element {
   const { label, icon: Icon } = props;
-  const content = (
-    <>
-      <Icon aria-hidden="true" size={18} />
-      <span className="icon-tip" aria-hidden="true">
-        {label}
-      </span>
-    </>
-  );
+  const icon = <Icon aria-hidden="true" size={18} />;
 
   if (props.href === undefined) {
     return (
-      <button
-        type="button"
-        className="icon-action"
-        aria-label={label}
-        onClick={props.onClick}
-      >
-        {content}
-      </button>
+      <Tooltip label={label} withArrow openDelay={150}>
+        <ActionIcon
+          variant="subtle"
+          size="lg"
+          aria-label={label}
+          onClick={props.onClick}
+        >
+          {icon}
+        </ActionIcon>
+      </Tooltip>
     );
   }
 
   return (
-    <a
-      className="icon-action"
-      aria-label={label}
-      href={props.href}
-      target={props.external === true ? "_blank" : undefined}
-      rel={props.external === true ? "noopener noreferrer" : undefined}
-    >
-      {content}
-    </a>
+    <Tooltip label={label} withArrow openDelay={150}>
+      <ActionIcon
+        component="a"
+        variant="subtle"
+        size="lg"
+        aria-label={label}
+        href={props.href}
+        target={props.external === true ? "_blank" : undefined}
+        rel={props.external === true ? "noopener noreferrer" : undefined}
+      >
+        {icon}
+      </ActionIcon>
+    </Tooltip>
   );
 }

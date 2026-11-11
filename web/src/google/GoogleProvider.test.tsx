@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterEach,
@@ -17,6 +11,7 @@ import {
 } from "vitest";
 
 import type { GoogleStatusBody } from "../api/client";
+import { render } from "../test/render";
 import { GoogleConnect } from "./GoogleConnect";
 import { GoogleProvider } from "./GoogleProvider";
 

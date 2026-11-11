@@ -1,9 +1,10 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TabId } from "./route";
 import { focusId, useFocusTarget } from "./useFocusTarget";
+import { render } from "../test/render";
 
 interface Props {
   kind: TabId;

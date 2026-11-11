@@ -1,4 +1,14 @@
-import { useEffect, useRef, useState, type JSX } from "react";
+import {
+  Alert,
+  Anchor,
+  Button,
+  Checkbox,
+  Group,
+  Modal,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { useState, type JSX } from "react";
 
 import {
   api,
@@ -58,7 +68,6 @@ export function CalendarDialog({
   title,
   onClose,
 }: Props): JSX.Element {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const { status, connect } = useGoogle();
   const [attach, setAttach] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -66,10 +75,6 @@ export function CalendarDialog({
   const [result, setResult] = useState<CalendarEventBody | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    dialogRef.current?.showModal();
-  }, []);
 
   const { at, bookingId } = appointment;
   const fields = calendarEventFields(appointment, title);
@@ -113,77 +118,79 @@ export function CalendarDialog({
   };
 
   const connectButton = (
-    <button type="button" onClick={handleConnect}>
+    <Button variant="default" size="compact-sm" onClick={handleConnect}>
       Collega Google Calendar
-    </button>
+    </Button>
   );
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="calendar-dialog"
-      aria-labelledby="calendar-dialog-title"
-      onClose={onClose}
-    >
-      <h2 id="calendar-dialog-title">Aggiungi a Google Calendar</h2>
-      <p>
-        {formatDate(at)} {formatTime(at)}
-      </p>
-      <p>{fields.title}</p>
-      <p>{fields.location}</p>
-      {hasBooking ? (
-        <label>
-          <input
-            type="checkbox"
+    <Modal opened onClose={onClose} title="Aggiungi a Google Calendar" centered>
+      <Stack gap="sm">
+        <Stack gap={4}>
+          <Text>
+            {formatDate(at)} {formatTime(at)}
+          </Text>
+          <Text>{fields.title}</Text>
+          <Text>{fields.location}</Text>
+        </Stack>
+        {hasBooking ? (
+          <Checkbox
+            label="Allega promemoria (PDF)"
             checked={attach}
             onChange={(event) => {
-              setAttach(event.target.checked);
+              setAttach(event.currentTarget.checked);
             }}
-          />{" "}
-          Allega promemoria (PDF)
-        </label>
-      ) : null}
-      {status !== undefined && !configured ? <p>{notConfiguredHint}</p> : null}
-      {configured && !connected ? <p>{connectButton}</p> : null}
-      {failure === undefined ? null : (
-        <p role="alert">
-          {failure.message}
-          {failure.reconnect ? connectButton : null}
-        </p>
-      )}
-      {result === undefined ? null : (
-        <p>
-          {result.created
-            ? "Aggiunto al calendario"
-            : "Già presente nel calendario"}{" "}
-          <a href={result.htmlLink} target="_blank" rel="noopener noreferrer">
-            Apri in Google Calendar
-          </a>
-        </p>
-      )}
-      <div className="calendar-dialog-actions">
-        {result === undefined ? (
-          <>
-            <button
-              type="button"
-              disabled={!connected || busy}
-              aria-busy={busy}
-              onClick={() => {
-                void handleAdd();
-              }}
-            >
-              Aggiungi
-            </button>
-            <button type="button" className="secondary" onClick={onClose}>
-              Annulla
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={onClose}>
-            Chiudi
-          </button>
+          />
+        ) : null}
+        {status !== undefined && !configured ? (
+          <Text size="sm">{notConfiguredHint}</Text>
+        ) : null}
+        {configured && !connected ? <Group>{connectButton}</Group> : null}
+        {failure === undefined ? null : (
+          <Alert color="red" role="alert">
+            <Group gap="xs">
+              <Text size="sm">{failure.message}</Text>
+              {failure.reconnect ? connectButton : null}
+            </Group>
+          </Alert>
         )}
-      </div>
-    </dialog>
+        {result === undefined ? null : (
+          <Alert color="teal" role="status">
+            <Text size="sm">
+              {result.created
+                ? "Aggiunto al calendario"
+                : "Già presente nel calendario"}{" "}
+              <Anchor
+                href={result.htmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Apri in Google Calendar
+              </Anchor>
+            </Text>
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          {result === undefined ? (
+            <>
+              <Button variant="default" onClick={onClose}>
+                Annulla
+              </Button>
+              <Button
+                disabled={!connected}
+                loading={busy}
+                onClick={() => {
+                  void handleAdd();
+                }}
+              >
+                Aggiungi
+              </Button>
+            </>
+          ) : (
+            <Button onClick={onClose}>Chiudi</Button>
+          )}
+        </Group>
+      </Stack>
+    </Modal>
   );
 }

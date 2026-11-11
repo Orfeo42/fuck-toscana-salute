@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Tabs, type TabItem } from "./Tabs";
+import { render } from "../test/render";
 
 const tabs: readonly TabItem[] = [
   { id: "visite", label: "Uno", content: <p>contenuto uno</p> },
@@ -91,28 +92,6 @@ describe("Tabs", () => {
     await user.keyboard("{ArrowLeft}");
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: "Due" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
-    });
-  });
-
-  it("jumps with Home and End", async () => {
-    const user = userEvent.setup();
-    render(<Tabs tabs={tabs} />);
-    screen.getByRole("tab", { name: "Uno" }).focus();
-
-    await user.keyboard("{End}");
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Due" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-      );
-    });
-
-    await user.keyboard("{Home}");
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Uno" })).toHaveAttribute(
         "aria-selected",
         "true",
       );

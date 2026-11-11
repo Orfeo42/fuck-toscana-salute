@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { Table } from "@mantine/core";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SortState } from "../lib/useSort";
 import { SortHeader } from "./SortHeader";
+import { render } from "../test/render";
 
 type Key = "date" | "name";
 
@@ -21,13 +23,13 @@ function makeSort(key: Key, dir: "asc" | "desc"): SortState<Key> {
 
 function renderHeader(sort: SortState<Key>, sortKey: Key): void {
   render(
-    <table>
-      <thead>
-        <tr>
+    <Table>
+      <Table.Thead>
+        <Table.Tr>
           <SortHeader label="Data" sortKey={sortKey} sort={sort} />
-        </tr>
-      </thead>
-    </table>,
+        </Table.Tr>
+      </Table.Thead>
+    </Table>,
   );
 }
 
@@ -53,11 +55,28 @@ describe("SortHeader", () => {
     );
   });
 
+  it("shows a down chevron when descending", () => {
+    const { container } = render(
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <SortHeader
+              label="Data"
+              sortKey="date"
+              sort={makeSort("date", "desc")}
+            />
+          </Table.Tr>
+        </Table.Thead>
+      </Table>,
+    );
+    expect(container.querySelector("svg")).toHaveClass("lucide-chevron-down");
+  });
+
   it("shows the indicator only on the active column", () => {
     const { container } = render(
-      <table>
-        <thead>
-          <tr>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
             <SortHeader
               label="Data"
               sortKey="date"
@@ -68,12 +87,12 @@ describe("SortHeader", () => {
               sortKey="name"
               sort={makeSort("date", "asc")}
             />
-          </tr>
-        </thead>
-      </table>,
+          </Table.Tr>
+        </Table.Thead>
+      </Table>,
     );
-    const glyphs = container.querySelectorAll('[aria-hidden="true"]');
+    const glyphs = container.querySelectorAll('svg[aria-hidden="true"]');
     expect(glyphs).toHaveLength(1);
-    expect(glyphs[0]).toHaveTextContent("▲");
+    expect(glyphs[0]).toHaveClass("lucide-chevron-up");
   });
 });

@@ -1,8 +1,12 @@
+import { MantineProvider } from "@mantine/core";
+import "@mantine/core/styles.css";
+import { Notifications } from "@mantine/notifications";
+import "@mantine/notifications/styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import "./styles.css";
+import { theme } from "./theme";
 
 const root = document.getElementById("root");
 if (root === null) {
@@ -11,6 +15,9 @@ if (root === null) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <MantineProvider theme={theme} defaultColorScheme="auto">
+      <Notifications position="bottom-center" />
+      <App />
+    </MantineProvider>
   </StrictMode>,
 );

@@ -1,3 +1,16 @@
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Group,
+  Loader,
+  SegmentedControl,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
 import type { JSX } from "react";
 
@@ -16,7 +29,6 @@ import {
   type StatusFilter,
   type VisitSortKey,
 } from "./visits/filter";
-import "./visits/visits.css";
 
 const statusOptions: readonly { value: StatusFilter; label: string }[] = [
   { value: "upcoming", label: "Prossimi" },
@@ -85,92 +97,105 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     appointments.reload();
   };
 
+  const segmentData = statusOptions.map((option) => ({
+    value: option.value,
+    label: `${option.label} (${String(counts[option.value])})`,
+  }));
+
   const summary = `${String(visible.length)} visite/esami`;
   const ready = !prescriptions.loading && prescriptions.error === undefined;
 
   return (
     <section aria-labelledby="visits-title" aria-busy={prescriptions.loading}>
       <h2 id="visits-title">Visite ed esami</h2>
-      <div className="vs-controls">
-        <fieldset className="vs-segments">
-          <legend>Mostra</legend>
-          {statusOptions.map((option) => (
-            <label key={option.value} className="vs-segment">
-              <input
-                type="radio"
-                name="vs-status"
-                value={option.value}
-                checked={status === option.value}
-                onChange={() => {
-                  setStatus(option.value);
-                }}
-              />
-              {`${option.label} (${String(counts[option.value])})`}
-            </label>
-          ))}
-        </fieldset>
-        {expiredCount > 0 ? (
-          <label className="vs-check">
-            <input
-              type="checkbox"
-              checked={showExpired}
-              onChange={(event) => {
-                setShowExpired(event.target.checked);
-              }}
-            />
-            {`Mostra scadute (${String(expiredCount)})`}
-          </label>
-        ) : null}
-        <label className="vs-field">
-          Cerca
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
+      <Group align="flex-end" wrap="wrap" mb="md">
+        <Stack gap={4}>
+          <Text id="vs-status-label" size="sm">
+            Mostra
+          </Text>
+          <SegmentedControl
+            aria-labelledby="vs-status-label"
+            data={segmentData}
+            value={status}
+            onChange={(value) => {
+              const picked = statusOptions.find(
+                (option) => option.value === value,
+              );
+              if (picked !== undefined) {
+                setStatus(picked.value);
+              }
             }}
           />
-        </label>
-        <div className="vs-actions">
-          <p aria-live="polite">{summary}</p>
-          <button type="button" onClick={reload}>
-            Aggiorna
-          </button>
-        </div>
-      </div>
-      {prescriptions.loading ? <p>Carico visite ed esami…</p> : null}
+        </Stack>
+        {expiredCount > 0 ? (
+          <Checkbox
+            label={`Mostra scadute (${String(expiredCount)})`}
+            checked={showExpired}
+            onChange={(event) => {
+              setShowExpired(event.currentTarget.checked);
+            }}
+          />
+        ) : null}
+        <TextInput
+          label="Cerca"
+          type="search"
+          leftSection={<Search size={16} aria-hidden="true" />}
+          value={search}
+          onChange={(event) => {
+            setSearch(event.currentTarget.value);
+          }}
+        />
+        <Text aria-live="polite">{summary}</Text>
+        <Button
+          variant="light"
+          leftSection={<RefreshCw size={16} aria-hidden="true" />}
+          onClick={reload}
+        >
+          Aggiorna
+        </Button>
+      </Group>
+      {prescriptions.loading ? (
+        <Group gap="xs">
+          <Loader size="sm" />
+          <Text>Carico visite ed esami…</Text>
+        </Group>
+      ) : null}
       {!prescriptions.loading && prescriptions.error === "unauthorized" ? (
-        <p role="alert">Accedi per vedere visite ed esami.</p>
+        <Alert color="yellow" role="alert" mb="md">
+          Accedi per vedere visite ed esami.
+        </Alert>
       ) : null}
       {!prescriptions.loading &&
       prescriptions.error !== undefined &&
       prescriptions.error !== "unauthorized" ? (
-        <p role="alert">Il portale regionale non risponde. Riprova tra poco.</p>
+        <Alert color="red" role="alert" mb="md">
+          Il portale regionale non risponde. Riprova tra poco.
+        </Alert>
       ) : null}
       {ready && appointments.error === "unauthorized" ? (
-        <p role="alert" className="vs-notice">
+        <Alert color="yellow" role="alert" mb="md">
           Accedi per vedere gli appuntamenti.
-        </p>
+        </Alert>
       ) : null}
       {ready && appointments.error === "needs_gestione" ? (
-        <p role="alert" className="vs-notice">
+        <Alert color="yellow" role="alert" mb="md">
           Per vedere date e orari serve l&apos;accesso a Gestione Prenotazioni:
           premi Accedi.
-        </p>
+        </Alert>
       ) : null}
       {ready && appointments.error === "unavailable" ? (
-        <p role="alert" className="vs-notice">
+        <Alert color="red" role="alert" mb="md">
           Appuntamenti non disponibili: il portale regionale non risponde.
-        </p>
+        </Alert>
       ) : null}
       {ready && visible.length === 0 ? (
-        <p>Nessuna visita o esame in questa vista.</p>
+        <Text c="dimmed">Nessuna visita o esame in questa vista.</Text>
       ) : null}
       {ready && visible.length > 0 ? (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
+        <Table.ScrollContainer minWidth={1000}>
+          <Table striped highlightOnHover stickyHeader verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
                 <SortHeader
                   label="Prescritta"
                   sortKey="prescritta"
@@ -189,10 +214,10 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
                 />
                 <SortHeader label="Struttura" sortKey="struttura" sort={sort} />
                 <SortHeader label="NRE" sortKey="nre" sort={sort} />
-                <th scope="col">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
+                <Table.Th scope="col">Azioni</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
               {visible.map((row) => (
                 <VisitRow
                   key={row.nre}
@@ -209,9 +234,9 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
                   now={currentNow}
                 />
               ))}
-            </tbody>
-          </table>
-        </div>
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       ) : null}
     </section>
   );

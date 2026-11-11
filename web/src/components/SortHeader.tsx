@@ -1,3 +1,5 @@
+import { Group, Table, UnstyledButton } from "@mantine/core";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { JSX } from "react";
 
 import type { SortState } from "../lib/useSort";
@@ -14,19 +16,20 @@ export function SortHeader<K extends string>({
   sort,
 }: Props<K>): JSX.Element {
   const active = sort.key === sortKey;
+  const Chevron = sort.dir === "asc" ? ChevronUp : ChevronDown;
   return (
-    <th scope="col" aria-sort={sort.ariaSort(sortKey)}>
-      <button
-        type="button"
+    <Table.Th scope="col" aria-sort={sort.ariaSort(sortKey)}>
+      <UnstyledButton
+        w="100%"
         onClick={() => {
           sort.toggle(sortKey);
         }}
       >
-        {label}
-        {active ? (
-          <span aria-hidden="true">{sort.dir === "asc" ? "▲" : "▼"}</span>
-        ) : null}
-      </button>
-    </th>
+        <Group gap={4} wrap="nowrap">
+          {label}
+          {active ? <Chevron aria-hidden="true" size={14} /> : null}
+        </Group>
+      </UnstyledButton>
+    </Table.Th>
   );
 }

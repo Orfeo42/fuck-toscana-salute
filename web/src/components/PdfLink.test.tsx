@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PdfLink } from "./PdfLink";
+import { render } from "../test/render";
 
 describe("PdfLink", () => {
   it("builds the href with an encoded ref", () => {

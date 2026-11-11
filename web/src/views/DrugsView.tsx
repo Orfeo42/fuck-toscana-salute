@@ -1,3 +1,14 @@
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  SegmentedControl,
+  Table,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import { RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
 import type { JSX } from "react";
 
@@ -21,7 +32,6 @@ import {
   type DrugRowData,
   type DrugSortKey,
 } from "./drugs/filter";
-import "./drugs/drugs.css";
 
 const descFirst: readonly DrugSortKey[] = ["data"];
 
@@ -29,6 +39,9 @@ const filterOptions: readonly { value: DrugFilter; label: string }[] = [
   { value: "pickup", label: "Da ritirare" },
   { value: "all", label: "Tutte" },
 ];
+
+const nowrap = { whiteSpace: "nowrap" } as const;
+const focusedBg = "var(--mantine-primary-color-light)";
 
 interface RowProps {
   row: DrugRowData;
@@ -40,32 +53,29 @@ function DrugRow({ row }: RowProps): JSX.Element {
     row.nre,
   );
   return (
-    <tr
+    <Table.Tr
       id={id}
       ref={ref}
       tabIndex={tabIndex}
-      className={focused ? "is-focused" : undefined}
+      {...(focused ? { bg: focusedBg } : {})}
+      data-focused={focused ? "true" : undefined}
     >
-      <td data-label="Data" className="col-nowrap">
-        {formatDate(row.fse.date)}
-      </td>
-      <td data-label="Farmaco">{row.fse.description || "Farmaco"}</td>
-      <td data-label="Stato">
+      <Table.Td style={nowrap}>{formatDate(row.fse.date)}</Table.Td>
+      <Table.Td>{row.fse.description || "Farmaco"}</Table.Td>
+      <Table.Td>
         <StatusBadge tone={drugStatusTone(row.fse.status)}>
           {drugStatusLabel(row.fse.status)}
         </StatusBadge>
-      </td>
-      <td data-label="NRE" className="col-nowrap">
+      </Table.Td>
+      <Table.Td style={nowrap}>
         <CopyButton value={row.nre} label="Copia NRE" />
-      </td>
-      <td data-label="Azioni">
-        <div className="col-actions">
-          <span className="action-slot">
-            <PdfLink documentRef={row.fse.documentRef} />
-          </span>
-        </div>
-      </td>
-    </tr>
+      </Table.Td>
+      <Table.Td>
+        <Group gap={2} wrap="nowrap">
+          <PdfLink documentRef={row.fse.documentRef} />
+        </Group>
+      </Table.Td>
+    </Table.Tr>
   );
 }
 
@@ -98,79 +108,81 @@ export function DrugsView(): JSX.Element {
     }
   }
 
+  const segments = filterOptions.map((option) => ({
+    value: option.value,
+    label: `${option.label} (${String(counts[option.value])})`,
+  }));
+
   const ready = !loading && error === undefined;
 
   return (
-    <section
-      className="drugs-view"
-      aria-labelledby="drugs-title"
-      aria-busy={loading}
-    >
+    <section aria-labelledby="drugs-title" aria-busy={loading}>
       <h2 id="drugs-title">Farmaci</h2>
-      <div className="drugs-controls">
-        <fieldset className="drugs-segments">
-          <legend>Mostra</legend>
-          {filterOptions.map((option) => (
-            <label key={option.value} className="drugs-segment">
-              <input
-                type="radio"
-                name="drugs-filter"
-                value={option.value}
-                checked={filter === option.value}
-                onChange={() => {
-                  setFilter(option.value);
-                }}
-              />
-              {`${option.label} (${String(counts[option.value])})`}
-            </label>
-          ))}
-        </fieldset>
-        <label className="drugs-field">
-          Cerca
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-            }}
-          />
-        </label>
-        <div className="drugs-actions">
-          <p aria-live="polite">{`${String(visible.length)} farmaci`}</p>
-          <button type="button" onClick={reload}>
-            Aggiorna
-          </button>
-        </div>
-      </div>
-      {loading ? <p>Carico i farmaci…</p> : null}
+      <Group align="flex-end" wrap="wrap" mb="md">
+        <SegmentedControl
+          aria-label="Mostra"
+          data={segments}
+          value={filter}
+          onChange={(value) => {
+            setFilter(value === "all" ? "all" : "pickup");
+          }}
+        />
+        <TextInput
+          label="Cerca"
+          type="search"
+          leftSection={<Search size={16} />}
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+          }}
+        />
+        <Text aria-live="polite">{`${String(visible.length)} farmaci`}</Text>
+        <Button
+          variant="light"
+          leftSection={<RefreshCw size={16} />}
+          onClick={reload}
+        >
+          Aggiorna
+        </Button>
+      </Group>
+      {loading ? (
+        <Group gap="xs">
+          <Loader size="sm" />
+          <Text>Carico i farmaci…</Text>
+        </Group>
+      ) : null}
       {!loading && error === "unauthorized" ? (
-        <p role="alert">Accedi per vedere i farmaci.</p>
+        <Alert color="yellow" role="alert">
+          Accedi per vedere i farmaci.
+        </Alert>
       ) : null}
       {!loading && error !== undefined && error !== "unauthorized" ? (
-        <p role="alert">Il portale regionale non risponde. Riprova tra poco.</p>
+        <Alert color="red" role="alert">
+          Il portale regionale non risponde. Riprova tra poco.
+        </Alert>
       ) : null}
       {ready && visible.length === 0 ? (
-        <p>Nessun farmaco in questa vista.</p>
+        <Text c="dimmed">Nessun farmaco in questa vista.</Text>
       ) : null}
       {ready && visible.length > 0 ? (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
+        <Table.ScrollContainer minWidth={720}>
+          <Table striped highlightOnHover stickyHeader verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
                 <SortHeader label="Data" sortKey="data" sort={sort} />
                 <SortHeader label="Farmaco" sortKey="farmaco" sort={sort} />
                 <SortHeader label="Stato" sortKey="stato" sort={sort} />
                 <SortHeader label="NRE" sortKey="nre" sort={sort} />
-                <th scope="col">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
+                <Table.Th>Azioni</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
               {visible.map((row) => (
                 <DrugRow key={row.nre} row={row} />
               ))}
-            </tbody>
-          </table>
-        </div>
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       ) : null}
     </section>
   );

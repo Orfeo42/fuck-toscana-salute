@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Copy } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { IconAction } from "./IconAction";
+import { render } from "../test/render";
 
 describe("IconAction", () => {
   it("renders an external link with its accessible name", () => {
@@ -40,15 +41,19 @@ describe("IconAction", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("hides the icon and the tip from assistive tech", () => {
+  it("hides the icon from assistive tech", () => {
     render(<IconAction label="Copia" icon={Copy} onClick={vi.fn()} />);
 
     const button = screen.getByRole("button", { name: "Copia" });
     expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
-    expect(button.querySelector(".icon-tip")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia");
+  });
+
+  it("shows the label as a tooltip on hover", async () => {
+    const user = userEvent.setup();
+    render(<IconAction label="Copia" icon={Copy} onClick={vi.fn()} />);
+
+    await user.hover(screen.getByRole("button", { name: "Copia" }));
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Copia");
   });
 });

@@ -1,7 +1,14 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 
 import type { AppointmentBody, RowBody, SessionBody } from "../api/client";
 import { HealthDataProvider } from "../data/HealthDataProvider";
@@ -9,6 +16,7 @@ import { GoogleContext } from "../google/useGoogle";
 import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { VisitsView } from "./VisitsView";
+import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -146,12 +154,10 @@ function mockRows(
   });
 }
 
-function stubScroll(scroll: () => void): void {
-  Object.defineProperty(Element.prototype, "scrollIntoView", {
-    configurable: true,
-    writable: true,
-    value: scroll,
-  });
+function stubScroll(scroll: () => void): MockInstance {
+  return vi
+    .spyOn(HTMLElement.prototype, "scrollIntoView")
+    .mockImplementation(scroll);
 }
 
 function mockData(appointments: AppointmentBody[], notInCup: string[]): void {
@@ -215,7 +221,7 @@ function bodyRows(): HTMLElement[] {
 
 function titles(): string[] {
   return bodyRows().map((row) => {
-    const cell = row.querySelector('td[data-label="Prestazione"]');
+    const cell = row.querySelectorAll("td")[1];
     return cell?.textContent ?? "";
   });
 }
@@ -247,7 +253,7 @@ describe("VisitsView", () => {
     ).toHaveAttribute("aria-busy", "true");
   });
 
-  it("renders the columns with data-labels and excludes drugs", async () => {
+  it("renders the columns and excludes drugs", async () => {
     renderView();
 
     expect(await screen.findByText("Visita esempio")).toBeInTheDocument();
@@ -265,19 +271,6 @@ describe("VisitsView", () => {
       "Azioni",
     ]);
     const row = rowOf("Visita esempio");
-    expect(
-      Array.from(row.querySelectorAll("td")).map((td) =>
-        td.getAttribute("data-label"),
-      ),
-    ).toEqual([
-      "Prescritta",
-      "Prestazione",
-      "Stato",
-      "Appuntamento",
-      "Struttura",
-      "NRE",
-      "Azioni",
-    ]);
     expect(screen.queryByText("Farmaco esempio")).not.toBeInTheDocument();
     expect(within(row).getByText("Da prenotare")).toBeInTheDocument();
     expect(within(row).getByText("0900A0000000001")).toBeInTheDocument();
@@ -615,7 +608,7 @@ describe("VisitsView", () => {
 
   it("focuses the row of a deep-linked NRE", async () => {
     const scroll = vi.fn();
-    stubScroll(scroll);
+    const spy = stubScroll(scroll);
     window.location.hash = "#/visite/0900A0000000004";
     try {
       renderView();
@@ -623,16 +616,16 @@ describe("VisitsView", () => {
         await screen.findByText("Ecografia esempio, Prelievo esempio")
       ).closest("tr");
 
-      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveAttribute("data-focused", "true");
       expect(row).toHaveFocus();
       expect(scroll).toHaveBeenCalled();
     } finally {
-      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      spy.mockRestore();
     }
   });
 
   it("switches to Tutte when the focused row is hidden", async () => {
-    stubScroll(vi.fn());
+    const spy = stubScroll(vi.fn());
     window.location.hash = "#/visite/0900A0000000003";
     try {
       renderView();
@@ -640,10 +633,10 @@ describe("VisitsView", () => {
         "tr",
       );
 
-      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveAttribute("data-focused", "true");
       expect(screen.getByRole("radio", { name: /Tutte/ })).toBeChecked();
     } finally {
-      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      spy.mockRestore();
     }
   });
   it("shows an expired prescription as Scaduta without Prenota sul CUP", async () => {
@@ -716,7 +709,7 @@ describe("VisitsView", () => {
   });
 
   it("checks Mostra scadute for a deep link to an expired NRE", async () => {
-    stubScroll(vi.fn());
+    const spy = stubScroll(vi.fn());
     window.location.hash = "#/visite/0900A0000000065";
     mockRows(
       [fseVisit("0900A0000000065", "Visita scaduta", "2026-11-09T09:00:00Z")],
@@ -726,12 +719,12 @@ describe("VisitsView", () => {
       renderView();
       const row = (await screen.findByText("Visita scaduta")).closest("tr");
 
-      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveAttribute("data-focused", "true");
       expect(
         screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
       ).toBeChecked();
     } finally {
-      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      spy.mockRestore();
     }
   });
 

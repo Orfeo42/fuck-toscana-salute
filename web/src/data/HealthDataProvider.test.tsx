@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { HealthDataProvider } from "./HealthDataProvider";
 import { useHealthData } from "./useHealthData";
+import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),

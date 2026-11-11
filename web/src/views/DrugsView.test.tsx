@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { HealthDataProvider } from "../data/HealthDataProvider";
 import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { DrugsView } from "./DrugsView";
+import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -63,11 +64,7 @@ const visit: RowBody = {
 const rows = [pickupOld, pickupNew, done, visit];
 
 function stubScroll(scroll: () => void): void {
-  Object.defineProperty(Element.prototype, "scrollIntoView", {
-    configurable: true,
-    writable: true,
-    value: scroll,
-  });
+  vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(scroll);
 }
 
 const session: SessionBody = {
@@ -143,22 +140,16 @@ describe("DrugsView", () => {
     expect(bodyRows()).toHaveLength(3);
   });
 
-  it("renders the columns with data-labels", async () => {
+  it("renders the columns", async () => {
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
 
     const headers = screen
       .getAllByRole("columnheader")
       .map((h) => h.textContent);
-    expect(headers).toEqual(["Data▼", "Farmaco", "Stato", "NRE", "Azioni"]);
+    expect(headers).toEqual(["Data", "Farmaco", "Stato", "NRE", "Azioni"]);
     const cells = within(at(bodyRows(), 0)).getAllByRole("cell");
-    expect(cells.map((cell) => cell.getAttribute("data-label"))).toEqual([
-      "Data",
-      "Farmaco",
-      "Stato",
-      "NRE",
-      "Azioni",
-    ]);
+    expect(cells).toHaveLength(5);
     expect(within(at(cells, 2)).getByText("Da ritirare")).toBeVisible();
     expect(within(at(cells, 3)).getByText("0900A0000000002")).toBeVisible();
   });
@@ -321,11 +312,11 @@ describe("DrugsView", () => {
       render(<Harness />);
       const row = (await screen.findByText("Farmaco esempio")).closest("tr");
 
-      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveAttribute("data-focused", "true");
       expect(row).toHaveFocus();
       expect(scroll).toHaveBeenCalled();
     } finally {
-      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      vi.restoreAllMocks();
     }
   });
 
@@ -338,10 +329,10 @@ describe("DrugsView", () => {
         "tr",
       );
 
-      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveAttribute("data-focused", "true");
       expect(screen.getByRole("radio", { name: /Tutte/ })).toBeChecked();
     } finally {
-      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      vi.restoreAllMocks();
     }
   });
 });

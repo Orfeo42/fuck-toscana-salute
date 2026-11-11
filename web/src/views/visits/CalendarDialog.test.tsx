@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppointmentBody, GoogleStatusBody } from "../../api/client";
 import { GoogleContext } from "../../google/useGoogle";
 import { CalendarDialog } from "./CalendarDialog";
+import { render } from "../../test/render";
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -13,10 +14,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/client", () => ({
   api: { POST: mocks.post },
 }));
-
-const showModal = vi.fn(function showModal(this: HTMLDialogElement) {
-  this.setAttribute("open", "");
-});
 
 const hint =
   "Crea ~/.config/fuck-toscana-salute/google-client.json (vedi README)";
@@ -75,15 +72,11 @@ function failWith(status: number, detail: string): void {
 describe("CalendarDialog", () => {
   beforeEach(() => {
     mocks.post.mockReset();
-    showModal.mockClear();
-    HTMLDialogElement.prototype.showModal = showModal;
-    HTMLDialogElement.prototype.close = vi.fn();
   });
 
-  it("opens the modal and shows the summary", () => {
+  it("shows the modal and the the summary", () => {
     renderDialog();
 
-    expect(showModal).toHaveBeenCalledTimes(1);
     expect(
       screen.getByRole("dialog", { name: "Aggiungi a Google Calendar" }),
     ).toBeInTheDocument();
@@ -173,7 +166,7 @@ describe("CalendarDialog", () => {
 
     const add = screen.getByRole("button", { name: "Aggiungi" });
     expect(add).toBeDisabled();
-    expect(add).toHaveAttribute("aria-busy", "true");
+    expect(add).toHaveAttribute("data-loading", "true");
   });
 
   it("shows the created message with the link and closes", async () => {
