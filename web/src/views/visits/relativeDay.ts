@@ -17,11 +17,21 @@ function dayNumber(date: Date): number {
 
 export function relativeDay(iso: string, now: Date): string {
   const days = dayNumber(new Date(iso)) - dayNumber(now);
-  if (days <= 0) {
+  if (days === 0) {
     return "oggi";
   }
   if (days === 1) {
     return "domani";
   }
+  if (days === -1) {
+    return "ieri";
+  }
+  if (days < 0) {
+    return `${String(-days)} giorni fa`;
+  }
   return `tra ${String(days)} giorni`;
+}
+
+export function romeDay(date: Date): string {
+  return dayFormat.format(date);
 }
