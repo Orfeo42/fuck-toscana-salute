@@ -36,8 +36,8 @@ const (
 const (
 	cupLoginURL     = "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?client_id=r_toscan__portale_cup2_0&redirect_uri=https%3A%2F%2Fprenota.sanita.toscana.it&response_type=code&scope=default"
 	fseLoginURL     = "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?client_id=r_toscan__fse_web&redirect_uri=https%3A%2F%2Ffse.sanita.toscana.it%2F&response_type=code&scope=profile+sdm-rs%2Fcittadino+sisorchestrator-rs%2Fcittadino+vaccini-rs%2Fcittadino"
-	cupGestioneURL  = "https://prenota.sanita.toscana.it/gestione-prenotazioni"
-	gestioneLink    = `a[href="/gestione-prenotazioni"]`
+	cupGestioneURL  = "https://prenota.sanita.toscana.it/#/gestione-prenotazioni"
+	gestioneLink    = `a[href="#/gestione-prenotazioni"]`
 	textFieldSel    = `input[type="text"]:not([disabled])`
 	actionTimeoutMs = 5000
 	verificaTsPath  = "/sis-portale-prenotazione/verificaTs"
