@@ -3,8 +3,9 @@ import { useState, type JSX } from "react";
 import type { AppointmentBody } from "../api/client";
 import { useHealthData } from "../data/useHealthData";
 import type { HealthError } from "../data/healthContext";
-import { failureLabel } from "../lib/status";
+import { useRoute } from "../lib/route";
 import { AppointmentCard } from "./appointments/AppointmentCard";
+import { FailedRow } from "./appointments/FailedRow";
 import { PastRow } from "./appointments/PastRow";
 import "./appointments/appointments.css";
 
@@ -28,6 +29,7 @@ function time(appointment: AppointmentBody): number {
 export function AppointmentsView({ now }: Props = {}): JSX.Element {
   const [current] = useState(() => now ?? new Date());
   const { data, error, loading, reload } = useHealthData().appointments;
+  const route = useRoute();
 
   const all = data?.appointments ?? [];
   const failed = data?.failed ?? [];
@@ -37,6 +39,12 @@ export function AppointmentsView({ now }: Props = {}): JSX.Element {
   const past = all
     .filter((a) => !isUpcoming(a))
     .sort((a, b) => time(b) - time(a));
+
+  const focus = route.tab === "appuntamenti" ? route.focus : undefined;
+  const pastOpen =
+    focus !== undefined && past.some((a) => a.nre.toUpperCase() === focus);
+  const failedOpen =
+    focus !== undefined && failed.some((f) => f.nre.toUpperCase() === focus);
 
   return (
     <section aria-busy={loading} aria-labelledby="appointments-title">
@@ -67,7 +75,7 @@ export function AppointmentsView({ now }: Props = {}): JSX.Element {
             )}
           </div>
           <div className="appointments-section">
-            <details>
+            <details open={pastOpen || undefined}>
               <summary>Passati e disdetti ({past.length})</summary>
               <ul className="appointments-list">
                 {past.map((a) => (
@@ -78,19 +86,13 @@ export function AppointmentsView({ now }: Props = {}): JSX.Element {
           </div>
           {failed.length > 0 && (
             <div className="appointments-section">
-              <details>
+              <details open={failedOpen || undefined}>
                 <summary>
                   Prenotazioni non trovate nel CUP regionale ({failed.length})
                 </summary>
                 <ul className="appointments-list">
                   {failed.map((f) => (
-                    <li key={f.nre}>
-                      <strong>{f.nre}</strong>: {failureLabel(f.reason)}
-                      <p className="appointments-hint">
-                        Controlla l&apos;SMS o il promemoria ricevuto alla
-                        prenotazione.
-                      </p>
-                    </li>
+                    <FailedRow key={f.nre} failed={f} />
                   ))}
                 </ul>
               </details>

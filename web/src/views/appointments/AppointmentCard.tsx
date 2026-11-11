@@ -2,8 +2,12 @@ import type { JSX } from "react";
 
 import type { AppointmentBody } from "../../api/client";
 import { PdfLink } from "../../components/PdfLink";
+import { useHealthData } from "../../data/useHealthData";
 import { formatDate, formatTime } from "../../lib/format";
+import { prescriptionHref } from "../../lib/route";
+import { useFocusTarget } from "../../lib/useFocusTarget";
 import { appointmentStatusLabel } from "../../lib/status";
+import { googleCalendarUrl } from "./googleCalendar";
 import { mapUrl } from "./mapUrl";
 import { relativeDay } from "./relativeDay";
 
@@ -13,12 +17,24 @@ interface Props {
 }
 
 export function AppointmentCard({ appointment, now }: Props): JSX.Element {
-  const { at, unit, fse, status } = appointment;
+  const { at, unit, fse, status, nre } = appointment;
+  const { prescriptionNres } = useHealthData();
+  const { id, ref, tabIndex, focused } = useFocusTarget<HTMLLIElement>(
+    "appuntamento",
+    nre,
+  );
+  const calendarUrl =
+    status === "DISDETTO" ? undefined : googleCalendarUrl(appointment);
   const place = [unit.address, unit.city, unit.province]
     .filter((part) => part !== "")
     .join(", ");
   return (
-    <li className="card appointment-card">
+    <li
+      id={id}
+      ref={ref}
+      tabIndex={tabIndex}
+      className={`card appointment-card${focused ? " is-focused" : ""}`}
+    >
       <time className="appointment-when" dateTime={at}>
         <span className="appointment-date">{formatDate(at)}</span>
         <span className="appointment-time">{formatTime(at)}</span>
@@ -50,6 +66,14 @@ export function AppointmentCard({ appointment, now }: Props): JSX.Element {
             {appointmentStatusLabel(status)}
           </span>
           <PdfLink documentRef={fse?.documentRef} />
+          {calendarUrl !== undefined && (
+            <a href={calendarUrl} target="_blank" rel="noopener noreferrer">
+              Aggiungi a Google Calendar
+            </a>
+          )}
+          {prescriptionNres.has(nre.toUpperCase()) && (
+            <a href={prescriptionHref(nre)}>Vai alla ricetta</a>
+          )}
         </p>
       </div>
     </li>

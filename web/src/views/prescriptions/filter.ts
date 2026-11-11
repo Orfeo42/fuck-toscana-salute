@@ -1,5 +1,8 @@
-import type { RowBody } from "../../api/client";
+import type { AppointmentBody, RowBody } from "../../api/client";
 import { isClosedPrescription } from "../../lib/status";
+
+const toBookStatus = 3;
+const cancelledBooking = "DISDETTO";
 
 export type StatusFilter = "bookable" | "open" | "all";
 export type KindFilter = "all" | "visit" | "drug";
@@ -12,6 +15,45 @@ export interface Criteria {
 
 export type StatusCounts = Record<StatusFilter, number>;
 
+export interface BookedState {
+  kind: "booked";
+  at: string | undefined;
+  status: string;
+}
+
+export interface BookedElsewhereState {
+  kind: "booked_elsewhere";
+}
+
+export interface OfficialState {
+  kind: "official";
+  status: number;
+}
+
+export type EffectiveState = BookedState | BookedElsewhereState | OfficialState;
+
+export interface BookingContext {
+  bookingByNre: ReadonlyMap<string, AppointmentBody>;
+  notInCup: ReadonlySet<string>;
+  now: Date;
+}
+
+export function effectiveState(
+  row: RowBody,
+  bookingByNre: ReadonlyMap<string, AppointmentBody>,
+  notInCup: ReadonlySet<string>,
+): EffectiveState {
+  const key = row.nre.toUpperCase();
+  const booking = bookingByNre.get(key);
+  if (booking !== undefined && booking.status !== cancelledBooking) {
+    return { kind: "booked", at: booking.at, status: booking.status };
+  }
+  if (notInCup.has(key)) {
+    return { kind: "booked_elsewhere" };
+  }
+  return { kind: "official", status: row.fse?.status ?? toBookStatus };
+}
+
 function isBookable(row: RowBody): boolean {
   return row.cup !== undefined;
 }
@@ -23,11 +65,23 @@ function isOpen(row: RowBody): boolean {
   return !isClosedPrescription(row.fse.status);
 }
 
-function matchesStatus(row: RowBody, status: StatusFilter): boolean {
+function matchesStatus(
+  row: RowBody,
+  status: StatusFilter,
+  context: BookingContext,
+): boolean {
+  const state = effectiveState(row, context.bookingByNre, context.notInCup);
   if (status === "bookable") {
-    return isBookable(row);
+    return isBookable(row) && state.kind === "official";
   }
   if (status === "open") {
+    if (
+      state.kind === "booked" &&
+      state.at !== undefined &&
+      new Date(state.at).getTime() > context.now.getTime()
+    ) {
+      return true;
+    }
     return isOpen(row);
   }
   return true;
@@ -74,10 +128,11 @@ export function rowTitle(row: RowBody): string {
 export function filterRows(
   rows: readonly RowBody[],
   criteria: Criteria,
+  context: BookingContext,
 ): RowBody[] {
   return rows.filter(
     (row) =>
-      matchesStatus(row, criteria.status) &&
+      matchesStatus(row, criteria.status, context) &&
       matchesKind(row, criteria.kind) &&
       matchesSearch(row, criteria.search),
   );
@@ -87,13 +142,15 @@ export function countByStatus(
   rows: readonly RowBody[],
   kind: KindFilter,
   search: string,
+  context: BookingContext,
 ): StatusCounts {
   const base = rows.filter(
     (row) => matchesKind(row, kind) && matchesSearch(row, search),
   );
   return {
-    bookable: base.filter((row) => matchesStatus(row, "bookable")).length,
-    open: base.filter((row) => matchesStatus(row, "open")).length,
+    bookable: base.filter((row) => matchesStatus(row, "bookable", context))
+      .length,
+    open: base.filter((row) => matchesStatus(row, "open", context)).length,
     all: base.length,
   };
 }

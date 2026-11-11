@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { RowBody } from "../../api/client";
+import type { AppointmentBody, RowBody } from "../../api/client";
 import {
   countByStatus,
+  effectiveState,
   filterRows,
   rowDate,
   rowTitle,
   sortRows,
+  type BookingContext,
   type Criteria,
 } from "./filter";
 
@@ -56,59 +58,93 @@ const rows = [booked, closedDrug, cupOnly, nullItems];
 
 const base: Criteria = { status: "all", kind: "all", search: "" };
 
+const now = new Date("2026-11-10T09:00:00Z");
+
+const noBookings: BookingContext = {
+  bookingByNre: new Map(),
+  notInCup: new Set(),
+  now,
+};
+
+function booking(
+  nre: string,
+  status: string,
+  at: string | undefined,
+): AppointmentBody {
+  return {
+    id: `a-${nre}`,
+    nre,
+    status,
+    ...(at === undefined ? {} : { at }),
+    unit: {
+      name: "Unita esempio",
+      description: "",
+      address: "",
+      city: "",
+      province: "",
+    },
+  };
+}
+
 describe("filterRows", () => {
   it("bookable keeps rows with cup", () => {
-    const got = filterRows(rows, { ...base, status: "bookable" });
+    const got = filterRows(rows, { ...base, status: "bookable" }, noBookings);
     expect(got).toEqual([cupOnly, nullItems]);
   });
 
   it("open keeps non closed fse and cup only rows", () => {
-    const got = filterRows(rows, { ...base, status: "open" });
+    const got = filterRows(rows, { ...base, status: "open" }, noBookings);
     expect(got).toEqual([booked, cupOnly, nullItems]);
   });
 
   it("all keeps everything", () => {
-    expect(filterRows(rows, base)).toEqual(rows);
+    expect(filterRows(rows, base, noBookings)).toEqual(rows);
   });
 
   it("searches the description case-insensitively", () => {
-    const got = filterRows(rows, { ...base, search: "FARMACO" });
+    const got = filterRows(rows, { ...base, search: "FARMACO" }, noBookings);
     expect(got).toEqual([closedDrug]);
   });
 
   it("searches the cup items", () => {
-    const got = filterRows(rows, { ...base, search: "ecografia" });
+    const got = filterRows(rows, { ...base, search: "ecografia" }, noBookings);
     expect(got).toEqual([cupOnly]);
   });
 
   it("searches the NRE", () => {
-    const got = filterRows(rows, { ...base, search: "0900a0000000001" });
+    const got = filterRows(
+      rows,
+      { ...base, search: "0900a0000000001" },
+      noBookings,
+    );
     expect(got).toEqual([booked]);
   });
 
   it("ignores a blank search", () => {
-    expect(filterRows(rows, { ...base, search: "   " })).toEqual(rows);
+    expect(filterRows(rows, { ...base, search: "   " }, noBookings)).toEqual(
+      rows,
+    );
   });
 
   it("kind visit keeps visits and cup rows", () => {
-    const got = filterRows(rows, { ...base, kind: "visit" });
+    const got = filterRows(rows, { ...base, kind: "visit" }, noBookings);
     expect(got).toEqual([booked, cupOnly, nullItems]);
   });
 
   it("kind drug keeps drugs only", () => {
-    const got = filterRows(rows, { ...base, kind: "drug" });
+    const got = filterRows(rows, { ...base, kind: "drug" }, noBookings);
     expect(got).toEqual([closedDrug]);
   });
 
   it("handles null cup items", () => {
-    const got = filterRows([nullItems], { ...base, search: "x" });
+    const got = filterRows([nullItems], { ...base, search: "x" }, noBookings);
     expect(got).toEqual([]);
   });
 });
 
 describe("countByStatus", () => {
   it("counts each status filter", () => {
-    expect(countByStatus(rows, "all", "")).toEqual({
+    expect(countByStatus(rows, "all", "", noBookings)).toEqual({
       bookable: 2,
       open: 3,
       all: 4,
@@ -116,7 +152,7 @@ describe("countByStatus", () => {
   });
 
   it("applies kind and search before counting", () => {
-    expect(countByStatus(rows, "visit", "esempio")).toEqual({
+    expect(countByStatus(rows, "visit", "esempio", noBookings)).toEqual({
       bookable: 1,
       open: 2,
       all: 2,
@@ -179,5 +215,112 @@ describe("rowTitle", () => {
 
   it("falls back to a generic title for null items", () => {
     expect(rowTitle(nullItems)).toBe("Prescrizione");
+  });
+});
+
+describe("effectiveState", () => {
+  it("is booked when a live booking exists, beating the fse status", () => {
+    const bookings = new Map([
+      [
+        "0900A0000000001",
+        booking("0900A0000000001", "PRENOTATO", "2026-12-01T09:00:00Z"),
+      ],
+    ]);
+    expect(effectiveState(booked, bookings, new Set())).toEqual({
+      kind: "booked",
+      at: "2026-12-01T09:00:00Z",
+      status: "PRENOTATO",
+    });
+  });
+
+  it("upper-cases the row NRE for the lookup", () => {
+    const row: RowBody = { ...cupOnly, nre: "0900a0000000003" };
+    const bookings = new Map([
+      ["0900A0000000003", booking("0900A0000000003", "PRENOTATO", undefined)],
+    ]);
+    expect(effectiveState(row, bookings, new Set())).toEqual({
+      kind: "booked",
+      at: undefined,
+      status: "PRENOTATO",
+    });
+  });
+
+  it("falls back to official when the booking is DISDETTO", () => {
+    const bookings = new Map([
+      [
+        "0900A0000000001",
+        booking("0900A0000000001", "DISDETTO", "2026-12-01T09:00:00Z"),
+      ],
+    ]);
+    expect(effectiveState(booked, bookings, new Set())).toEqual({
+      kind: "official",
+      status: 30,
+    });
+  });
+
+  it("is booked elsewhere when the NRE is not in the CUP", () => {
+    expect(
+      effectiveState(cupOnly, new Map(), new Set(["0900A0000000003"])),
+    ).toEqual({ kind: "booked_elsewhere" });
+  });
+
+  it("is official with the fse status", () => {
+    expect(effectiveState(closedDrug, new Map(), new Set())).toEqual({
+      kind: "official",
+      status: 8,
+    });
+  });
+
+  it("is official with the to-book status for a cup only row", () => {
+    expect(effectiveState(cupOnly, new Map(), new Set())).toEqual({
+      kind: "official",
+      status: 3,
+    });
+  });
+});
+
+describe("filterRows with bookings", () => {
+  const context: BookingContext = {
+    bookingByNre: new Map([
+      [
+        "0900A0000000003",
+        booking("0900A0000000003", "PRENOTATO", "2026-12-01T09:00:00Z"),
+      ],
+      [
+        "0900A0000000001",
+        booking("0900A0000000001", "PRENOTATO", "2026-11-01T09:00:00Z"),
+      ],
+    ]),
+    notInCup: new Set(["0900A0000000004"]),
+    now,
+  };
+
+  it("bookable excludes booked and booked elsewhere rows", () => {
+    const got = filterRows(rows, { ...base, status: "bookable" }, context);
+    expect(got).toEqual([]);
+  });
+
+  it("open counts a future booked row even when its fse status is closed", () => {
+    const closedBooked: RowBody = { ...closedDrug, nre: "0900A0000000003" };
+    const got = filterRows(
+      [closedBooked],
+      { ...base, status: "open" },
+      context,
+    );
+    expect(got).toEqual([closedBooked]);
+  });
+
+  it("open falls back to the fse status for a past booked row", () => {
+    const pastClosed: RowBody = { ...closedDrug, nre: "0900A0000000001" };
+    const got = filterRows([pastClosed], { ...base, status: "open" }, context);
+    expect(got).toEqual([]);
+  });
+
+  it("countByStatus applies the booking context", () => {
+    expect(countByStatus(rows, "all", "", context)).toEqual({
+      bookable: 0,
+      open: 3,
+      all: 4,
+    });
   });
 });

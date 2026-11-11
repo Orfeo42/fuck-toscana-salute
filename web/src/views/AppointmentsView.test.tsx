@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppointmentBody, SessionBody } from "../api/client";
 import { callsTo } from "../test/calls";
@@ -65,9 +65,31 @@ function renderView(): void {
   );
 }
 
+function mockApi(
+  appointments: AppointmentBody[],
+  failed: { nre: string; reason: string }[],
+  prescriptionNres: string[],
+): void {
+  mocks.get.mockImplementation((path: string) =>
+    Promise.resolve(
+      path === "/api/prescriptions"
+        ? {
+            data: {
+              prescriptions: prescriptionNres.map((nre) => ({ nre })),
+            },
+          }
+        : { data: { appointments, failed } },
+    ),
+  );
+}
+
 describe("AppointmentsView", () => {
   beforeEach(() => {
     mocks.get.mockReset();
+  });
+
+  afterEach(() => {
+    window.location.hash = "";
   });
 
   it("shows the busy state while loading", () => {
@@ -287,5 +309,133 @@ describe("AppointmentsView", () => {
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("shows the Google Calendar link on upcoming booked cards only", async () => {
+    mockApi(
+      [
+        appointment("up"),
+        appointment("cancelled", {
+          status: "DISDETTO",
+          nre: "0900A0000000003",
+        }),
+      ],
+      [],
+      [],
+    );
+    renderView();
+
+    const links = await screen.findAllByRole("link", {
+      name: "Aggiungi a Google Calendar",
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute(
+      "href",
+      expect.stringContaining("https://calendar.google.com/calendar/render?"),
+    );
+    expect(links[0]).toHaveAttribute("target", "_blank");
+    expect(links[0]).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("links to the prescription only when its NRE is in the prescriptions", async () => {
+    mockApi(
+      [appointment("a"), appointment("b", { nre: "0900A0000000004" })],
+      [
+        { nre: "0900A0000000002", reason: "not_in_cup" },
+        { nre: "0900A0000000005", reason: "not_in_cup" },
+      ],
+      ["0900a0000000001", "0900A0000000002"],
+    );
+    renderView();
+
+    await screen.findByText("Prenotazioni non trovate nel CUP regionale (2)");
+    const links = screen.getAllByRole("link", { name: "Vai alla ricetta" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "#/ricette/0900A0000000001",
+      "#/ricette/0900A0000000002",
+    ]);
+  });
+
+  it("highlights and focuses the card targeted by the hash", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      value: scrollIntoView,
+      configurable: true,
+      writable: true,
+    });
+    window.location.hash = "#/appuntamenti/0900A0000000001";
+    mockApi([appointment("a")], [], []);
+    try {
+      renderView();
+
+      await screen.findByRole("heading", { name: "Prossimi appuntamenti (1)" });
+      const card = document.getElementById("appuntamento-0900A0000000001");
+      expect(card).toHaveClass("is-focused");
+      expect(card).toHaveFocus();
+      expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+
+  it("opens the past section and focuses a past row from the hash", async () => {
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      value: vi.fn(),
+      configurable: true,
+      writable: true,
+    });
+    window.location.hash = "#/appuntamenti/0900A0000000006";
+    mockApi(
+      [
+        appointment("old", {
+          nre: "0900A0000000006",
+          at: "2026-10-01T09:30:00Z",
+        }),
+      ],
+      [],
+      [],
+    );
+    try {
+      renderView();
+
+      await screen.findByText("Passati e disdetti (1)");
+      const row = document.getElementById("appuntamento-0900A0000000006");
+      expect(row?.closest("details")).toHaveAttribute("open");
+      expect(row).toHaveClass("is-focused");
+      expect(row).toHaveFocus();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+
+  it("opens the failed section and focuses a failed item from the hash", async () => {
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      value: vi.fn(),
+      configurable: true,
+      writable: true,
+    });
+    window.location.hash = "#/appuntamenti/0900A0000000002";
+    mockApi([], [{ nre: "0900A0000000002", reason: "not_in_cup" }], []);
+    try {
+      renderView();
+
+      await screen.findByText("Prenotazioni non trovate nel CUP regionale (1)");
+      const item = document.getElementById("appuntamento-0900A0000000002");
+      expect(item?.closest("details")).toHaveAttribute("open");
+      expect(item).toHaveClass("is-focused");
+      expect(item).toHaveFocus();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+
+  it("keeps sections closed without a matching focus", async () => {
+    mockApi([appointment("old", { at: "2026-10-01T09:30:00Z" })], [], []);
+    renderView();
+
+    await screen.findByText("Passati e disdetti (1)");
+    expect(
+      screen.getByText("Passati e disdetti (1)").closest("details"),
+    ).not.toHaveAttribute("open");
   });
 });

@@ -84,6 +84,16 @@
   border-left-width: 5px;
 }
 
+.rx-card.is-focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.rx-card:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .rx-title {
   margin: 0;
   font-size: 1.05rem;

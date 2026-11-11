@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RowBody, SessionBody } from "../api/client";
+import type { AppointmentBody, RowBody, SessionBody } from "../api/client";
 import { callsTo } from "../test/calls";
 import { HealthDataProvider } from "../data/HealthDataProvider";
 import { SessionContext } from "../session/useSession";
@@ -77,6 +77,44 @@ const cupOnly: RowBody = {
 
 const rows = [bookedVisit, drug, closed, cupOnly];
 
+function appointment(nre: string, at: string): AppointmentBody {
+  return {
+    id: `a-${nre}`,
+    nre,
+    status: "PRENOTATO",
+    at,
+    unit: {
+      name: "Unita esempio",
+      description: "",
+      address: "",
+      city: "",
+      province: "",
+    },
+  };
+}
+
+function stubScroll(scroll: () => void): void {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value: scroll,
+  });
+}
+
+function mockData(appointments: AppointmentBody[], notInCup: string[]): void {
+  mocks.get.mockImplementation((path: string) => {
+    if (path === "/api/appointments") {
+      return Promise.resolve({
+        data: {
+          appointments,
+          failed: notInCup.map((nre) => ({ nre, reason: "not_in_cup" })),
+        },
+      });
+    }
+    return Promise.resolve({ data: { prescriptions: rows } });
+  });
+}
+
 function sessionWith(cupState: string): SessionBody {
   return {
     gestioneReady: true,
@@ -130,7 +168,8 @@ function titles(): string[] {
 describe("PrescriptionsView", () => {
   beforeEach(() => {
     mocks.get.mockReset();
-    mocks.get.mockResolvedValue({ data: { prescriptions: rows } });
+    window.location.hash = "";
+    mockData([], []);
   });
 
   it("shows the loading state", () => {
@@ -387,6 +426,86 @@ describe("PrescriptionsView", () => {
 
     expect(await screen.findByText("Prescrizione")).toBeInTheDocument();
     expect(screen.getByText("0900A0000000005")).toBeInTheDocument();
+  });
+
+  it("shows the booked badge with date and a link to the appointment", async () => {
+    mockData([appointment("0900A0000000002", "2026-12-01T09:30:00Z")], []);
+    renderView();
+    await screen.findByText("Farmaco esempio");
+
+    const card = await waitFor(() => {
+      const found = screen
+        .getAllByRole("listitem")
+        .find((item) => within(item).queryByText(/^Prenotata · /) !== null);
+      if (found === undefined) {
+        throw new Error("no booked card");
+      }
+      return found;
+    });
+    expect(within(card).getByText(/^Prenotata · .*10:30/)).toBeVisible();
+    expect(
+      within(card).getByRole("link", { name: "Vai all'appuntamento" }),
+    ).toHaveAttribute("href", "#/appuntamenti/0900A0000000002");
+    expect(within(card).queryByText("Presa in carico")).not.toBeInTheDocument();
+  });
+
+  it("hides Prenota sul CUP on a booked row", async () => {
+    mockData([appointment("0900A0000000004", "2026-12-01T09:30:00Z")], []);
+    renderView();
+
+    expect(
+      await screen.findByRole("link", { name: "Vai all'appuntamento" }),
+    ).toBeVisible();
+    const card = cardAt(0);
+    expect(
+      within(card).queryByRole("link", { name: "Prenota sul CUP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the booked elsewhere badge and hides Prenota sul CUP", async () => {
+    mockData([], ["0900A0000000004"]);
+    renderView();
+
+    const badge = await screen.findByText("Prenotata fuori dal CUP regionale");
+    const card = badge.closest("li");
+    expect(card).not.toBeNull();
+    expect(
+      within(card as HTMLElement).queryByRole("link", {
+        name: "Prenota sul CUP",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("focuses the card of a deep-linked NRE", async () => {
+    const scroll = vi.fn();
+    stubScroll(scroll);
+    window.location.hash = "#/ricette/0900A0000000002";
+    try {
+      renderView();
+      const card = (await screen.findByText("Farmaco esempio")).closest("li");
+
+      expect(card).toHaveClass("is-focused");
+      expect(card).toHaveFocus();
+      expect(scroll).toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+
+  it("shows a deep-linked row hidden by the default filter", async () => {
+    stubScroll(vi.fn());
+    window.location.hash = "#/ricette/0900A0000000003";
+    try {
+      renderView();
+      const card = (await screen.findByText("Esame chiuso esempio")).closest(
+        "li",
+      );
+
+      expect(card).toHaveClass("is-focused");
+      expect(screen.getByRole("radio", { name: /Tutte/ })).toBeChecked();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
 
   it("shows the empty state for a filter with no rows", async () => {

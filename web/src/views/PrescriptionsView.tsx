@@ -2,9 +2,11 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import { useHealthData } from "../data/useHealthData";
+import { useRoute } from "../lib/route";
 import { PrescriptionCard } from "./prescriptions/PrescriptionCard";
 import {
   countByStatus,
+  effectiveState,
   filterRows,
   sortRows,
   type KindFilter,
@@ -28,15 +30,40 @@ function isKindFilter(value: string): value is KindFilter {
   return kindOptions.some((option) => option.value === value);
 }
 
-export function PrescriptionsView(): JSX.Element {
-  const { data: body, error, loading, reload } = useHealthData().prescriptions;
+interface Props {
+  now?: Date;
+}
+
+export function PrescriptionsView({ now }: Props = {}): JSX.Element {
+  const health = useHealthData();
+  const { data: body, error, loading, reload } = health.prescriptions;
+  const { bookingByNre, notInCup } = health;
+  const route = useRoute();
+  const focus = route.tab === "ricette" ? route.focus : undefined;
+  const [mountedAt] = useState(() => new Date());
+  const [handledFocus, setHandledFocus] = useState<string | undefined>(
+    undefined,
+  );
   const data = body?.prescriptions ?? [];
   const [status, setStatus] = useState<StatusFilter>("open");
   const [kind, setKind] = useState<KindFilter>("all");
   const [search, setSearch] = useState("");
 
-  const counts = countByStatus(data, kind, search);
-  const visible = sortRows(filterRows(data, { status, kind, search }));
+  const context = { bookingByNre, notInCup, now: now ?? mountedAt };
+  const counts = countByStatus(data, kind, search, context);
+  const visible = sortRows(filterRows(data, { status, kind, search }, context));
+
+  if (body !== undefined && focus !== handledFocus) {
+    setHandledFocus(focus);
+    const exists = data.some((row) => row.nre.toUpperCase() === focus);
+    const shown = visible.some((row) => row.nre.toUpperCase() === focus);
+    if (exists && !shown) {
+      setStatus("all");
+      setKind("all");
+      setSearch("");
+    }
+  }
+
   const summary = `${String(visible.length)} ${visible.length === 1 ? "ricetta" : "ricette"}`;
 
   return (
@@ -111,7 +138,11 @@ export function PrescriptionsView(): JSX.Element {
       {!loading && error === undefined && visible.length > 0 ? (
         <ul className="rx-list">
           {visible.map((row) => (
-            <PrescriptionCard key={row.nre} row={row} />
+            <PrescriptionCard
+              key={row.nre}
+              row={row}
+              state={effectiveState(row, bookingByNre, notInCup)}
+            />
           ))}
         </ul>
       ) : null}
