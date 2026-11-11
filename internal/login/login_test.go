@@ -2,6 +2,7 @@ package login
 
 import (
 	"encoding/base64"
+	"net/url"
 	"testing"
 	"time"
 
@@ -65,5 +66,31 @@ func TestTesseraFromURL(t *testing.T) {
 	t.Run("unparsable url", func(t *testing.T) {
 		_, err := tesseraFromURL("http://[::1")
 		require.ErrorIs(t, err, ErrNoTessera)
+	})
+}
+
+func TestLoginURLs(t *testing.T) {
+	t.Run("CUP", func(t *testing.T) {
+		u, err := url.Parse(cupLoginURL)
+		require.NoError(t, err)
+		q := u.Query()
+		assert.Equal(t, "auth.regione.toscana.it", u.Host)
+		assert.Equal(t, "/auth/realms/rt/protocol/openid-connect/auth", u.Path)
+		assert.Equal(t, "code", q.Get("response_type"))
+		assert.Equal(t, "r_toscan__portale_cup2_0", q.Get("client_id"))
+		assert.Equal(t, "https://prenota.sanita.toscana.it", q.Get("redirect_uri"))
+		assert.Equal(t, "default", q.Get("scope"))
+	})
+
+	t.Run("FSE", func(t *testing.T) {
+		u, err := url.Parse(fseLoginURL)
+		require.NoError(t, err)
+		q := u.Query()
+		assert.Equal(t, "auth.regione.toscana.it", u.Host)
+		assert.Equal(t, "/auth/realms/rt/protocol/openid-connect/auth", u.Path)
+		assert.Equal(t, "code", q.Get("response_type"))
+		assert.Equal(t, "r_toscan__fse_web", q.Get("client_id"))
+		assert.Equal(t, "https://fse.sanita.toscana.it/", q.Get("redirect_uri"))
+		assert.Equal(t, "profile sdm-rs/cittadino sisorchestrator-rs/cittadino vaccini-rs/cittadino", q.Get("scope"))
 	})
 }

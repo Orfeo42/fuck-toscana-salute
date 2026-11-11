@@ -34,12 +34,16 @@ const (
 )
 
 const (
-	cupURL          = "https://prenota.sanita.toscana.it/"
-	fseURL          = "https://fse.sanita.toscana.it/"
+	cupLoginURL     = "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?client_id=r_toscan__portale_cup2_0&redirect_uri=https%3A%2F%2Fprenota.sanita.toscana.it&response_type=code&scope=default"
+	fseLoginURL     = "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?client_id=r_toscan__fse_web&redirect_uri=https%3A%2F%2Ffse.sanita.toscana.it%2F&response_type=code&scope=profile+sdm-rs%2Fcittadino+sisorchestrator-rs%2Fcittadino+vaccini-rs%2Fcittadino"
+	cupGestioneURL  = "https://prenota.sanita.toscana.it/gestione-prenotazioni"
+	gestioneLink    = `a[href="/gestione-prenotazioni"]`
+	textFieldSel    = `input[type="text"]:not([disabled])`
+	actionTimeoutMs = 5000
 	verificaTsPath  = "/sis-portale-prenotazione/verificaTs"
 	pollInterval    = time.Second
 	storageScript   = `() => ({access: sessionStorage.getItem("access_token") || "", refresh: sessionStorage.getItem("refresh_token") || "", cf: sessionStorage.getItem("fcode") || sessionStorage.getItem("fseCf") || ""})`
-	bannerScript    = `() => { const d = document.createElement("div"); d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#fff;color:#000;border:4px solid red;padding:12px;font:16px sans-serif;text-align:center"; d.textContent = "fuck-toscana-salute: accesso OK. Ora apri \"Gestione Prenotazioni\", inserisci codice fiscale e tessera sanitaria, risolvi il captcha e premi Login. La finestra si chiudera' da sola."; document.body.appendChild(d); }`
+	bannerScript    = `() => { const d = document.createElement("div"); d.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#fff;color:#000;border:4px solid red;padding:12px;font:16px sans-serif;text-align:center"; d.textContent = "fuck-toscana-salute: inserisci codice fiscale e tessera sanitaria, risolvi il captcha e premi Login. La finestra si chiudera' da sola."; document.body.appendChild(d); }`
 	tesseraQueryKey = "numbersTeam"
 )
 
@@ -117,13 +121,25 @@ func readSnapshot(page playwright.Page) (storageSnapshot, error) {
 	return storageSnapshot{Access: access, Refresh: refresh, CF: cf}, nil
 }
 
+func (l *Launcher) openGestione(ctx context.Context, page playwright.Page) {
+	clickErr := page.Locator(gestioneLink).First().Click(playwright.LocatorClickOptions{Timeout: playwright.Float(actionTimeoutMs)})
+	if clickErr != nil {
+		if _, gotoErr := page.Goto(cupGestioneURL); gotoErr != nil {
+			slog.WarnContext(ctx, "login gestione navigation failed", slog.String("error", gotoErr.Error()))
+		}
+	}
+	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{State: playwright.LoadStateDomcontentloaded}); err != nil {
+		slog.WarnContext(ctx, "login gestione load wait failed", slog.String("error", err.Error()))
+	}
+}
+
 func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result, err error) {
 	var target string
 	switch portal {
 	case session.PortalCUP:
-		target = cupURL
+		target = cupLoginURL
 	case session.PortalFSE:
-		target = fseURL
+		target = fseLoginURL
 	default:
 		return Result{}, ErrUnknownPortal
 	}
@@ -219,8 +235,14 @@ func (l *Launcher) Login(ctx context.Context, portal session.Portal) (res Result
 		return resultFromStorage(portal, snapshot)
 	}
 
+	l.openGestione(ctx, page)
+
 	if _, bannerErr := page.Evaluate(bannerScript); bannerErr != nil {
 		slog.WarnContext(ctx, "login banner injection failed", slog.String("error", bannerErr.Error()))
+	}
+
+	if focusErr := page.Locator(textFieldSel).First().Focus(playwright.LocatorFocusOptions{Timeout: playwright.Float(actionTimeoutMs)}); focusErr != nil {
+		slog.WarnContext(ctx, "login field focus failed", slog.String("error", focusErr.Error()))
 	}
 
 	var tessera string
