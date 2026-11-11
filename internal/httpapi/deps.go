@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"fuck-toscana-salute/internal/agenda"
+	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
 )
@@ -29,4 +30,12 @@ type Agenda interface {
 type Documents interface {
 	PrescriptionPDF(ctx context.Context, documentRef string) ([]byte, error)
 	Promemoria(ctx context.Context, bookingID string) ([]byte, error)
+}
+
+//go:generate moq -out google_mock.go . Google:MockGoogle
+type Google interface {
+	Status(ctx context.Context) (google.Status, error)
+	AuthURL() (string, error)
+	Disconnect(ctx context.Context) error
+	AddEvent(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error)
 }

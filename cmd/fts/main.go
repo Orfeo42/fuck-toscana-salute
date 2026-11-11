@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"fuck-toscana-salute/internal/config"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
+	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/httpapi"
 	"fuck-toscana-salute/internal/keycloak"
 	"fuck-toscana-salute/internal/login"
@@ -31,6 +33,7 @@ const (
 	superviseTick     = time.Minute
 	keyringService    = "fuck-toscana-salute"
 	keyringUser       = "session"
+	keyringGoogleUser = "google"
 )
 
 type documents struct {
@@ -82,11 +85,19 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	fseClient := fse.New(up, store)
 	cupClient := cup.New(up, store)
 	ag := agenda.New(cupClient, fseClient, lookupConcurrency)
+	googleCfg, err := google.ConfigFromFile(cfg.GoogleClientFile, "http://"+ln.Addr().String()+google.CallbackPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		slog.WarnContext(ctx, "google not configured: client file missing")
+	} else if err != nil {
+		return fmt.Errorf("google config: %w", err)
+	}
+	googleClient := google.New(googleCfg, vault.NewTokenVault(keyringService, keyringGoogleUser), httpClient)
 	mux := http.NewServeMux()
-	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient})
+	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient)
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}
+	mux.Handle(google.CallbackPath, googleClient.CallbackHandler())
 	mux.Handle("/", webui.Handler())
 	srv := &http.Server{
 		Addr:              cfg.Addr,

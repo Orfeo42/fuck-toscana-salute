@@ -12,9 +12,12 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/googleapi"
 
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
+	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 )
@@ -87,6 +90,34 @@ func TestToHTTPError(t *testing.T) {
 
 		_ = toHTTPError(ctx, "op", &upstream.StatusError{Status: 500})
 		assert.Contains(t, buf.String(), "shape=empty")
+	})
+
+	t.Run("google not configured is 409", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", google.ErrNotConfigured))
+		assert.Equal(t, http.StatusConflict, statusOf(t, err))
+		assert.Contains(t, err.Error(), "google_not_configured")
+	})
+
+	t.Run("google not connected is 401", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrNotConnected)
+		assert.Equal(t, http.StatusUnauthorized, statusOf(t, err))
+		assert.Contains(t, err.Error(), "google_not_connected")
+	})
+
+	t.Run("google api error is 502 logged as warning", func(t *testing.T) {
+		var buf bytes.Buffer
+		previous := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		defer slog.SetDefault(previous)
+
+		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", &googleapi.Error{Code: 503}))
+		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
+		assert.Contains(t, buf.String(), "level=WARN")
+	})
+
+	t.Run("oauth2 retrieve error is 502", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusBadRequest}, ErrorCode: "boom"})
+		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
 	})
 
 	t.Run("anything else is 500", func(t *testing.T) {

@@ -12,7 +12,9 @@ import (
 func TestLoad(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		dataHome := t.TempDir()
+		configHome := t.TempDir()
 		t.Setenv("XDG_DATA_HOME", dataHome)
+		t.Setenv("XDG_CONFIG_HOME", configHome)
 		got, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, Config{
@@ -22,6 +24,8 @@ func TestLoad(t *testing.T) {
 			RefreshMargin:  60 * time.Second,
 			RefreshTick:    15 * time.Second,
 			ProfileDir:     filepath.Join(dataHome, "fuck-toscana-salute", "chrome-profile"),
+
+			GoogleClientFile: filepath.Join(configHome, "fuck-toscana-salute", "google-client.json"),
 		}, got)
 	})
 
@@ -49,6 +53,21 @@ func TestLoad(t *testing.T) {
 		got, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, dir, got.ProfileDir)
+	})
+
+	t.Run("google client file from env", func(t *testing.T) {
+		t.Setenv("FTS_GOOGLE_CLIENT_FILE", "/tmp/client.json")
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/client.json", got.GoogleClientFile)
+	})
+
+	t.Run("google client file default under user config dir", func(t *testing.T) {
+		configHome := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", configHome)
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(configHome, "fuck-toscana-salute", "google-client.json"), got.GoogleClientFile)
 	})
 
 	t.Run("relative profile dir rejected", func(t *testing.T) {

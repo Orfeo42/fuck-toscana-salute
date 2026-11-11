@@ -27,6 +27,8 @@ type Config struct {
 	RefreshMargin  time.Duration `env:"FTS_REFRESH_MARGIN" envDefault:"60s"`
 	RefreshTick    time.Duration `env:"FTS_REFRESH_TICK" envDefault:"15s"`
 	ProfileDir     string        `env:"FTS_PROFILE_DIR"`
+
+	GoogleClientFile string `env:"FTS_GOOGLE_CLIENT_FILE"`
 }
 
 func Load() (Config, error) {
@@ -60,6 +62,14 @@ func Load() (Config, error) {
 	}
 	if !filepath.IsAbs(cfg.ProfileDir) {
 		return Config{}, ErrInvalidProfileDir
+	}
+
+	if cfg.GoogleClientFile == "" {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return Config{}, fmt.Errorf("user config dir: %w", err)
+		}
+		cfg.GoogleClientFile = filepath.Join(configDir, "fuck-toscana-salute", "google-client.json")
 	}
 
 	return cfg, nil

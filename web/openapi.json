@@ -59,6 +59,81 @@
         "required": ["appointments", "failed"],
         "type": "object"
       },
+      "CalendarEventBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/CalendarEventBody.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "htmlLink": {
+            "type": "string"
+          }
+        },
+        "required": ["htmlLink", "created"],
+        "type": "object"
+      },
+      "CalendarEventRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/CalendarEventRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "appointmentId": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "attachPromemoria": {
+            "default": true,
+            "type": "boolean"
+          },
+          "bookingId": {
+            "maxLength": 32,
+            "pattern": "^[A-Za-z0-9]+$",
+            "type": "string"
+          },
+          "details": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "durationMinutes": {
+            "default": 60,
+            "format": "int64",
+            "maximum": 480,
+            "minimum": 5,
+            "type": "integer"
+          },
+          "location": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": ["appointmentId", "title", "start"],
+        "type": "object"
+      },
       "ErrorDetail": {
         "additionalProperties": false,
         "properties": {
@@ -136,6 +211,43 @@
           }
         },
         "required": ["nre", "reason"],
+        "type": "object"
+      },
+      "GoogleConnectBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/GoogleConnectBody.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "authUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["authUrl"],
+        "type": "object"
+      },
+      "GoogleStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/GoogleStatusBody.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          }
+        },
+        "required": ["configured", "connected"],
         "type": "object"
       },
       "LoginBody": {
@@ -362,6 +474,43 @@
         }
       }
     },
+    "/api/calendar/events": {
+      "post": {
+        "operationId": "create-calendar-event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarEventBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
     "/api/documents/booking": {
       "get": {
         "operationId": "get-booking-pdf",
@@ -455,6 +604,78 @@
                 }
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/google": {
+      "delete": {
+        "operationId": "google-disconnect",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      },
+      "get": {
+        "operationId": "get-google-status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleStatusBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/google/connect": {
+      "post": {
+        "operationId": "start-google-connect",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleConnectBody"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "content": {

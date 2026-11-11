@@ -46,14 +46,16 @@ type bookingPDFInput struct {
 	ID string `query:"id" required:"true" minLength:"1" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
 }
 
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents) http.Handler {
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow, ag, docs)
+	register(api, store, flow, ag, docs, g)
 	return mux
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents) {
+func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google) {
+	registerGoogle(api, g, docs)
+
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-session",
 		Method:        http.MethodGet,
