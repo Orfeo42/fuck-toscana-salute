@@ -18,10 +18,20 @@ describe("AppNav", () => {
     expect(
       screen.getByRole("link", { name: "Visite ed esami" }),
     ).toHaveAttribute("href", "#/visite");
+    expect(screen.getByRole("link", { name: "Referti" })).toHaveAttribute(
+      "href",
+      "#/referti",
+    );
     expect(screen.getByRole("link", { name: "Farmaci" })).toHaveAttribute(
       "href",
       "#/farmaci",
     );
+  });
+
+  it("lists Referti between Visite ed esami and Farmaci", () => {
+    render(<AppNav onNavigate={vi.fn()} />);
+    const names = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(names).toEqual(["Visite ed esami", "Referti", "Farmaci"]);
   });
 
   it("marks the first section active by default", () => {

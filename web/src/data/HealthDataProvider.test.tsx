@@ -12,7 +12,10 @@ import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  refreshPortals: vi.fn(),
 }));
+
+vi.mock("./refresh", () => ({ refreshPortals: mocks.refreshPortals }));
 
 vi.mock("../api/client", () => ({
   api: { GET: mocks.get },
@@ -30,6 +33,8 @@ const appointmentsBody = {
   ],
   failed: [],
   unbooked: ["0900A0000000009"],
+  verdicts: [],
+  updated: { lists: null, appointments: {}, verdicts: {} },
 };
 
 const prescriptionsBody = { prescriptions: [{ nre: "0900A0000000002" }] };
@@ -69,6 +74,15 @@ function Probe(): JSX.Element {
       <p data-testid="indexes">
         {`${[...health.bookingByNre.keys()].join(",")}|${[...health.unbooked].join(",")}|${[...health.prescriptionNres].join(",")}`}
       </p>
+      <p data-testid="refreshing">{String(health.refreshing)}</p>
+      <button
+        type="button"
+        onClick={() => {
+          void health.refresh({ nres: ["0900A0000000001"] });
+        }}
+      >
+        refresh-one
+      </button>
       <button
         type="button"
         onClick={() => {
@@ -254,6 +268,63 @@ describe("HealthDataProvider", () => {
       expect(callsTo(mocks.get, "/api/appointments")).toBe(3);
     });
     expect(callsTo(mocks.get, "/api/prescriptions")).toBe(3);
+  });
+
+  it("refreshes then reloads both resources keeping data visible", async () => {
+    const user = userEvent.setup();
+    mocks.refreshPortals.mockResolvedValue(true);
+    render(<Harness session={sessionWith("active")} />);
+    await waitFor(() => {
+      expect(screen.getByTestId("prescriptions")).toHaveTextContent(
+        "false|-|1",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "refresh-one" }));
+
+    expect(mocks.refreshPortals).toHaveBeenCalledWith({
+      nres: ["0900A0000000001"],
+    });
+    await waitFor(() => {
+      expect(callsTo(mocks.get, "/api/appointments")).toBe(2);
+    });
+    expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
+    expect(screen.getByTestId("appointments")).toHaveTextContent("false|-|1");
+    await waitFor(() => {
+      expect(screen.getByTestId("refreshing")).toHaveTextContent("false");
+    });
+  });
+
+  it("notifies and does not reload when the refresh fails", async () => {
+    const user = userEvent.setup();
+    mocks.refreshPortals.mockResolvedValue(false);
+    render(<Harness session={sessionWith("active")} />);
+    await waitFor(() => {
+      expect(screen.getByTestId("prescriptions")).toHaveTextContent(
+        "false|-|1",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "refresh-one" }));
+
+    expect(await screen.findByText("Aggiornamento non riuscito")).toBeVisible();
+    expect(callsTo(mocks.get, "/api/appointments")).toBe(1);
+    expect(screen.getByTestId("refreshing")).toHaveTextContent("false");
+  });
+
+  it("notifies when the refresh request throws", async () => {
+    const user = userEvent.setup();
+    mocks.refreshPortals.mockRejectedValue(new Error("network"));
+    render(<Harness session={sessionWith("active")} />);
+    await waitFor(() => {
+      expect(screen.getByTestId("prescriptions")).toHaveTextContent(
+        "false|-|1",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "refresh-one" }));
+
+    expect(await screen.findByText("Aggiornamento non riuscito")).toBeVisible();
   });
 
   it("throws outside the provider", () => {

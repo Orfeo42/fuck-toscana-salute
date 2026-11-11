@@ -16,7 +16,7 @@ import { CopyButton } from "../components/CopyButton";
 import { StopClick } from "../components/StopClick";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
-import { formatDate } from "../lib/format";
+import { formatDate, formatUpdated } from "../lib/format";
 import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
@@ -53,7 +53,16 @@ interface Props {
 
 export function VisitsView({ now }: Props = {}): JSX.Element {
   const health = useHealthData();
-  const { prescriptions, appointments, bookingByNre, unbooked } = health;
+  const {
+    prescriptions,
+    appointments,
+    bookingByNre,
+    unbooked,
+    verdictByNre,
+    appointmentCheckedAtByNre,
+    refresh,
+    refreshing,
+  } = health;
   const [mountedAt] = useState(() => new Date());
   const [handledFocus, setHandledFocus] = useState<string | undefined>(
     undefined,
@@ -63,10 +72,11 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   );
   const [search, setSearch] = useState("");
   const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
+  const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
   const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
 
   const currentNow = now ?? mountedAt;
-  const context = { bookingByNre, unbooked, now: currentNow };
+  const context = { bookingByNre, unbooked, verdictByNre, now: currentNow };
   const dataReady = prescriptions.data !== undefined && !appointments.loading;
   const focus = useFocusTarget("visite", dataReady);
   const data = buildRows(
@@ -92,11 +102,6 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       setSearch("");
     }
   }
-
-  const reload = (): void => {
-    prescriptions.reload();
-    appointments.reload();
-  };
 
   const columns: DataTableColumn<RowBody>[] = [
     {
@@ -142,7 +147,13 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       render: (row) => (
         <StatusCell
           row={row}
-          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          state={effectiveState(
+            row,
+            bookingByNre,
+            unbooked,
+            currentNow,
+            verdictByNre,
+          )}
         />
       ),
     },
@@ -155,7 +166,13 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       customCellAttributes: () => ({ "aria-busy": appointments.loading }),
       render: (row) => (
         <AppointmentCell
-          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          state={effectiveState(
+            row,
+            bookingByNre,
+            unbooked,
+            currentNow,
+            verdictByNre,
+          )}
           loading={appointments.loading}
           failed={appointments.error !== undefined}
           onOpen={() => {
@@ -172,7 +189,13 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       textAlign: "center",
       render: (row) => (
         <PlaceCell
-          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+          state={effectiveState(
+            row,
+            bookingByNre,
+            unbooked,
+            currentNow,
+            verdictByNre,
+          )}
           booking={bookingByNre.get(row.nre.toUpperCase())}
         />
       ),
@@ -195,7 +218,13 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
         <StopClick>
           <ActionsCell
             row={row}
-            state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+            state={effectiveState(
+              row,
+              bookingByNre,
+              unbooked,
+              currentNow,
+              verdictByNre,
+            )}
             booking={bookingByNre.get(row.nre.toUpperCase())}
             now={currentNow}
           />
@@ -209,6 +238,11 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       ? undefined
       : data.find((row) => row.nre === detailNre);
 
+  const selected = visible.filter((row) => selectedNres.includes(row.nre));
+  const updatedText = formatUpdated(
+    appointments.data?.updated.lists,
+    currentNow,
+  );
   const summary = `${String(visible.length)} visite/esami`;
   const ready = !prescriptions.loading && prescriptions.error === undefined;
 
@@ -228,13 +262,41 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           }}
         />
         <Text aria-live="polite">{summary}</Text>
+        {updatedText === undefined ? null : (
+          <Text size="sm" c="dimmed">
+            {updatedText}
+          </Text>
+        )}
         <Button
           variant="light"
+          loading={refreshing}
           leftSection={<RefreshCw size={16} aria-hidden="true" />}
-          onClick={reload}
+          onClick={() => {
+            void refresh({ all: true });
+          }}
         >
-          Aggiorna
+          Aggiorna tutto
         </Button>
+        {selected.length === 0 ? null : (
+          <Button
+            variant="light"
+            loading={refreshing}
+            leftSection={<RefreshCw size={16} aria-hidden="true" />}
+            onClick={() => {
+              const nres = [
+                ...new Set(
+                  selected
+                    .map((row) => row.nre.toUpperCase())
+                    .filter((nre) => nre !== ""),
+                ),
+              ];
+              setSelectedNres([]);
+              void refresh({ nres });
+            }}
+          >
+            {`Aggiorna selezionate (${String(selected.length)})`}
+          </Button>
+        )}
       </Group>
       {prescriptions.loading ? (
         <Group gap="xs">
@@ -279,6 +341,10 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}
+          selectedRecords={selected}
+          onSelectedRecordsChange={(records) => {
+            setSelectedNres(records.map((row) => row.nre));
+          }}
           columns={columns}
           noRecordsText="Nessuna visita o esame in questa vista."
           sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
@@ -317,9 +383,22 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       {detailRow === undefined ? null : (
         <VisitDetailModal
           row={detailRow}
-          state={effectiveState(detailRow, bookingByNre, unbooked, currentNow)}
+          state={effectiveState(
+            detailRow,
+            bookingByNre,
+            unbooked,
+            currentNow,
+            verdictByNre,
+          )}
           booking={bookingByNre.get(detailRow.nre.toUpperCase())}
           now={currentNow}
+          appointmentCheckedAt={appointmentCheckedAtByNre.get(
+            detailRow.nre.toUpperCase(),
+          )}
+          refreshing={refreshing}
+          onRefresh={() => {
+            void refresh({ nres: [detailRow.nre.toUpperCase()] });
+          }}
           onClose={() => {
             setDetailNre(undefined);
           }}

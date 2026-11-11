@@ -1,13 +1,17 @@
 import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { MapPinned, Navigation } from "lucide-react";
+import { MapPinned, Navigation, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
 import { DetailField, DetailSection } from "../../components/DetailSection";
 import { StatusBadge } from "../../components/StatusBadge";
-import { formatDate, formatLongDateTime } from "../../lib/format";
+import {
+  formatDate,
+  formatLongDateTime,
+  formatShortDateTime,
+} from "../../lib/format";
 import { rowDate, rowTitle, unitName, type EffectiveState } from "./filter";
 import { fullAddress, mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
 import { relativeDay } from "./relativeDay";
@@ -19,6 +23,9 @@ interface Props {
   state: EffectiveState;
   booking: AppointmentBody | undefined;
   now: Date;
+  appointmentCheckedAt: string | undefined;
+  refreshing: boolean;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
@@ -27,6 +34,9 @@ export function VisitDetailModal({
   state,
   booking,
   now,
+  appointmentCheckedAt,
+  refreshing,
+  onRefresh,
   onClose,
 }: Props): JSX.Element {
   const fullScreen = useMediaQuery("(max-width: 48em)");
@@ -35,6 +45,15 @@ export function VisitDetailModal({
   const place = bookedUnit?.place ?? "";
   const address = bookedUnit === undefined ? "" : fullAddress(bookedUnit);
   const at = state.kind === "booked" ? state.at : undefined;
+  const verifiedAt = state.kind === "booked" ? undefined : state.verifiedAt;
+  const updates = [
+    appointmentCheckedAt === undefined
+      ? undefined
+      : `Appuntamenti: ${formatShortDateTime(appointmentCheckedAt)}`,
+    verifiedAt === undefined
+      ? undefined
+      : `Verifica CUP: ${formatShortDateTime(verifiedAt)}`,
+  ].filter((item) => item !== undefined);
 
   return (
     <Modal
@@ -123,7 +142,21 @@ export function VisitDetailModal({
             now={now}
             labelled
           />
+          <Button
+            variant="light"
+            w="fit-content"
+            loading={refreshing}
+            leftSection={<RefreshCw size={16} aria-hidden="true" />}
+            onClick={onRefresh}
+          >
+            Aggiorna
+          </Button>
         </DetailSection>
+        {updates.length === 0 ? null : (
+          <Text size="xs" c="dimmed">
+            {`Aggiornamenti — ${updates.join(" · ")}`}
+          </Text>
+        )}
       </Stack>
     </Modal>
   );

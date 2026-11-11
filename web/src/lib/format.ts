@@ -71,3 +71,35 @@ export function formatLongDateTime(iso: string): string {
   const date = new Date(iso);
   return `${longDateFormat.format(date)}, ${timeFormat.format(date)}`;
 }
+
+const shortDateFormat = new Intl.DateTimeFormat("it-IT", {
+  timeZone: "Europe/Rome",
+  day: "2-digit",
+  month: "2-digit",
+});
+
+const dayKeyFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Rome",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function formatShortDateTime(iso: string): string {
+  const date = new Date(iso);
+  return `${shortDateFormat.format(date)} ${timeFormat.format(date)}`;
+}
+
+export function formatUpdated(
+  iso: string | null | undefined,
+  now: Date,
+): string | undefined {
+  if (iso === null || iso === undefined) {
+    return undefined;
+  }
+  const date = new Date(iso);
+  if (dayKeyFormat.format(date) === dayKeyFormat.format(now)) {
+    return `Aggiornato alle ${timeFormat.format(date)}`;
+  }
+  return `Aggiornato il ${formatShortDateTime(iso)}`;
+}

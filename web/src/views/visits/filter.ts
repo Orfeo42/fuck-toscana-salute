@@ -1,5 +1,6 @@
 import type { AppointmentBody, RowBody, UnitBody } from "../../api/client";
 import type { StatusTone } from "../../components/StatusBadge";
+import type { Verdict } from "../../data/indexes";
 import { prescriptionStatusLabel } from "../../lib/status";
 import { compareValues, type SortDir } from "../../lib/useSort";
 import { romeDay } from "./relativeDay";
@@ -12,6 +13,8 @@ const fseBookedNote =
   "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile";
 const fseBookedStatus = 30;
 const expiredLabel = "Scaduta";
+const handledLabel = "Gestita altrove";
+const noVerdicts: ReadonlyMap<string, Verdict> = new Map();
 
 const officialTones: Readonly<Record<number, StatusTone>> = {
   3: "tobook",
@@ -45,6 +48,7 @@ const labelOrder: readonly string[] = [
   bookedLabel,
   prescriptionStatusLabel(3),
   unverifiedLabel,
+  handledLabel,
   prescriptionStatusLabel(5),
   prescriptionStatusLabel(7),
   prescriptionStatusLabel(6),
@@ -73,6 +77,7 @@ export interface OfficialState {
   label: string;
   tone: StatusTone;
   note: string | undefined;
+  verifiedAt: string | undefined;
   canBook: boolean;
 }
 
@@ -80,8 +85,10 @@ export interface ExpiredState {
   kind: "expired";
   label: string;
   tone: StatusTone;
-  expiresOn: string;
+  expiresOn: string | undefined;
   estimated: boolean;
+  note: string | undefined;
+  verifiedAt: string | undefined;
 }
 
 export type EffectiveState = BookedState | ExpiredState | OfficialState;
@@ -89,6 +96,7 @@ export type EffectiveState = BookedState | ExpiredState | OfficialState;
 export interface BookingContext {
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
   unbooked: ReadonlySet<string>;
+  verdictByNre: ReadonlyMap<string, Verdict>;
   now: Date;
 }
 
@@ -97,6 +105,7 @@ export function effectiveState(
   bookingByNre: ReadonlyMap<string, AppointmentBody>,
   unbooked: ReadonlySet<string>,
   now: Date,
+  verdictByNre: ReadonlyMap<string, Verdict> = noVerdicts,
 ): EffectiveState {
   const key = row.nre.toUpperCase();
   const booking = bookingByNre.get(key);
@@ -122,6 +131,45 @@ export function effectiveState(
       tone: "closed",
       expiresOn,
       estimated: row.fse?.expiryEstimated === true,
+      note: undefined,
+      verifiedAt: undefined,
+    };
+  }
+  const notBooked =
+    (status === toBookStatus || status === fseBookedStatus) &&
+    unbooked.has(key);
+  const verdict = notBooked ? verdictByNre.get(key) : undefined;
+  if (verdict?.reason === "bookable") {
+    return {
+      kind: "official",
+      status: toBookStatus,
+      label: prescriptionStatusLabel(toBookStatus),
+      tone: officialTones[toBookStatus] ?? "closed",
+      note: undefined,
+      verifiedAt: verdict.verifiedAt,
+      canBook: true,
+    };
+  }
+  if (verdict?.reason === "handled") {
+    return {
+      kind: "official",
+      status,
+      label: handledLabel,
+      tone: "closed",
+      note: verdict.message,
+      verifiedAt: verdict.verifiedAt,
+      canBook: false,
+    };
+  }
+  if (verdict?.reason === "expired") {
+    return {
+      kind: "expired",
+      label: expiredLabel,
+      tone: "closed",
+      expiresOn,
+      estimated: row.fse?.expiryEstimated === true,
+      note: verdict.message,
+      verifiedAt: verdict.verifiedAt,
     };
   }
   if (status === fseBookedStatus && unbooked.has(key)) {
@@ -130,7 +178,8 @@ export function effectiveState(
       status,
       label: unverifiedLabel,
       tone: "pending",
-      note: fseBookedNote,
+      note: verdict?.message ?? fseBookedNote,
+      verifiedAt: verdict?.verifiedAt,
       canBook: true,
     };
   }
@@ -140,6 +189,7 @@ export function effectiveState(
     label: prescriptionStatusLabel(status),
     tone: officialTones[status] ?? "closed",
     note: undefined,
+    verifiedAt: undefined,
     canBook: status === toBookStatus,
   };
 }
@@ -194,6 +244,7 @@ function upcomingAt(row: RowBody, context: BookingContext): number | undefined {
     context.bookingByNre,
     context.unbooked,
     context.now,
+    context.verdictByNre,
   );
   if (state.kind !== "booked" || state.at === undefined) {
     return undefined;
@@ -239,6 +290,7 @@ export function rowLabel(row: RowBody, context: BookingContext): string {
     context.bookingByNre,
     context.unbooked,
     context.now,
+    context.verdictByNre,
   ).label;
 }
 
@@ -325,6 +377,7 @@ function sortValue(
     context.bookingByNre,
     context.unbooked,
     context.now,
+    context.verdictByNre,
   );
   if (key === "stato") {
     return state.label;

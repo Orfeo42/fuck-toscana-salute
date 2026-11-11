@@ -2,12 +2,21 @@ import type {
   AppointmentBody,
   AppointmentsBody,
   PrescriptionsBody,
+  VerdictBody,
 } from "../api/client";
+
+export interface Verdict {
+  reason: VerdictBody["reason"];
+  message: string;
+  verifiedAt: string | undefined;
+}
 
 export interface Indexes {
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
   unbooked: ReadonlySet<string>;
   prescriptionNres: ReadonlySet<string>;
+  verdictByNre: ReadonlyMap<string, Verdict>;
+  appointmentCheckedAtByNre: ReadonlyMap<string, string>;
 }
 
 function time(appointment: AppointmentBody): number {
@@ -51,5 +60,31 @@ export function buildIndexes(
     prescriptionNres.add(row.nre.toUpperCase());
   }
 
-  return { bookingByNre, unbooked, prescriptionNres };
+  const upperKeys = (
+    record: Readonly<Record<string, string>>,
+  ): Map<string, string> =>
+    new Map(Object.entries(record).map(([nre, at]) => [nre.toUpperCase(), at]));
+
+  const verifiedAt = upperKeys(appointments?.updated.verdicts ?? {});
+  const verdictByNre = new Map<string, Verdict>();
+  for (const verdict of appointments?.verdicts ?? []) {
+    const key = verdict.nre.toUpperCase();
+    verdictByNre.set(key, {
+      reason: verdict.reason,
+      message: verdict.message,
+      verifiedAt: verifiedAt.get(key),
+    });
+  }
+
+  const appointmentCheckedAtByNre = upperKeys(
+    appointments?.updated.appointments ?? {},
+  );
+
+  return {
+    bookingByNre,
+    unbooked,
+    prescriptionNres,
+    verdictByNre,
+    appointmentCheckedAtByNre,
+  };
 }

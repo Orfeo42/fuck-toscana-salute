@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,9 +14,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/client", () => ({
   api: { POST: mocks.post },
 }));
-
-const hint =
-  "Crea ~/.config/fuck-toscana-salute/google-client.json (vedi README)";
 
 function appointment(withBooking = true): AppointmentBody {
   return {
@@ -42,6 +39,7 @@ function renderDialog(
     status?: GoogleStatusBody;
     appt?: AppointmentBody;
     connect?: () => Promise<void>;
+    openSettings?: () => void;
     onClose?: () => void;
   } = {},
 ): void {
@@ -54,6 +52,7 @@ function renderDialog(
         refresh: vi.fn(),
         connect: options.connect ?? vi.fn(),
         disconnect: vi.fn(),
+        openSettings: options.openSettings ?? vi.fn(),
       }}
     >
       <CalendarDialog
@@ -241,14 +240,18 @@ describe("CalendarDialog", () => {
     );
   });
 
-  it("shows the hint on 409 google_not_configured", async () => {
+  it("offers Configura on 409 google_not_configured", async () => {
     const user = userEvent.setup();
     failWith(409, "google_not_configured");
-    renderDialog();
+    const openSettings = vi.fn();
+    renderDialog({ openSettings });
 
     await user.click(screen.getByRole("button", { name: "Aggiungi" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(hint);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Google non è configurato");
+    await user.click(within(alert).getByRole("button", { name: "Configura" }));
+    expect(openSettings).toHaveBeenCalled();
   });
 
   it("shows the gestione error on any other 409", async () => {
@@ -299,10 +302,17 @@ describe("CalendarDialog", () => {
     expect(connect).toHaveBeenCalled();
   });
 
-  it("shows the hint and disables Aggiungi when not configured", () => {
-    renderDialog({ status: { configured: false, connected: false } });
+  it("shows Configura and disables Aggiungi when not configured", async () => {
+    const user = userEvent.setup();
+    const openSettings = vi.fn();
+    renderDialog({
+      status: { configured: false, connected: false },
+      openSettings,
+    });
 
-    expect(screen.getByText(hint)).toBeVisible();
+    expect(screen.getByText("Google non è configurato")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Configura" }));
+    expect(openSettings).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Aggiungi" })).toBeDisabled();
   });
 });

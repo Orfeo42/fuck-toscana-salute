@@ -14,6 +14,7 @@ function renderConnect(
     error?: string;
     connect?: () => Promise<void>;
     disconnect?: () => Promise<void>;
+    openSettings?: () => void;
   } = {},
 ): void {
   render(
@@ -25,6 +26,7 @@ function renderConnect(
         refresh: vi.fn(),
         connect: options.connect ?? vi.fn(),
         disconnect: options.disconnect ?? vi.fn(),
+        openSettings: options.openSettings ?? vi.fn(),
       }}
     >
       <Menu opened>
@@ -53,10 +55,15 @@ describe("GoogleConnect", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("boom");
   });
 
-  it("shows the not configured text", () => {
-    renderConnect({ configured: false, connected: false });
+  it("shows the not configured text with a configure button", async () => {
+    const user = userEvent.setup();
+    const openSettings = vi.fn();
+    renderConnect({ configured: false, connected: false }, { openSettings });
 
-    expect(screen.getByText("Google Calendar non configurato")).toBeVisible();
+    expect(screen.getByText("Google non è configurato")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Configura" }));
+
+    expect(openSettings).toHaveBeenCalled();
   });
 
   it("connects from the connect button", async () => {

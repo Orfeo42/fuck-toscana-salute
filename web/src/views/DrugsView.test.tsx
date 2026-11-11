@@ -12,7 +12,10 @@ import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  refreshPortals: vi.fn(),
 }));
+
+vi.mock("../data/refresh", () => ({ refreshPortals: mocks.refreshPortals }));
 
 vi.mock("../lib/pdf", () => ({
   loadPdf: () => ({
@@ -102,6 +105,26 @@ function Harness(): JSX.Element {
   );
 }
 
+function mockPrescriptions(body: {
+  prescriptions: RowBody[] | null;
+  updated?: string;
+}): void {
+  mocks.get.mockImplementation((path: string) => {
+    if (path === "/api/appointments") {
+      return Promise.resolve({
+        data: {
+          appointments: [],
+          failed: [],
+          unbooked: [],
+          verdicts: [],
+          updated: { lists: null, appointments: {}, verdicts: {} },
+        },
+      });
+    }
+    return Promise.resolve({ data: body });
+  });
+}
+
 function at(items: HTMLElement[], index: number): HTMLElement {
   const item = items[index];
   if (item === undefined) {
@@ -130,7 +153,7 @@ async function openStatusFilter(user: User): Promise<void> {
 
 function descriptions(): (string | null)[] {
   return bodyRows().map(
-    (row) => within(row).getAllByRole("cell")[1]?.textContent ?? null,
+    (row) => within(row).getAllByRole("cell")[2]?.textContent ?? null,
   );
 }
 
@@ -138,7 +161,9 @@ describe("DrugsView", () => {
   beforeEach(() => {
     mocks.get.mockReset();
     window.location.hash = "";
-    mocks.get.mockResolvedValue({ data: { prescriptions: rows } });
+    mocks.refreshPortals.mockReset();
+    mocks.refreshPortals.mockResolvedValue(true);
+    mockPrescriptions({ prescriptions: rows });
   });
 
   it("shows the loading state", () => {
@@ -171,11 +196,11 @@ describe("DrugsView", () => {
     const headers = [...screen.getByRole("table").querySelectorAll("th")].map(
       (h) => h.textContent,
     );
-    expect(headers).toEqual(["Data", "Farmaco", "Stato", "NRE", "Azioni"]);
+    expect(headers).toEqual(["", "Data", "Farmaco", "Stato", "NRE", "Azioni"]);
     const cells = within(at(bodyRows(), 0)).getAllByRole("cell");
-    expect(cells).toHaveLength(5);
-    expect(within(at(cells, 2)).getByText("Da ritirare")).toBeVisible();
-    expect(within(at(cells, 3)).getByText("0900A0000000002")).toBeVisible();
+    expect(cells).toHaveLength(6);
+    expect(within(at(cells, 3)).getByText("Da ritirare")).toBeVisible();
+    expect(within(at(cells, 4)).getByText("0900A0000000002")).toBeVisible();
   });
 
   it("hides closed statuses by default, newest first", async () => {
@@ -379,21 +404,22 @@ describe("DrugsView", () => {
     );
   });
 
-  it("refetches on Aggiorna", async () => {
+  it("refreshes everything then refetches on Aggiorna tutto", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Farmaco esempio");
     expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
 
-    await user.click(screen.getByRole("button", { name: "Aggiorna" }));
+    await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
 
+    expect(mocks.refreshPortals).toHaveBeenCalledWith({ all: true });
     await waitFor(() => {
       expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
     });
   });
 
   it("treats a null list as empty", async () => {
-    mocks.get.mockResolvedValue({ data: { prescriptions: null } });
+    mockPrescriptions({ prescriptions: null });
     render(<Harness />);
 
     expect(
@@ -439,5 +465,70 @@ describe("DrugsView", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+
+  it("refreshes the selected rows by NRE and clears the selection", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+    const row = at(bodyRows(), 0);
+    expect(
+      screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole("checkbox"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Aggiorna selezionate (1)" }),
+    );
+    expect(mocks.refreshPortals).toHaveBeenCalledWith({
+      nres: ["0900A0000000002"],
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("refreshes one NRE from the detail modal", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByText("Farmaco esempio"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Farmaco esempio",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Aggiorna" }));
+
+    expect(mocks.refreshPortals).toHaveBeenCalledWith({
+      nres: ["0900A0000000002"],
+    });
+  });
+
+  it("shows a notification when the refresh fails", async () => {
+    const user = userEvent.setup();
+    mocks.refreshPortals.mockResolvedValue(false);
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+
+    await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
+
+    expect(await screen.findByText("Aggiornamento non riuscito")).toBeVisible();
+  });
+
+  it("shows the freshness text and hides it when null", async () => {
+    mockPrescriptions({ prescriptions: rows, updated: "2026-01-09T08:05:00Z" });
+    render(<Harness />);
+
+    expect(await screen.findByText("Aggiornato il 09/01 09:05")).toBeVisible();
+  });
+
+  it("hides the freshness text without an update time", async () => {
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+
+    expect(screen.queryByText(/^Aggiornato (alle|il)/)).not.toBeInTheDocument();
   });
 });

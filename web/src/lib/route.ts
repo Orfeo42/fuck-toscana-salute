@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type TabId = "visite" | "farmaci" | "collega";
+export type TabId = "visite" | "referti" | "farmaci" | "collega";
 
 export const linkHref = "#/collega";
 
@@ -17,7 +17,12 @@ const legacyTabs: Readonly<Record<string, TabId>> = {
 };
 
 function toTabId(value: string): TabId | undefined {
-  if (value === "visite" || value === "farmaci" || value === "collega") {
+  if (
+    value === "visite" ||
+    value === "referti" ||
+    value === "farmaci" ||
+    value === "collega"
+  ) {
     return value;
   }
   return legacyTabs[value];

@@ -1,11 +1,11 @@
-import { Menu, Text } from "@mantine/core";
+import { Button, Group, Menu, Text } from "@mantine/core";
 import { CalendarCheck, CalendarPlus } from "lucide-react";
 import type { JSX } from "react";
 
-import { notConfiguredHint, useGoogle } from "./useGoogle";
+import { useGoogle } from "./useGoogle";
 
 export function GoogleConnect(): JSX.Element | null {
-  const { status, error, connect, disconnect } = useGoogle();
+  const { status, error, connect, disconnect, openSettings } = useGoogle();
 
   const handleConnect = (): void => {
     void connect();
@@ -23,9 +23,14 @@ export function GoogleConnect(): JSX.Element | null {
   }
   if (!status.configured) {
     return (
-      <Text size="xs" c="dimmed" px="sm" title={notConfiguredHint}>
-        Google Calendar non configurato
-      </Text>
+      <Group justify="space-between" px="sm" py={4} wrap="nowrap">
+        <Text size="xs" c="dimmed">
+          Google non è configurato
+        </Text>
+        <Button size="compact-xs" variant="light" onClick={openSettings}>
+          Configura
+        </Button>
+      </Group>
     );
   }
   if (!status.connected) {

@@ -10,7 +10,13 @@ import {
   type MockInstance,
 } from "vitest";
 
-import type { AppointmentBody, RowBody, SessionBody } from "../api/client";
+import type {
+  AppointmentBody,
+  AppointmentsUpdatedBody,
+  RowBody,
+  SessionBody,
+  VerdictBody,
+} from "../api/client";
 import { HealthDataProvider } from "../data/HealthDataProvider";
 import { GoogleContext } from "../google/useGoogle";
 import { formatDate } from "../lib/format";
@@ -28,7 +34,10 @@ vi.mock("../lib/pdf", () => ({
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  refreshPortals: vi.fn(),
 }));
+
+vi.mock("../data/refresh", () => ({ refreshPortals: mocks.refreshPortals }));
 
 vi.mock("../api/client", () => ({
   api: { GET: mocks.get },
@@ -37,6 +46,8 @@ vi.mock("../api/client", () => ({
 }));
 
 const now = new Date("2026-11-10T09:00:00Z");
+
+const noUpdates = { lists: null, appointments: {}, verdicts: {} };
 
 const toBook: RowBody = {
   nre: "0900A0000000001",
@@ -157,7 +168,9 @@ function mockRows(
 ): void {
   mocks.get.mockImplementation((path: string) => {
     if (path === "/api/appointments") {
-      return Promise.resolve({ data: { appointments, failed: [] } });
+      return Promise.resolve({
+        data: { appointments, failed: [], verdicts: [], updated: noUpdates },
+      });
     }
     return Promise.resolve({ data: { prescriptions } });
   });
@@ -169,7 +182,11 @@ function stubScroll(scroll: () => void): MockInstance {
     .mockImplementation(scroll);
 }
 
-function mockData(appointments: AppointmentBody[], unbooked: string[]): void {
+function mockData(
+  appointments: AppointmentBody[],
+  unbooked: string[],
+  extras: { verdicts?: VerdictBody[]; updated?: AppointmentsUpdatedBody } = {},
+): void {
   mocks.get.mockImplementation((path: string) => {
     if (path === "/api/appointments") {
       return Promise.resolve({
@@ -177,6 +194,8 @@ function mockData(appointments: AppointmentBody[], unbooked: string[]): void {
           appointments,
           failed: [],
           unbooked,
+          verdicts: extras.verdicts ?? [],
+          updated: extras.updated ?? noUpdates,
         },
       });
     }
@@ -213,6 +232,7 @@ function Harness(): JSX.Element {
           refresh: vi.fn(),
           connect: vi.fn(),
           disconnect: vi.fn(),
+          openSettings: vi.fn(),
         }}
       >
         <HealthDataProvider>
@@ -253,7 +273,7 @@ function sortLabel(name: string): string | null {
 
 function titles(): string[] {
   return bodyRows().map((row) => {
-    const cell = row.querySelectorAll("td")[1];
+    const cell = row.querySelectorAll("td")[2];
     return cell?.textContent ?? "";
   });
 }
@@ -275,6 +295,8 @@ function rowOf(text: string): HTMLElement {
 describe("VisitsView", () => {
   beforeEach(() => {
     mocks.get.mockReset();
+    mocks.refreshPortals.mockReset();
+    mocks.refreshPortals.mockResolvedValue(true);
     window.location.hash = "";
     mockData([], []);
   });
@@ -298,6 +320,7 @@ describe("VisitsView", () => {
         (header) => header.textContent,
       ),
     ).toEqual([
+      "",
       "Prescritta",
       "Prestazione",
       "Stato",
@@ -804,7 +827,10 @@ describe("VisitsView", () => {
 
     await screen.findByRole("checkbox", { name: "Erogata (1)" });
     expect(
-      screen.getAllByRole("checkbox").map((box) => box.getAttribute("value")),
+      screen
+        .getAllByRole("checkbox")
+        .map((box) => box.getAttribute("value"))
+        .filter((value) => value !== null),
     ).toEqual(["Prenotata", "Da prenotare", "Erogata"]);
   });
 
@@ -1022,7 +1048,9 @@ describe("VisitsView", () => {
     expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
     expect(callsTo(mocks.get, "/api/appointments")).toBe(1);
 
-    await user.click(screen.getByRole("button", { name: "Aggiorna" }));
+    await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
+
+    expect(mocks.refreshPortals).toHaveBeenCalledWith({ all: true });
 
     await waitFor(() => {
       expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
@@ -1032,7 +1060,13 @@ describe("VisitsView", () => {
 
   it("shows the empty state for a view with no rows", async () => {
     mocks.get.mockResolvedValue({
-      data: { prescriptions: [done], appointments: [], failed: [] },
+      data: {
+        prescriptions: [done],
+        appointments: [],
+        failed: [],
+        verdicts: [],
+        updated: noUpdates,
+      },
     });
     renderView();
 
@@ -1128,7 +1162,13 @@ describe("VisitsView", () => {
     mocks.get.mockImplementation((path: string) => {
       if (path === "/api/appointments") {
         return Promise.resolve({
-          data: { appointments: [], failed: [], unbooked: ["0900A0000000066"] },
+          data: {
+            appointments: [],
+            failed: [],
+            unbooked: ["0900A0000000066"],
+            verdicts: [],
+            updated: noUpdates,
+          },
         });
       }
       return Promise.resolve({ data: { prescriptions: [expired30] } });
@@ -1255,5 +1295,199 @@ describe("VisitsView", () => {
         name: "Apri promemoria prenotazione (PDF)",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  describe("verdicts", () => {
+    const nre = "0900A0000000005";
+    const verifiedAt = "2026-11-10T08:30:00Z";
+    const updated: AppointmentsUpdatedBody = {
+      lists: null,
+      appointments: {},
+      verdicts: { [nre]: verifiedAt },
+    };
+
+    function verdict(reason: VerdictBody["reason"]): VerdictBody {
+      return { nre, reason, message: "Messaggio esempio" };
+    }
+
+    it("shows a bookable verdict as Da prenotare with Prenota sul CUP", async () => {
+      mockData([], [nre], { verdicts: [verdict("bookable")], updated });
+      renderView();
+
+      const row = await waitFor(() => rowOf("Controllo esempio"));
+      expect(within(row).getByText("Da prenotare")).toBeVisible();
+      expect(
+        within(row).getByRole("link", { name: "Prenota sul CUP" }),
+      ).toBeVisible();
+      expect(within(row).queryByText("Da verificare")).not.toBeInTheDocument();
+    });
+
+    it("shows a handled verdict as Gestita altrove with note and verification time", async () => {
+      const user = userEvent.setup();
+      mockData([], [nre], { verdicts: [verdict("handled")], updated });
+      renderView();
+
+      const row = await waitFor(() => rowOf("Controllo esempio"));
+      expect(within(row).getByText("Gestita altrove")).toBeVisible();
+      expect(
+        within(row).queryByRole("link", { name: "Prenota sul CUP" }),
+      ).not.toBeInTheDocument();
+      await openStatusInfo(user, row);
+      expect(await screen.findByText("Messaggio esempio")).toBeVisible();
+      expect(
+        screen.getByText("Verificato con il CUP il 10/11 09:30"),
+      ).toBeVisible();
+    });
+
+    it("shows an expired verdict as Scaduta once the filter allows it", async () => {
+      const user = userEvent.setup();
+      mockData([], [nre], { verdicts: [verdict("expired")], updated });
+      renderView();
+      await waitFor(() => rowOf("Visita esempio"));
+
+      await pickStatuses(user, "Scaduta (1)");
+
+      const row = rowOf("Controllo esempio");
+      expect(within(row).getByText("Scaduta")).toBeVisible();
+    });
+
+    it("keeps Da verificare with the verdict message for other", async () => {
+      const user = userEvent.setup();
+      mockData([], [nre], { verdicts: [verdict("other")], updated });
+      renderView();
+
+      const row = await waitFor(() => rowOf("Da verificare"));
+      await openStatusInfo(user, row);
+      expect(await screen.findByText("Messaggio esempio")).toBeVisible();
+    });
+
+    it("keeps Da verificare without a verdict", async () => {
+      mockData([], [nre]);
+      renderView();
+
+      const row = await waitFor(() => rowOf("Da verificare"));
+      expect(row).toBeVisible();
+    });
+
+    it("lists Gestita altrove in the status filter", async () => {
+      const user = userEvent.setup();
+      mockData([], [nre], { verdicts: [verdict("handled")], updated });
+      renderView();
+      await waitFor(() => rowOf("Gestita altrove"));
+
+      await openStatusFilter(user);
+
+      expect(
+        await screen.findByRole("checkbox", { name: "Gestita altrove (1)" }),
+      ).toBeChecked();
+    });
+
+    it("shows both update times in the detail modal", async () => {
+      const user = userEvent.setup();
+      mockData([], [nre], {
+        verdicts: [verdict("handled")],
+        updated: {
+          ...updated,
+          appointments: { [nre]: "2026-11-10T07:00:00Z" },
+        },
+      });
+      renderView();
+
+      await user.click(await waitFor(() => rowOf("Controllo esempio")));
+
+      const dialog = await screen.findByRole("dialog", {
+        name: "Controllo esempio",
+      });
+      expect(
+        within(dialog).getByText(
+          "Aggiornamenti — Appuntamenti: 10/11 08:00 · Verifica CUP: 10/11 09:30",
+        ),
+      ).toBeVisible();
+    });
+  });
+
+  describe("freshness and refresh", () => {
+    it("shows the time for a list updated today", async () => {
+      mockData([], [], {
+        updated: { ...noUpdates, lists: "2026-11-10T08:05:00Z" },
+      });
+      renderView();
+
+      expect(await screen.findByText("Aggiornato alle 09:05")).toBeVisible();
+    });
+
+    it("shows day and time for a list updated another day", async () => {
+      mockData([], [], {
+        updated: { ...noUpdates, lists: "2026-11-09T08:05:00Z" },
+      });
+      renderView();
+
+      expect(
+        await screen.findByText("Aggiornato il 09/11 09:05"),
+      ).toBeVisible();
+    });
+
+    it("hides the freshness text when never updated", async () => {
+      renderView();
+      await waitFor(() => rowOf("Visita esempio"));
+
+      expect(
+        screen.queryByText(/^Aggiornato (alle|il)/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("refreshes the selected rows by NRE and clears the selection", async () => {
+      const user = userEvent.setup();
+      renderView();
+      const row = await waitFor(() => rowOf("Visita esempio"));
+      expect(
+        screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
+      ).not.toBeInTheDocument();
+
+      await user.click(within(row).getByRole("checkbox"));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Aggiorna selezionate (1)" }),
+      );
+      expect(mocks.refreshPortals).toHaveBeenCalledWith({
+        nres: ["0900A0000000001"],
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("refreshes one NRE from the detail modal", async () => {
+      const user = userEvent.setup();
+      renderView();
+      await user.click(await waitFor(() => rowOf("Visita esempio")));
+
+      const dialog = await screen.findByRole("dialog", {
+        name: "Visita esempio",
+      });
+      await user.click(
+        within(dialog).getByRole("button", { name: "Aggiorna" }),
+      );
+
+      expect(mocks.refreshPortals).toHaveBeenCalledWith({
+        nres: ["0900A0000000001"],
+      });
+    });
+
+    it("shows a notification when the refresh fails", async () => {
+      const user = userEvent.setup();
+      mocks.refreshPortals.mockResolvedValue(false);
+      renderView();
+      await waitFor(() => rowOf("Visita esempio"));
+
+      await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
+
+      expect(
+        await screen.findByText("Aggiornamento non riuscito"),
+      ).toBeVisible();
+    });
   });
 });

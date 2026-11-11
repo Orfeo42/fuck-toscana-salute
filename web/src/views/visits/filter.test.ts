@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
+import type { Verdict } from "../../data/indexes";
 import {
   buildRows,
   defaultExcludedLabels,
@@ -83,10 +84,13 @@ function booking(
 function contextOf(
   bookings: AppointmentBody[],
   unbooked: string[] = [],
+  verdicts: Verdict[] = [],
+  verdictNres: string[] = [],
 ): BookingContext {
   return {
     bookingByNre: new Map(bookings.map((b) => [b.nre, b])),
     unbooked: new Set(unbooked),
+    verdictByNre: new Map(verdicts.map((v, i) => [verdictNres[i] ?? "", v])),
     now,
   };
 }
@@ -416,6 +420,98 @@ describe("labelCounts", () => {
     expect(
       labelCounts([row, toBook], context).map((item) => item.label),
     ).toEqual(["Da prenotare", "Da verificare"]);
+  });
+});
+
+describe("effectiveState with verdicts", () => {
+  const nre = "0900A0000000070";
+  const row = fseRow(nre, "visit", 30, "2026-11-01T09:00:00Z");
+  const verifiedAt = "2026-11-10T08:00:00Z";
+
+  function stateWith(
+    reason: Verdict["reason"],
+    target: RowBody = row,
+    unbooked = new Set([nre]),
+  ): ReturnType<typeof effectiveState> {
+    const verdicts = new Map([
+      [nre, { reason, message: "Messaggio esempio", verifiedAt }],
+    ]);
+    return effectiveState(target, new Map(), unbooked, now, verdicts);
+  }
+
+  it("treats bookable like an open prescription", () => {
+    expect(stateWith("bookable")).toMatchObject({
+      kind: "official",
+      label: "Da prenotare",
+      tone: "tobook",
+      canBook: true,
+      verifiedAt,
+    });
+  });
+
+  it("shows handled as Gestita altrove, gray, with the message", () => {
+    expect(stateWith("handled")).toMatchObject({
+      kind: "official",
+      label: "Gestita altrove",
+      tone: "closed",
+      note: "Messaggio esempio",
+      canBook: false,
+      verifiedAt,
+    });
+  });
+
+  it("shows expired as Scaduta with the message", () => {
+    expect(stateWith("expired")).toMatchObject({
+      kind: "expired",
+      label: "Scaduta",
+      tone: "closed",
+      note: "Messaggio esempio",
+      verifiedAt,
+    });
+  });
+
+  it("keeps Da verificare for other, with the message", () => {
+    expect(stateWith("other")).toMatchObject({
+      kind: "official",
+      label: "Da verificare",
+      note: "Messaggio esempio",
+      verifiedAt,
+    });
+  });
+
+  it("keeps Da verificare with the default note without a verdict", () => {
+    expect(
+      effectiveState(row, new Map(), new Set([nre]), now, new Map()),
+    ).toMatchObject({
+      label: "Da verificare",
+      note: expect.stringContaining("FSE la segna") as string,
+      verifiedAt: undefined,
+    });
+  });
+
+  it("ignores a verdict for a row that is not unbooked", () => {
+    expect(stateWith("handled", row, new Set())).toMatchObject({
+      label: "Prenotata",
+    });
+  });
+
+  it("applies a verdict to a status 3 unbooked row", () => {
+    const open = fseRow(nre, "visit", 3, "2026-11-01T09:00:00Z");
+    expect(stateWith("handled", open)).toMatchObject({
+      label: "Gestita altrove",
+    });
+  });
+
+  it("lists Gestita altrove among the status filter options", () => {
+    const context = contextOf(
+      [],
+      [nre],
+      [{ reason: "handled", message: "m", verifiedAt }],
+      [nre],
+    );
+    expect(
+      labelCounts([row, toBook], context).map((item) => item.label),
+    ).toEqual(["Da prenotare", "Gestita altrove"]);
   });
 });
 

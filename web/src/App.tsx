@@ -14,6 +14,7 @@ import { SessionProvider } from "./session/SessionProvider";
 import { chromeColors } from "./theme";
 import { DrugsView } from "./views/DrugsView";
 import { LinkView } from "./views/LinkView";
+import { ReportsView } from "./views/ReportsView";
 import { VisitsView } from "./views/VisitsView";
 
 const headerConfig = { height: 56 };
@@ -22,6 +23,9 @@ function Content(): JSX.Element {
   const route = useRoute();
   if (route.tab === "collega") {
     return <LinkView />;
+  }
+  if (route.tab === "referti") {
+    return <ReportsView />;
   }
   return route.tab === "farmaci" ? <DrugsView /> : <VisitsView />;
 }

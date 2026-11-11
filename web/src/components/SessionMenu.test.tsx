@@ -93,7 +93,7 @@ function failedSession(reason: string): SessionBody {
   };
 }
 
-function renderMenu(): void {
+function renderMenu(openSettings = vi.fn()): void {
   render(
     <GoogleContext
       value={{
@@ -103,6 +103,7 @@ function renderMenu(): void {
         refresh: vi.fn(),
         connect: vi.fn(),
         disconnect: vi.fn(),
+        openSettings,
       }}
     >
       <SessionProvider>
@@ -342,5 +343,20 @@ describe("SessionMenu", () => {
       await vi.advanceTimersByTimeAsync(13000);
     });
     expect(mocks.get.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("opens the Google settings from the menu", async () => {
+    const openSettings = vi.fn();
+    mocks.get.mockResolvedValue({ data: activeSession });
+    renderMenu(openSettings);
+    await openMenu();
+
+    await userEvent
+      .setup()
+      .click(
+        await screen.findByRole("menuitem", { name: "Impostazioni Google" }),
+      );
+
+    expect(openSettings).toHaveBeenCalled();
   });
 });

@@ -9,12 +9,10 @@ export interface GoogleValue {
   refresh: () => void;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  openSettings: () => void;
 }
 
 export const GoogleContext = createContext<GoogleValue | undefined>(undefined);
-
-export const notConfiguredHint =
-  "Crea ~/.config/fuck-toscana-salute/google-client.json (vedi README)";
 
 export function useGoogle(): GoogleValue {
   const value = useContext(GoogleContext);

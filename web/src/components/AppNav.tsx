@@ -1,5 +1,5 @@
 import { Box, NavLink, Stack, Text } from "@mantine/core";
-import { Pill, Stethoscope, type LucideIcon } from "lucide-react";
+import { FileText, Pill, Stethoscope, type LucideIcon } from "lucide-react";
 import type { JSX } from "react";
 
 import { useRoute, type TabId } from "../lib/route";
@@ -17,6 +17,7 @@ interface Props {
 
 const items: readonly NavItem[] = [
   { id: "visite", label: "Visite ed esami", icon: Stethoscope },
+  { id: "referti", label: "Referti", icon: FileText },
   { id: "farmaci", label: "Farmaci", icon: Pill },
 ];
 

@@ -18,7 +18,7 @@ import { StopClick } from "../components/StopClick";
 import { StatusBadge } from "../components/StatusBadge";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
-import { formatDate } from "../lib/format";
+import { formatDate, formatUpdated } from "../lib/format";
 import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
@@ -42,7 +42,11 @@ const focusedBg = "var(--mantine-primary-color-light)";
 const rowPointer = { cursor: "pointer" };
 
 export function DrugsView(): JSX.Element {
-  const { data: body, error, loading, reload } = useHealthData().prescriptions;
+  const health = useHealthData();
+  const { refresh, refreshing } = health;
+  const { data: body, error, loading } = health.prescriptions;
+  const [now] = useState(() => new Date());
+  const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
   const [handledFocus, setHandledFocus] = useState<string | undefined>(
     undefined,
   );
@@ -73,6 +77,9 @@ export function DrugsView(): JSX.Element {
       setSearch("");
     }
   }
+
+  const selected = visible.filter((row) => selectedNres.includes(row.nre));
+  const updatedText = formatUpdated(body?.updated, now);
 
   const columns: DataTableColumn<DrugRowData>[] = [
     {
@@ -167,13 +174,41 @@ export function DrugsView(): JSX.Element {
           }}
         />
         <Text aria-live="polite">{`${String(visible.length)} farmaci`}</Text>
+        {updatedText === undefined ? null : (
+          <Text size="sm" c="dimmed">
+            {updatedText}
+          </Text>
+        )}
         <Button
           variant="light"
+          loading={refreshing}
           leftSection={<RefreshCw size={16} />}
-          onClick={reload}
+          onClick={() => {
+            void refresh({ all: true });
+          }}
         >
-          Aggiorna
+          Aggiorna tutto
         </Button>
+        {selected.length === 0 ? null : (
+          <Button
+            variant="light"
+            loading={refreshing}
+            leftSection={<RefreshCw size={16} />}
+            onClick={() => {
+              const nres = [
+                ...new Set(
+                  selected
+                    .map((row) => row.nre.toUpperCase())
+                    .filter((nre) => nre !== ""),
+                ),
+              ];
+              setSelectedNres([]);
+              void refresh({ nres });
+            }}
+          >
+            {`Aggiorna selezionate (${String(selected.length)})`}
+          </Button>
+        )}
       </Group>
       {loading ? (
         <Group gap="xs">
@@ -200,6 +235,10 @@ export function DrugsView(): JSX.Element {
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}
+          selectedRecords={selected}
+          onSelectedRecordsChange={(records) => {
+            setSelectedNres(records.map((row) => row.nre));
+          }}
           columns={columns}
           noRecordsText="Nessun farmaco in questa vista."
           sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
@@ -238,6 +277,10 @@ export function DrugsView(): JSX.Element {
       {detailRow === undefined ? null : (
         <DrugDetailModal
           row={detailRow}
+          refreshing={refreshing}
+          onRefresh={() => {
+            void refresh({ nres: [detailRow.nre.toUpperCase()] });
+          }}
           onClose={() => {
             setDetailNre(undefined);
           }}

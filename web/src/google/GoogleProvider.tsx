@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { api, type GoogleStatusBody } from "../api/client";
+import { GoogleSettingsModal } from "./GoogleSettingsModal";
 import { GoogleContext, type GoogleValue } from "./useGoogle";
 
 interface Props {
@@ -21,6 +22,7 @@ const connectPollMaxMs = 2 * 60 * 1000;
 export function GoogleProvider({ children }: Props): JSX.Element {
   const [status, setStatus] = useState<GoogleStatusBody | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const pollRef = useRef<number | undefined>(undefined);
   const deadlineRef = useRef<number | undefined>(undefined);
 
@@ -87,6 +89,14 @@ export function GoogleProvider({ children }: Props): JSX.Element {
     await load();
   }, [load]);
 
+  const openSettings = useCallback((): void => {
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback((): void => {
+    setSettingsOpen(false);
+  }, []);
+
   useEffect(() => {
     const first = setTimeout(refresh, 0);
     window.addEventListener("focus", refresh);
@@ -100,9 +110,22 @@ export function GoogleProvider({ children }: Props): JSX.Element {
   const loading = status === undefined && error === undefined;
 
   const value = useMemo<GoogleValue>(
-    () => ({ status, loading, error, refresh, connect, disconnect }),
-    [status, loading, error, refresh, connect, disconnect],
+    () => ({
+      status,
+      loading,
+      error,
+      refresh,
+      connect,
+      disconnect,
+      openSettings,
+    }),
+    [status, loading, error, refresh, connect, disconnect, openSettings],
   );
 
-  return <GoogleContext value={value}>{children}</GoogleContext>;
+  return (
+    <GoogleContext value={value}>
+      {children}
+      <GoogleSettingsModal opened={settingsOpen} onClose={closeSettings} />
+    </GoogleContext>
+  );
 }

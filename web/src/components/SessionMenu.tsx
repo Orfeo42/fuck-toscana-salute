@@ -7,11 +7,19 @@ import {
   Menu,
   Text,
 } from "@mantine/core";
-import { ChevronDown, LogIn, LogOut, RefreshCw, UserRound } from "lucide-react";
+import {
+  ChevronDown,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  Settings,
+  UserRound,
+} from "lucide-react";
 import type { JSX } from "react";
 
 import type { PortalBody } from "../api/client";
 import { GoogleConnect } from "../google/GoogleConnect";
+import { useGoogle } from "../google/useGoogle";
 import { formatDateTime } from "../lib/format";
 import { linkHref } from "../lib/route";
 import { useSession } from "../session/useSession";
@@ -53,6 +61,7 @@ function statusText(portal: PortalBody): string {
 
 export function SessionMenu(): JSX.Element | null {
   const { session, loginAll, logout } = useSession();
+  const { openSettings } = useGoogle();
 
   if (session === undefined) {
     return <Loader size="sm" color="white" aria-label="Caricamento sessione" />;
@@ -143,6 +152,9 @@ export function SessionMenu(): JSX.Element | null {
         <Menu.Divider />
         <Menu.Label>Google Calendar</Menu.Label>
         <GoogleConnect />
+        <Menu.Item leftSection={<Settings size={16} />} onClick={openSettings}>
+          Impostazioni Google
+        </Menu.Item>
         <Menu.Divider />
         {degraded && (
           <Menu.Item

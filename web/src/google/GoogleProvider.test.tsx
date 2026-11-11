@@ -64,15 +64,31 @@ describe("GoogleConnect", () => {
     open.mockRestore();
   });
 
-  it("shows the not configured text with the hint tooltip", async () => {
+  it("opens the settings modal from the configure button", async () => {
+    const user = userEvent.setup();
     mockStatus({ configured: false, connected: false });
+    mocks.get.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/google/settings"
+          ? {
+              data: {
+                clientId: "",
+                calendarId: "primary",
+                driveFolderId: "",
+                hasSecret: false,
+                redirectUri: "http://localhost:8080/api/google/callback",
+              },
+            }
+          : { data: { configured: false, connected: false } },
+      ),
+    );
     renderConnect();
 
-    const text = await screen.findByText("Google Calendar non configurato");
-    expect(text).toHaveAttribute(
-      "title",
-      "Crea ~/.config/fuck-toscana-salute/google-client.json (vedi README)",
-    );
+    await user.click(await screen.findByRole("button", { name: "Configura" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Configura Google" }),
+    ).toBeVisible();
   });
 
   it("shows the connect button when configured but not connected", async () => {

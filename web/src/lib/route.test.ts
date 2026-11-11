@@ -18,6 +18,13 @@ describe("parseRoute", () => {
     });
   });
 
+  it("parses the referti tab", () => {
+    expect(parseRoute("#/referti")).toEqual({
+      tab: "referti",
+      focus: undefined,
+    });
+  });
+
   it("parses the collega page", () => {
     expect(parseRoute("#/collega")).toEqual({
       tab: "collega",

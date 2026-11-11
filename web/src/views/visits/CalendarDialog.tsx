@@ -16,7 +16,7 @@ import {
   type CalendarEventBody,
 } from "../../api/client";
 import { formatDate, formatTime } from "../../lib/format";
-import { notConfiguredHint, useGoogle } from "../../google/useGoogle";
+import { useGoogle } from "../../google/useGoogle";
 import { calendarEventFields } from "./googleCalendar";
 
 interface Props {
@@ -28,11 +28,15 @@ interface Props {
 interface Failure {
   message: string;
   reconnect: boolean;
+  configure: boolean;
 }
+
+const notConfiguredMessage = "Google non è configurato";
 
 const genericFailure: Failure = {
   message: "Google o il portale regionale non rispondono. Riprova tra poco.",
   reconnect: false,
+  configure: false,
 };
 
 function failureFor(
@@ -43,21 +47,28 @@ function failureFor(
     return {
       message: "Collegamento Google scaduto: ricollega.",
       reconnect: true,
+      configure: false,
     };
   }
   if (status === 404) {
     return {
       message: "Promemoria non disponibile: riprova senza allegato.",
       reconnect: false,
+      configure: false,
     };
   }
   if (status === 409 && detail === "google_not_configured") {
-    return { message: notConfiguredHint, reconnect: false };
+    return {
+      message: notConfiguredMessage,
+      reconnect: false,
+      configure: true,
+    };
   }
   if (status === 409) {
     return {
       message: "Serve l'accesso a Gestione Prenotazioni: premi Accedi.",
       reconnect: false,
+      configure: false,
     };
   }
   return genericFailure;
@@ -68,7 +79,7 @@ export function CalendarDialog({
   title,
   onClose,
 }: Props): JSX.Element {
-  const { status, connect } = useGoogle();
+  const { status, connect, openSettings } = useGoogle();
   const [attach, setAttach] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | undefined>(undefined);
@@ -117,6 +128,12 @@ export function CalendarDialog({
     }
   };
 
+  const configureButton = (
+    <Button variant="default" size="compact-sm" onClick={openSettings}>
+      Configura
+    </Button>
+  );
+
   const connectButton = (
     <Button variant="default" size="compact-sm" onClick={handleConnect}>
       Collega Google Calendar
@@ -143,7 +160,10 @@ export function CalendarDialog({
           />
         ) : null}
         {status !== undefined && !configured ? (
-          <Text size="sm">{notConfiguredHint}</Text>
+          <Group gap="xs">
+            <Text size="sm">{notConfiguredMessage}</Text>
+            {configureButton}
+          </Group>
         ) : null}
         {configured && !connected ? <Group>{connectButton}</Group> : null}
         {failure === undefined ? null : (
@@ -151,6 +171,7 @@ export function CalendarDialog({
             <Group gap="xs">
               <Text size="sm">{failure.message}</Text>
               {failure.reconnect ? connectButton : null}
+              {failure.configure ? configureButton : null}
             </Group>
           </Alert>
         )}

@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { notifications } from "@mantine/notifications";
+
 import {
   api,
   type AppointmentsBody,
@@ -19,12 +21,14 @@ import {
   type HealthError,
 } from "./healthContext";
 import { buildIndexes } from "./indexes";
+import { refreshPortals, type RefreshScope } from "./refresh";
 
 interface Props {
   children: ReactNode;
 }
 
 interface Result<T> {
+  sessionKey: string;
   requestId: string;
   data: T | undefined;
   error: HealthError | undefined;
@@ -50,13 +54,15 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
   const [prescriptionResult, setPrescriptionResult] = useState<
     Result<PrescriptionsBody> | undefined
   >(undefined);
+  const [refreshCalls, setRefreshCalls] = useState(0);
 
   const cupState =
     session?.portals?.find((portal) => portal.portal === "cup")?.state ?? "";
   const gestioneReady = session?.gestioneReady ?? false;
   const portalKey =
     session?.portals?.map((p) => `${p.portal}:${p.state}`).join("|") ?? "";
-  const appointmentId = `${cupState}|${String(gestioneReady)}|${String(appointmentReloads)}`;
+  const appointmentSessionKey = `${cupState}|${String(gestioneReady)}`;
+  const appointmentId = `${appointmentSessionKey}|${String(appointmentReloads)}`;
   const prescriptionId = `${portalKey}#${String(prescriptionReloads)}`;
 
   useEffect(() => {
@@ -71,6 +77,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
         }
         if (data !== undefined) {
           setAppointmentResult({
+            sessionKey: appointmentSessionKey,
             requestId: appointmentId,
             data,
             error: undefined,
@@ -78,6 +85,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
           return;
         }
         setAppointmentResult({
+          sessionKey: appointmentSessionKey,
           requestId: appointmentId,
           data: undefined,
           error: appointmentsError(response.status),
@@ -87,6 +95,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
           return;
         }
         setAppointmentResult({
+          sessionKey: appointmentSessionKey,
           requestId: appointmentId,
           data: undefined,
           error: "unavailable",
@@ -97,7 +106,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
     return () => {
       controller.abort();
     };
-  }, [appointmentId]);
+  }, [appointmentId, appointmentSessionKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,6 +120,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
         }
         if (data !== undefined) {
           setPrescriptionResult({
+            sessionKey: portalKey,
             requestId: prescriptionId,
             data,
             error: undefined,
@@ -118,6 +128,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
           return;
         }
         setPrescriptionResult({
+          sessionKey: portalKey,
           requestId: prescriptionId,
           data: undefined,
           error: response.status === 401 ? "unauthorized" : "unavailable",
@@ -127,6 +138,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
           return;
         }
         setPrescriptionResult({
+          sessionKey: portalKey,
           requestId: prescriptionId,
           data: undefined,
           error: "unavailable",
@@ -137,7 +149,7 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
     return () => {
       controller.abort();
     };
-  }, [prescriptionId]);
+  }, [prescriptionId, portalKey]);
 
   const reloadAppointments = useCallback((): void => {
     setAppointmentReloads((count) => count + 1);
@@ -147,14 +159,46 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
     setPrescriptionReloads((count) => count + 1);
   }, []);
 
+  const refresh = useCallback(
+    async (scope: RefreshScope): Promise<void> => {
+      setRefreshCalls((count) => count + 1);
+      try {
+        const ok = await refreshPortals(scope);
+        if (!ok) {
+          notifications.show({
+            color: "red",
+            message: "Aggiornamento non riuscito",
+          });
+          return;
+        }
+        reloadAppointments();
+        reloadPrescriptions();
+      } catch {
+        notifications.show({
+          color: "red",
+          message: "Aggiornamento non riuscito",
+        });
+      } finally {
+        setRefreshCalls((count) => count - 1);
+      }
+    },
+    [reloadAppointments, reloadPrescriptions],
+  );
+
   const currentAppointments =
-    appointmentResult?.requestId === appointmentId
+    appointmentResult?.sessionKey === appointmentSessionKey
       ? appointmentResult
       : undefined;
   const currentPrescriptions =
-    prescriptionResult?.requestId === prescriptionId
+    prescriptionResult?.sessionKey === portalKey
       ? prescriptionResult
       : undefined;
+  const reloading =
+    (currentAppointments !== undefined &&
+      currentAppointments.requestId !== appointmentId) ||
+    (currentPrescriptions !== undefined &&
+      currentPrescriptions.requestId !== prescriptionId);
+  const refreshing = refreshCalls > 0 || reloading;
 
   const appointmentData = currentAppointments?.data;
   const prescriptionData = currentPrescriptions?.data;
@@ -178,6 +222,8 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
         reload: reloadPrescriptions,
       },
       ...indexes,
+      refreshing,
+      refresh,
     }),
     [
       appointmentData,
@@ -187,6 +233,8 @@ export function HealthDataProvider({ children }: Props): JSX.Element {
       currentPrescriptions,
       reloadPrescriptions,
       indexes,
+      refreshing,
+      refresh,
     ],
   );
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatDateTime, formatTime } from "./format";
+import {
+  formatDate,
+  formatDateTime,
+  formatShortDateTime,
+  formatTime,
+  formatUpdated,
+} from "./format";
 
 describe("formatDate", () => {
   it("formats an ISO date in Rome time", () => {
@@ -35,5 +41,38 @@ describe("formatTime", () => {
 
   it("returns a dash for undefined", () => {
     expect(formatTime(undefined)).toBe("—");
+  });
+});
+
+describe("formatShortDateTime", () => {
+  it("formats day, month and time in Rome time", () => {
+    expect(formatShortDateTime("2026-11-10T08:05:00Z")).toBe("10/11 09:05");
+  });
+});
+
+describe("formatUpdated", () => {
+  const now = new Date("2026-11-10T12:00:00Z");
+
+  it("shows only the time for a timestamp from today", () => {
+    expect(formatUpdated("2026-11-10T08:05:00Z", now)).toBe(
+      "Aggiornato alle 09:05",
+    );
+  });
+
+  it("shows day, month and time for another day", () => {
+    expect(formatUpdated("2026-11-09T08:05:00Z", now)).toBe(
+      "Aggiornato il 09/11 09:05",
+    );
+  });
+
+  it("uses the Rome day across the UTC boundary", () => {
+    expect(formatUpdated("2026-11-09T23:30:00Z", now)).toBe(
+      "Aggiornato alle 00:30",
+    );
+  });
+
+  it("returns undefined for null and undefined", () => {
+    expect(formatUpdated(null, now)).toBeUndefined();
+    expect(formatUpdated(undefined, now)).toBeUndefined();
   });
 });

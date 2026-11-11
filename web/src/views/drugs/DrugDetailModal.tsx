@@ -1,5 +1,6 @@
-import { Modal, Stack } from "@mantine/core";
+import { Button, Modal, Stack } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
+import { RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
 import { CopyButton } from "../../components/CopyButton";
@@ -11,10 +12,17 @@ import { drugStatusLabel, drugStatusTone, type DrugRowData } from "./filter";
 
 interface Props {
   row: DrugRowData;
+  refreshing: boolean;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
-export function DrugDetailModal({ row, onClose }: Props): JSX.Element {
+export function DrugDetailModal({
+  row,
+  refreshing,
+  onRefresh,
+  onClose,
+}: Props): JSX.Element {
   const fullScreen = useMediaQuery("(max-width: 48em)");
   const { fse } = row;
 
@@ -40,6 +48,15 @@ export function DrugDetailModal({ row, onClose }: Props): JSX.Element {
         </DetailSection>
         <DetailSection title="Azioni">
           <PdfLink documentRef={fse.documentRef} labelled />
+          <Button
+            variant="light"
+            w="fit-content"
+            loading={refreshing}
+            leftSection={<RefreshCw size={16} aria-hidden="true" />}
+            onClick={onRefresh}
+          >
+            Aggiorna
+          </Button>
         </DetailSection>
       </Stack>
     </Modal>

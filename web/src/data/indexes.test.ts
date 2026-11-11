@@ -156,4 +156,45 @@ describe("buildIndexes", () => {
     );
     expect([...result.unbooked]).toEqual(["0900A0000000002"]);
   });
+
+  it("builds verdicts with their verification time, upper-casing NREs", () => {
+    const result = buildIndexes(
+      {
+        appointments: [],
+        failed: [],
+        unbooked: [],
+        verdicts: [{ nre: "0900a0000000003", reason: "handled", message: "m" }],
+        updated: {
+          lists: null,
+          appointments: { "0900a0000000003": "2026-11-10T08:00:00Z" },
+          verdicts: { "0900A0000000003": "2026-11-10T08:30:00Z" },
+        },
+      },
+      undefined,
+    );
+    expect(result.verdictByNre.get("0900A0000000003")).toEqual({
+      reason: "handled",
+      message: "m",
+      verifiedAt: "2026-11-10T08:30:00Z",
+    });
+    expect(result.appointmentCheckedAtByNre.get("0900A0000000003")).toBe(
+      "2026-11-10T08:00:00Z",
+    );
+  });
+
+  it("leaves verifiedAt undefined when no time is known", () => {
+    const result = buildIndexes(
+      {
+        appointments: [],
+        failed: [],
+        unbooked: [],
+        verdicts: [{ nre: "0900A0000000003", reason: "other", message: "m" }],
+        updated: noUpdates,
+      },
+      undefined,
+    );
+    expect(
+      result.verdictByNre.get("0900A0000000003")?.verifiedAt,
+    ).toBeUndefined();
+  });
 });
