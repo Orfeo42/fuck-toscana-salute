@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Tabs, type TabItem } from "./Tabs";
 
 const tabs: readonly TabItem[] = [
-  { id: "appuntamenti", label: "Uno", content: <p>contenuto uno</p> },
-  { id: "ricette", label: "Due", content: <p>contenuto due</p> },
+  { id: "visite", label: "Uno", content: <p>contenuto uno</p> },
+  { id: "farmaci", label: "Due", content: <p>contenuto due</p> },
 ];
 
 describe("Tabs", () => {
@@ -24,7 +24,7 @@ describe("Tabs", () => {
   });
 
   it("selects the tab named by the hash", () => {
-    window.location.hash = "#/ricette";
+    window.location.hash = "#/farmaci";
     render(<Tabs tabs={tabs} />);
     expect(screen.getByRole("tab", { name: "Due" })).toHaveAttribute(
       "aria-selected",
@@ -33,21 +33,21 @@ describe("Tabs", () => {
   });
 
   it("selects the tab of a deep link and keeps the focus in the hash", () => {
-    window.location.hash = "#/ricette/0900A0000000001";
+    window.location.hash = "#/farmaci/0900A0000000001";
     render(<Tabs tabs={tabs} />);
     expect(screen.getByRole("tab", { name: "Due" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(window.location.hash).toBe("#/ricette/0900A0000000001");
+    expect(window.location.hash).toBe("#/farmaci/0900A0000000001");
   });
 
   it("clicking a tab sets the plain hash", async () => {
     const user = userEvent.setup();
-    window.location.hash = "#/ricette/0900A0000000001";
+    window.location.hash = "#/farmaci/0900A0000000001";
     render(<Tabs tabs={tabs} />);
     await user.click(screen.getByRole("tab", { name: "Uno" }));
-    expect(window.location.hash).toBe("#/appuntamenti");
+    expect(window.location.hash).toBe("#/visite");
   });
 
   it("switches on click and updates the hash", async () => {
@@ -60,7 +60,7 @@ describe("Tabs", () => {
         "true",
       );
     });
-    expect(window.location.hash).toBe("#/ricette");
+    expect(window.location.hash).toBe("#/farmaci");
     expect(screen.getByRole("tabpanel")).toHaveTextContent("contenuto due");
   });
 
@@ -77,7 +77,7 @@ describe("Tabs", () => {
       );
     });
     expect(screen.getByRole("tab", { name: "Due" })).toHaveFocus();
-    expect(window.location.hash).toBe("#/ricette");
+    expect(window.location.hash).toBe("#/farmaci");
 
     await user.keyboard("{ArrowRight}");
     await waitFor(() => {
@@ -86,7 +86,7 @@ describe("Tabs", () => {
         "true",
       );
     });
-    expect(window.location.hash).toBe("#/appuntamenti");
+    expect(window.location.hash).toBe("#/visite");
 
     await user.keyboard("{ArrowLeft}");
     await waitFor(() => {

@@ -2,10 +2,11 @@ import { act, render, screen } from "@testing-library/react";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { focusId, useFocusTarget, type FocusKind } from "./useFocusTarget";
+import type { TabId } from "./route";
+import { focusId, useFocusTarget } from "./useFocusTarget";
 
 interface Props {
-  kind: FocusKind;
+  kind: TabId;
   nre: string;
 }
 
@@ -46,20 +47,20 @@ describe("useFocusTarget", () => {
   });
 
   it("builds the id from kind and upper-cased NRE", () => {
-    expect(focusId("ricetta", "0900a0000000001")).toBe(
-      "ricetta-0900A0000000001",
+    expect(focusId("farmaci", "0900a0000000001")).toBe(
+      "farmaci-0900A0000000001",
     );
-    render(<Card kind="appuntamento" nre="0900a0000000001" />);
+    render(<Card kind="visite" nre="0900a0000000001" />);
     expect(screen.getByText("card")).toHaveAttribute(
       "id",
-      "appuntamento-0900A0000000001",
+      "visite-0900A0000000001",
     );
     expect(screen.getByText("card")).toHaveAttribute("tabindex", "-1");
   });
 
   it("scrolls and focuses on a matching hash", () => {
-    window.location.hash = "#/ricette/0900A0000000001";
-    render(<Card kind="ricetta" nre="0900A0000000001" />);
+    window.location.hash = "#/farmaci/0900A0000000001";
+    render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
     expect(screen.getByText("card")).toHaveFocus();
@@ -67,18 +68,18 @@ describe("useFocusTarget", () => {
   });
 
   it("reacts to a later hashchange", () => {
-    render(<Card kind="appuntamento" nre="0900A0000000001" />);
+    render(<Card kind="visite" nre="0900A0000000001" />);
     expect(scrollIntoView).not.toHaveBeenCalled();
 
-    go("#/appuntamenti/0900a0000000001");
+    go("#/visite/0900a0000000001");
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(screen.getByText("card")).toHaveFocus();
   });
 
   it("does nothing on the wrong tab", () => {
-    window.location.hash = "#/appuntamenti/0900A0000000001";
-    render(<Card kind="ricetta" nre="0900A0000000001" />);
+    window.location.hash = "#/visite/0900A0000000001";
+    render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(screen.getByText("card")).not.toHaveFocus();
@@ -86,8 +87,8 @@ describe("useFocusTarget", () => {
   });
 
   it("does nothing for another NRE", () => {
-    window.location.hash = "#/ricette/0900A0000000002";
-    render(<Card kind="ricetta" nre="0900A0000000001" />);
+    window.location.hash = "#/farmaci/0900A0000000002";
+    render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(screen.getByText("card")).toHaveAttribute("data-focused", "false");
@@ -95,8 +96,8 @@ describe("useFocusTarget", () => {
 
   it("still focuses when scrollIntoView is missing", () => {
     Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
-    window.location.hash = "#/ricette/0900A0000000001";
-    render(<Card kind="ricetta" nre="0900A0000000001" />);
+    window.location.hash = "#/farmaci/0900A0000000001";
+    render(<Card kind="farmaci" nre="0900A0000000001" />);
 
     expect(screen.getByText("card")).toHaveFocus();
   });

@@ -1,8 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 
-import { useRoute } from "./route";
-
-export type FocusKind = "appuntamento" | "ricetta";
+import { useRoute, type TabId } from "./route";
 
 export interface FocusTarget<T extends HTMLElement> {
   id: string;
@@ -11,19 +9,17 @@ export interface FocusTarget<T extends HTMLElement> {
   focused: boolean;
 }
 
-export function focusId(kind: FocusKind, nre: string): string {
-  return `${kind}-${nre.toUpperCase()}`;
+export function focusId(tab: TabId, nre: string): string {
+  return `${tab}-${nre.toUpperCase()}`;
 }
 
 export function useFocusTarget<T extends HTMLElement>(
-  kind: FocusKind,
+  tab: TabId,
   nre: string,
 ): FocusTarget<T> {
   const route = useRoute();
   const ref = useRef<T | null>(null);
-  const expectedTab = kind === "appuntamento" ? "appuntamenti" : "ricette";
-  const focused =
-    route.tab === expectedTab && route.focus === nre.toUpperCase();
+  const focused = route.tab === tab && route.focus === nre.toUpperCase();
 
   useEffect(() => {
     const el = ref.current;
@@ -36,5 +32,5 @@ export function useFocusTarget<T extends HTMLElement>(
     el.focus();
   }, [focused]);
 
-  return { id: focusId(kind, nre), ref, tabIndex: -1, focused };
+  return { id: focusId(tab, nre), ref, tabIndex: -1, focused };
 }

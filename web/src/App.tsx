@@ -4,16 +4,12 @@ import { HealthDataProvider } from "./data/HealthDataProvider";
 import { SessionBar } from "./components/SessionBar";
 import { Tabs, type TabItem } from "./components/Tabs";
 import { SessionProvider } from "./session/SessionProvider";
-import { AppointmentsView } from "./views/AppointmentsView";
-import { PrescriptionsView } from "./views/PrescriptionsView";
+import { DrugsView } from "./views/DrugsView";
+import { VisitsView } from "./views/VisitsView";
 
 const tabs: readonly TabItem[] = [
-  {
-    id: "appuntamenti",
-    label: "Appuntamenti",
-    content: <AppointmentsView />,
-  },
-  { id: "ricette", label: "Ricette", content: <PrescriptionsView /> },
+  { id: "visite", label: "Visite ed esami", content: <VisitsView /> },
+  { id: "farmaci", label: "Farmaci", content: <DrugsView /> },
 ];
 
 export function App(): JSX.Element {
