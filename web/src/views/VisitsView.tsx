@@ -9,6 +9,7 @@ import { VisitRow } from "./visits/VisitRow";
 import {
   buildRows,
   countByStatus,
+  countExpired,
   effectiveState,
   filterRows,
   sortRows,
@@ -41,6 +42,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   );
   const [status, setStatus] = useState<StatusFilter>("open");
   const [search, setSearch] = useState("");
+  const [showExpired, setShowExpired] = useState(false);
   const sort = useSort<VisitSortKey>("appuntamento", "asc", descFirst);
 
   const currentNow = now ?? mountedAt;
@@ -49,9 +51,10 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     prescriptions.data?.prescriptions ?? [],
     appointments.data?.appointments ?? [],
   );
-  const counts = countByStatus(data, search, context);
+  const counts = countByStatus(data, search, showExpired, context);
+  const expiredCount = countExpired(data, search, context);
   const visible = sortRows(
-    filterRows(data, { status, search }, context),
+    filterRows(data, { status, search, showExpired }, context),
     sort.key,
     sort.dir,
     context,
@@ -63,11 +66,17 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     focus !== handledFocus
   ) {
     setHandledFocus(focus);
-    const exists = data.some((row) => row.nre.toUpperCase() === focus);
+    const focused = data.find((row) => row.nre.toUpperCase() === focus);
     const shown = visible.some((row) => row.nre.toUpperCase() === focus);
-    if (exists && !shown) {
+    if (focused !== undefined && !shown) {
       setStatus("all");
       setSearch("");
+      if (
+        effectiveState(focused, bookingByNre, notInCup, currentNow).kind ===
+        "expired"
+      ) {
+        setShowExpired(true);
+      }
     }
   }
 
@@ -100,6 +109,18 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
             </label>
           ))}
         </fieldset>
+        {expiredCount > 0 ? (
+          <label className="vs-check">
+            <input
+              type="checkbox"
+              checked={showExpired}
+              onChange={(event) => {
+                setShowExpired(event.target.checked);
+              }}
+            />
+            {`Mostra scadute (${String(expiredCount)})`}
+          </label>
+        ) : null}
         <label className="vs-field">
           Cerca
           <input

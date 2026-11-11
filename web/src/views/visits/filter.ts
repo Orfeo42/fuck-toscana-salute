@@ -30,6 +30,7 @@ export type VisitSortKey =
 export interface Criteria {
   status: StatusFilter;
   search: string;
+  showExpired: boolean;
 }
 
 export type StatusCounts = Record<StatusFilter, number>;
@@ -208,6 +209,13 @@ function isOpen(row: RowBody, context: BookingContext): boolean {
   return !closedStatuses.has(row.fse.status);
 }
 
+function isExpired(row: RowBody, context: BookingContext): boolean {
+  return (
+    effectiveState(row, context.bookingByNre, context.notInCup, context.now)
+      .kind === "expired"
+  );
+}
+
 function matchesStatus(
   row: RowBody,
   status: StatusFilter,
@@ -258,6 +266,7 @@ export function filterRows(
 ): RowBody[] {
   return rows.filter(
     (row) =>
+      (criteria.showExpired || !isExpired(row, context)) &&
       matchesStatus(row, criteria.status, context) &&
       matchesSearch(row, criteria.search, context),
   );
@@ -266,9 +275,14 @@ export function filterRows(
 export function countByStatus(
   rows: readonly RowBody[],
   search: string,
+  showExpired: boolean,
   context: BookingContext,
 ): StatusCounts {
-  const base = rows.filter((row) => matchesSearch(row, search, context));
+  const base = rows.filter(
+    (row) =>
+      (showExpired || !isExpired(row, context)) &&
+      matchesSearch(row, search, context),
+  );
   return {
     upcoming: base.filter((row) => matchesStatus(row, "upcoming", context))
       .length,
@@ -277,6 +291,16 @@ export function countByStatus(
     open: base.filter((row) => matchesStatus(row, "open", context)).length,
     all: base.length,
   };
+}
+
+export function countExpired(
+  rows: readonly RowBody[],
+  search: string,
+  context: BookingContext,
+): number {
+  return rows.filter(
+    (row) => isExpired(row, context) && matchesSearch(row, search, context),
+  ).length;
 }
 
 function dateMs(row: RowBody): number | undefined {

@@ -632,7 +632,10 @@ describe("VisitsView", () => {
       [],
     );
     renderView();
-    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Mostra scadute (1)" }),
+    );
+    await user.click(screen.getByRole("radio", { name: /Tutte/ }));
     await screen.findByText("Visita scaduta");
 
     const row = rowOf("Visita scaduta");
@@ -641,6 +644,74 @@ describe("VisitsView", () => {
     expect(
       within(row).queryByRole("link", { name: "Prenota sul CUP" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides expired rows under Tutte by default", async () => {
+    const user = userEvent.setup();
+    mockRows(
+      [
+        fseVisit("0900A0000000063", "Visita scaduta", "2026-11-09T09:00:00Z"),
+        fseVisit("0900A0000000064", "Visita valida", "2026-11-20T09:00:00Z"),
+      ],
+      [],
+    );
+    renderView();
+    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+
+    expect(titles()).toEqual(["Visita valida"]);
+    expect(
+      screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
+    ).not.toBeChecked();
+  });
+
+  it("shows expired rows once Mostra scadute is checked", async () => {
+    const user = userEvent.setup();
+    mockRows(
+      [
+        fseVisit("0900A0000000063", "Visita scaduta", "2026-11-09T09:00:00Z"),
+        fseVisit("0900A0000000064", "Visita valida", "2026-11-20T09:00:00Z"),
+      ],
+      [],
+    );
+    renderView();
+    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
+    );
+
+    expect(titles()).toHaveLength(2);
+    expect(screen.getByText("Visita scaduta")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Tutte (2)" })).toBeVisible();
+  });
+
+  it("omits the Mostra scadute checkbox without expired rows", async () => {
+    renderView();
+    await screen.findByText("Visita esempio");
+
+    expect(
+      screen.queryByRole("checkbox", { name: /Mostra scadute/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("checks Mostra scadute for a deep link to an expired NRE", async () => {
+    stubScroll(vi.fn());
+    window.location.hash = "#/visite/0900A0000000065";
+    mockRows(
+      [fseVisit("0900A0000000065", "Visita scaduta", "2026-11-09T09:00:00Z")],
+      [],
+    );
+    try {
+      renderView();
+      const row = (await screen.findByText("Visita scaduta")).closest("tr");
+
+      expect(row).toHaveClass("is-focused");
+      expect(
+        screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
+      ).toBeChecked();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
   });
 
   it("shows scade il for a valid status 3 prescription", async () => {
