@@ -4,7 +4,7 @@ Personal dashboard over the Regione Toscana health portals (CUP 2.0, Fascicolo S
 
 ## Goals
 
-- Live data only: every view calls the regional APIs on demand. No local cache, no database, nothing health-related written to disk.
+- Cached live data: views read through a Postgres-backed response cache (see "Data storage") that falls back to the regional APIs when a record is missing or older than its TTL. Everything health-related is stored encrypted.
 - Task-oriented UI, not a clone of the portals: upcoming appointments first, unbooked prescriptions with expiry, results, medicines/vaccines, search across all of it.
 - Merge CUP + FSE + ZeroCode into one view.
 - Runs locally only (health data is GDPR special-category). Never deployed or published.
@@ -12,7 +12,7 @@ Personal dashboard over the Regione Toscana health portals (CUP 2.0, Fascicolo S
 ## Non-goals / hard constraints
 
 - No CAPTCHA bypass or automation. The user solves the reCAPTCHA in the app-owned login window.
-- No credential handling: SPID/CIE login and the CF/tessera form are filled by the user in the login window. Tokens live in backend memory only.
+- No credential handling: SPID/CIE login and the CF/tessera form are filled by the user in the login window. Tokens live in backend memory and in the encrypted secrets table (so a restart does not force a new login).
 - No writes to bookings (book/move/cancel) until each endpoint is verified with explicit user approval.
 
 ## Architecture
@@ -20,6 +20,15 @@ Personal dashboard over the Regione Toscana health portals (CUP 2.0, Fascicolo S
 - Local backend (required): the regional APIs answer CORS only for their own origins (`access-control-allow-origin: https://prenota.sanita.toscana.it` / `https://fse.sanita.toscana.it`), so a browser page on localhost cannot call them. The backend proxies calls, holds tokens in memory, refreshes them.
 - App-owned login window (Playwright, headed): the user logs in to each portal there; the backend reads `access_token` / `refresh_token` from the page `sessionStorage` after login, then keeps the session alive with the refresh grant.
 - Frontend served by the backend on localhost.
+
+## Data storage
+
+- Postgres runs as the `db` compose service; the backend reads `FTS_DATABASE_HOST` (required), `FTS_DATABASE_PORT` (5432), `FTS_DATABASE_NAME` (`fts`), `FTS_DATABASE_USER` (`fts`) and `FTS_DATABASE_PASSWORD_FILE` (required). `FTS_SECRET_KEY_FILE` (base64 of 32 bytes, mode 0600) is the encryption key and is also required.
+- Encryption: HKDF-SHA256 derives an AES-256-GCM key and an HMAC-SHA256 key from the secret key. Every sensitive column (subject, payload, secret value) is sealed with AES-GCM, the source and the subject MAC bound as AAD. Lookups use the HMAC of the subject (NRE or secret key), so no identifier is stored in clear. A wrong key fails at startup when any stored row cannot be decrypted.
+- `responses` table (history, append-only): source, subject MAC, encrypted subject, `fetched_at`, status, encrypted payload. Sources: `cup.prescriptions`, `cup.appointments`, `cup.verdict`, `fse.prescriptions`, `fse.reports`. The CUP verdict is stored as the raw upstream JSON with the `paziente` block removed. Reads take the latest row per source and subject.
+- `secrets` table: encrypted session snapshot and Google token / settings (service `fuck-toscana-salute`, users `session`, `google`, `google-settings`). The previous `secrets.enc` file in the data directory is copied into the table on first start (existing table entries win) and renamed `secrets.enc.migrated`. The system keyring backend was removed.
+- Cache TTLs: lists (prescriptions, reports) 1 h, appointments per NRE 1 h, verdicts per NRE 24 h. An expired or missing record is fetched live and stored; when the live call fails the stale record is served. Freshness is exposed: `GET /api/appointments`, `/api/prescriptions` and `/api/reports` return `updated` timestamps.
+- Refresh: `POST /api/refresh` with `{all: true}` forces lists, appointments, verdicts and the reports list; with `{nres: [...]}` forces only those NREs (appointments and verdicts). Same-origin only (`Origin` must match `Host`).
 
 ## Authentication
 
@@ -105,6 +114,18 @@ FSE `nre/dettaglio` `dataScadenza` is sometimes the placeholder year 9999 (e.g. 
 
 The CUP booking flow's `GET {cupBe}/getPrescrizioneElettronica?cf&nre&numbersTeam` performs the "presa in carico" (state-changing on the national prescription system, paired with `/setRilascia`). The app must never call it automatically.
 
+### Reports (referti)
+
+Read-only: the backend lists the reports of the seven FSE kinds, lists the documents of a report and downloads a PDF. It never calls the endpoints that mark a report as read or hide it ("oscura"), so `unread` and `hidden` are only mirrored from `statoConsultazione` / `statoVisibilita`. Identifiers of health documents travel in POST bodies, never in URLs.
+
+- `GET /api/reports` → `{reports[]{kind, kindLabel, abstractId, detailId, repCode, date, updatedAt, provider, unread, hidden}, failures[]{kind, kindLabel, message}, updated}`; a kind that fails is reported in `failures` and does not hide the others.
+- `POST /api/reports/documents` body `{kind, abstractId, detailId, repCode}` → `{documents[]{position, label, acceptedAt?, provider?}}`.
+- `POST /api/reports/pdf` body `{kind, abstractId, detailId, repCode, position}` → `application/pdf`.
+
+### Google settings
+
+The OAuth client is configured from the UI, not from a file: `GET /api/google/settings` → `{clientId, calendarId, driveFolderId, hasSecret, redirectUri}` (the secret is never returned); `PUT /api/google/settings` body `{clientId, clientSecret?, calendarId?, driveFolderId?}` (an empty secret keeps the stored one; changing the client id drops the stored token) is stored encrypted in the `secrets` table. The redirect URI is built from the request (`X-Forwarded-Proto` or `http`, plus `Host`) with path `/api/google/callback` and must be registered in the Google client.
+
 ### ZeroCode (blood draws)
 
 Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zerocode.sanita.toscana.it/api/*`, own SPID login (likely cookie session, not the `rt` Keycloak). Known paths: `/api/profile`, `/api/memo/<id>` (promemoria PDF), `/api/payment-notice/<id>`, `/api/cube`. Not tested with a real session yet.
@@ -112,7 +133,7 @@ Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zero
 ## Screens
 
 - Upcoming: appointments sorted by date, each with prescription, place, and promemoria one click away.
-- To book: unbooked prescriptions with prescription date / expiry.
+- To book: unbooked prescriptions with prescription date / expiry and the CUP verdict (`bookable`, `handled`, `expired`, `other`) fetched per unbooked NRE via `getPrescrizioneElettronicaSecured` (read-only).
 - Results: lab, radiology, discharge letters, ER, newest first, PDF inline.
 - Medicines & vaccines.
 - Search across everything.
@@ -134,5 +155,5 @@ Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zero
 
 ## Stack
 
-- Backend: Go (stdlib `net/http`, `log/slog`), `playwright-go` for the login window.
+- Backend: Go (stdlib `net/http`, `log/slog`), `playwright-go` for the login window, Postgres via `pgx`/`sqlx`.
 - Frontend: React + Vite + TypeScript, served by the backend on localhost.

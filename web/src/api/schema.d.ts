@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/google/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-google-settings"];
+        put: operations["save-google-settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/login": {
         parameters: {
             query?: never;
@@ -180,6 +196,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list-reports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["list-report-documents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["get-report-pdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/session": {
         parameters: {
             query?: never;
@@ -221,6 +301,18 @@ export interface components {
             appointments: components["schemas"]["AppointmentBody"][] | null;
             failed: components["schemas"]["FailedBody"][] | null;
             unbooked: string[] | null;
+            updated: components["schemas"]["AppointmentsUpdatedBody"];
+            verdicts: components["schemas"]["VerdictBody"][] | null;
+        };
+        AppointmentsUpdatedBody: {
+            appointments: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            lists: string | null;
+            verdicts: {
+                [key: string]: string;
+            };
         };
         CalendarEventBody: {
             /**
@@ -314,6 +406,31 @@ export interface components {
             readonly $schema?: string;
             authUrl: string;
         };
+        GoogleSettingsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GoogleSettingsBody.json
+             */
+            readonly $schema?: string;
+            calendarId: string;
+            clientId: string;
+            driveFolderId: string;
+            hasSecret: boolean;
+            redirectUri: string;
+        };
+        GoogleSettingsRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GoogleSettingsRequest.json
+             */
+            readonly $schema?: string;
+            calendarId?: string;
+            clientId: string;
+            clientSecret?: string;
+            driveFolderId?: string;
+        };
         GoogleStatusBody: {
             /**
              * Format: uri
@@ -385,6 +502,90 @@ export interface components {
              */
             readonly $schema?: string;
             prescriptions: components["schemas"]["RowBody"][] | null;
+            /** Format: date-time */
+            updated: string | null;
+        };
+        RefreshRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshRequest.json
+             */
+            readonly $schema?: string;
+            all?: boolean;
+            nres?: string[] | null;
+        };
+        ReportBody: {
+            abstractId: string;
+            /** Format: date-time */
+            date?: string;
+            detailId: string;
+            hidden: boolean;
+            kind: string;
+            kindLabel: string;
+            provider: string;
+            repCode: string;
+            unread: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ReportDocumentBody: {
+            /** Format: date-time */
+            acceptedAt?: string;
+            label: string;
+            position: string;
+            provider?: string;
+        };
+        ReportDocumentsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportDocumentsBody.json
+             */
+            readonly $schema?: string;
+            documents: components["schemas"]["ReportDocumentBody"][] | null;
+        };
+        ReportFailureBody: {
+            kind: string;
+            kindLabel: string;
+            message: string;
+        };
+        ReportPDFRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportPDFRequest.json
+             */
+            readonly $schema?: string;
+            abstractId?: string;
+            detailId?: string;
+            kind: string;
+            position?: string;
+            repCode?: string;
+        };
+        ReportRefRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportRefRequest.json
+             */
+            readonly $schema?: string;
+            abstractId?: string;
+            detailId?: string;
+            kind: string;
+            repCode?: string;
+        };
+        ReportsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportsBody.json
+             */
+            readonly $schema?: string;
+            failures: components["schemas"]["ReportFailureBody"][] | null;
+            reports: components["schemas"]["ReportBody"][] | null;
+            /** Format: date-time */
+            updated: string | null;
         };
         RowBody: {
             cup?: components["schemas"]["PrescriptionCUPBody"];
@@ -412,6 +613,12 @@ export interface components {
             place?: string;
             postalCode?: string;
             province: string;
+        };
+        VerdictBody: {
+            message: string;
+            nre: string;
+            /** @enum {string} */
+            reason: "bookable" | "handled" | "expired" | "other";
         };
     };
     responses: never;
@@ -635,6 +842,66 @@ export interface operations {
             };
         };
     };
+    "get-google-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleSettingsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-google-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "start-login-all": {
         parameters: {
             query?: never;
@@ -765,6 +1032,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PrescriptionsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-report-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRefRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDocumentsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-report-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportPDFRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
                 };
             };
             /** @description Error */

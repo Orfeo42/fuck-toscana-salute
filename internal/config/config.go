@@ -3,8 +3,11 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -21,6 +24,9 @@ const (
 	ErrInvalidDataDir    configError = "data directory must be an absolute path"
 	ErrInvalidLoginMode  configError = "login mode must be window or bookmarklet"
 	ErrNonLoopbackViewer configError = "viewer address must be loopback"
+
+	ErrDatabasePassword      configError = "cannot read database password file"
+	ErrDatabasePasswordEmpty configError = "database password file is empty"
 )
 
 const (
@@ -38,10 +44,14 @@ type Config struct {
 	DataDir        string        `env:"FTS_DATA_DIR"`
 	LoginMode      string        `env:"FTS_LOGIN_MODE" envDefault:"window"`
 	ListenAny      bool          `env:"FTS_LISTEN_ANY"`
-	SecretKeyFile  string        `env:"FTS_SECRET_KEY_FILE"`
+	SecretKeyFile  string        `env:"FTS_SECRET_KEY_FILE,required"`
 	ViewerAddr     string        `env:"FTS_VIEWER_ADDR"`
 
-	GoogleClientFile string `env:"FTS_GOOGLE_CLIENT_FILE"`
+	DatabaseHost         string `env:"FTS_DATABASE_HOST,required"`
+	DatabasePort         int    `env:"FTS_DATABASE_PORT" envDefault:"5432"`
+	DatabaseName         string `env:"FTS_DATABASE_NAME" envDefault:"fts"`
+	DatabaseUser         string `env:"FTS_DATABASE_USER" envDefault:"fts"`
+	DatabasePasswordFile string `env:"FTS_DATABASE_PASSWORD_FILE,required"`
 }
 
 func Load() (Config, error) {
@@ -86,15 +96,26 @@ func Load() (Config, error) {
 		return Config{}, ErrInvalidProfileDir
 	}
 
-	if cfg.GoogleClientFile == "" {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return Config{}, fmt.Errorf("user config dir: %w", err)
-		}
-		cfg.GoogleClientFile = filepath.Join(configDir, "fuck-toscana-salute", "google-client.json")
-	}
-
 	return cfg, nil
+}
+
+func (c Config) DatabaseDSN() (string, error) {
+	raw, err := os.ReadFile(c.DatabasePasswordFile)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrDatabasePassword, err)
+	}
+	password := strings.TrimSpace(string(raw))
+	if password == "" {
+		return "", ErrDatabasePasswordEmpty
+	}
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(c.DatabaseUser, password),
+		Host:     net.JoinHostPort(c.DatabaseHost, strconv.Itoa(c.DatabasePort)),
+		Path:     "/" + c.DatabaseName,
+		RawQuery: "sslmode=disable",
+	}
+	return dsn.String(), nil
 }
 
 func defaultDataDir() (string, error) {

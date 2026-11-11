@@ -60,9 +60,49 @@
               "type": "string"
             },
             "type": ["array", "null"]
+          },
+          "updated": {
+            "$ref": "#/components/schemas/AppointmentsUpdatedBody"
+          },
+          "verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/VerdictBody"
+            },
+            "type": ["array", "null"]
           }
         },
-        "required": ["appointments", "failed", "unbooked"],
+        "required": [
+          "appointments",
+          "failed",
+          "unbooked",
+          "verdicts",
+          "updated"
+        ],
+        "type": "object"
+      },
+      "AppointmentsUpdatedBody": {
+        "additionalProperties": false,
+        "properties": {
+          "appointments": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "lists": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          },
+          "verdicts": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": ["lists", "appointments", "verdicts"],
         "type": "object"
       },
       "CalendarEventBody": {
@@ -234,6 +274,73 @@
           }
         },
         "required": ["authUrl"],
+        "type": "object"
+      },
+      "GoogleSettingsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/GoogleSettingsBody.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "calendarId": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "driveFolderId": {
+            "type": "string"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "redirectUri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientId",
+          "calendarId",
+          "driveFolderId",
+          "hasSecret",
+          "redirectUri"
+        ],
+        "type": "object"
+      },
+      "GoogleSettingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/GoogleSettingsRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "calendarId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "clientId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "clientSecret": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "driveFolderId": {
+            "maxLength": 100,
+            "type": "string"
+          }
+        },
+        "required": ["clientId"],
         "type": "object"
       },
       "GoogleStatusBody": {
@@ -415,9 +522,237 @@
               "$ref": "#/components/schemas/RowBody"
             },
             "type": ["array", "null"]
+          },
+          "updated": {
+            "format": "date-time",
+            "type": ["string", "null"]
           }
         },
-        "required": ["prescriptions"],
+        "required": ["prescriptions", "updated"],
+        "type": "object"
+      },
+      "RefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/RefreshRequest.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "nres": {
+            "items": {
+              "pattern": "^[0-9A-Za-z]{10,20}$",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "type": ["array", "null"]
+          }
+        },
+        "type": "object"
+      },
+      "ReportBody": {
+        "additionalProperties": false,
+        "properties": {
+          "abstractId": {
+            "type": "string"
+          },
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detailId": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "kindLabel": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "repCode": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "kindLabel",
+          "abstractId",
+          "detailId",
+          "repCode",
+          "provider",
+          "unread",
+          "hidden"
+        ],
+        "type": "object"
+      },
+      "ReportDocumentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": ["position", "label"],
+        "type": "object"
+      },
+      "ReportDocumentsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportDocumentsBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ReportDocumentBody"
+            },
+            "type": ["array", "null"]
+          }
+        },
+        "required": ["documents"],
+        "type": "object"
+      },
+      "ReportFailureBody": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "kindLabel": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "kindLabel", "message"],
+        "type": "object"
+      },
+      "ReportPDFRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/ReportPDFRequest.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "abstractId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "detailId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 20,
+            "type": "string"
+          },
+          "position": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "repCode": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "type": "object"
+      },
+      "ReportRefRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/ReportRefRequest.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "abstractId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "detailId": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 20,
+            "type": "string"
+          },
+          "repCode": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": ["kind"],
+        "type": "object"
+      },
+      "ReportsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": ["https://example.com/schemas/ReportsBody.json"],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/ReportFailureBody"
+            },
+            "type": ["array", "null"]
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ReportBody"
+            },
+            "type": ["array", "null"]
+          },
+          "updated": {
+            "format": "date-time",
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["reports", "failures", "updated"],
         "type": "object"
       },
       "RowBody": {
@@ -492,6 +827,23 @@
           }
         },
         "required": ["name", "description", "address", "city", "province"],
+        "type": "object"
+      },
+      "VerdictBody": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "nre": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": ["bookable", "handled", "expired", "other"],
+            "type": "string"
+          }
+        },
+        "required": ["nre", "reason", "message"],
         "type": "object"
       }
     }
@@ -745,6 +1097,61 @@
         }
       }
     },
+    "/api/google/settings": {
+      "get": {
+        "operationId": "get-google-settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSettingsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "save-google-settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
     "/api/login": {
       "post": {
         "operationId": "start-login-all",
@@ -859,6 +1266,150 @@
               }
             },
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/refresh": {
+      "post": {
+        "operationId": "refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "operationId": "list-reports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/reports/documents": {
+      "post": {
+        "operationId": "list-report-documents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDocumentsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/reports/pdf": {
+      "post": {
+        "operationId": "get-report-pdf",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportPDFRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "contentEncoding": "base64",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "default": {
             "content": {

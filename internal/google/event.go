@@ -25,7 +25,6 @@ const (
 	statusCancelled = "cancelled"
 	statusConfirmed = "confirmed"
 
-	calendarID    = "primary"
 	timeZone      = "Europe/Rome"
 	pdfMimeType   = "application/pdf"
 	eventIDPrefix = "fts"
@@ -82,8 +81,9 @@ func eventID(key string) string {
 }
 
 func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResult, error) {
-	if c.cfg == nil {
-		return EventResult{}, ErrNotConfigured
+	settings, err := c.configured()
+	if err != nil {
+		return EventResult{}, err
 	}
 	token, err := c.store.Load(ctx)
 	if err != nil {
@@ -98,7 +98,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 	}
 
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
-	ts := &savingSource{ctx: ctx, src: c.cfg.TokenSource(ctx, token), store: c.store, last: token.AccessToken}
+	ts := &savingSource{ctx: ctx, src: c.oauthConfig(settings, "").TokenSource(ctx, token), store: c.store, last: token.AccessToken}
 	calOpts := []option.ClientOption{option.WithTokenSource(ts)}
 	if c.calendarEndpoint != "" {
 		calOpts = append(calOpts, option.WithEndpoint(c.calendarEndpoint))
@@ -109,7 +109,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 	}
 
 	id := eventID(ev.Key)
-	existing, err := c.getEvent(ctx, cal, id)
+	existing, err := c.getEvent(ctx, cal, settings.CalendarID, id)
 	if err != nil {
 		return EventResult{}, c.classify(ctx, err)
 	}
@@ -126,7 +126,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 			return EventResult{}, err
 		}
 		name := "promemoria-" + ev.Start.In(rome).Format(time.DateOnly) + ".pdf"
-		file, err := c.upload(ctx, svc, name, pdf)
+		file, err := c.upload(ctx, svc, name, settings.DriveFolderID, pdf)
 		if err != nil {
 			return EventResult{}, c.classify(ctx, err)
 		}
@@ -150,7 +150,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 		Attachments: attachments,
 	}
 
-	result, err := c.write(ctx, cal, body, existing != nil)
+	result, err := c.write(ctx, cal, settings.CalendarID, body, existing != nil)
 	if fileID != "" && (err != nil || !result.Created) {
 		c.deleteFile(ctx, svc, fileID)
 	}
@@ -160,7 +160,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 	return result, nil
 }
 
-func (c *Client) write(ctx context.Context, cal *calendar.Service, body *calendar.Event, cancelled bool) (EventResult, error) {
+func (c *Client) write(ctx context.Context, cal *calendar.Service, calendarID string, body *calendar.Event, cancelled bool) (EventResult, error) {
 	if !cancelled {
 		created, err := cal.Events.Insert(calendarID, body).SupportsAttachments(true).Context(ctx).Do()
 		if err == nil {
@@ -169,7 +169,7 @@ func (c *Client) write(ctx context.Context, cal *calendar.Service, body *calenda
 		if !isStatus(err, http.StatusConflict) {
 			return EventResult{}, err
 		}
-		raced, getErr := c.getEvent(ctx, cal, body.Id)
+		raced, getErr := c.getEvent(ctx, cal, calendarID, body.Id)
 		if getErr != nil {
 			return EventResult{}, getErr
 		}
@@ -188,7 +188,7 @@ func (c *Client) write(ctx context.Context, cal *calendar.Service, body *calenda
 	return EventResult{HTMLLink: updated.HtmlLink, Created: true}, nil
 }
 
-func (c *Client) getEvent(ctx context.Context, cal *calendar.Service, id string) (*calendar.Event, error) {
+func (c *Client) getEvent(ctx context.Context, cal *calendar.Service, calendarID, id string) (*calendar.Event, error) {
 	got, err := cal.Events.Get(calendarID, id).Context(ctx).Do()
 	if isStatus(err, http.StatusNotFound) {
 		return nil, nil
@@ -211,8 +211,12 @@ func (c *Client) driveService(ctx context.Context, ts oauth2.TokenSource) (*driv
 	return svc, nil
 }
 
-func (c *Client) upload(ctx context.Context, svc *drive.Service, name string, pdf []byte) (*drive.File, error) {
-	file, err := svc.Files.Create(&drive.File{Name: name, MimeType: pdfMimeType}).
+func (c *Client) upload(ctx context.Context, svc *drive.Service, name, folderID string, pdf []byte) (*drive.File, error) {
+	meta := &drive.File{Name: name, MimeType: pdfMimeType}
+	if folderID != "" {
+		meta.Parents = []string{folderID}
+	}
+	file, err := svc.Files.Create(meta).
 		Media(bytes.NewReader(pdf), googleapi.ContentType(pdfMimeType)).
 		Fields("id,webViewLink").
 		Context(ctx).

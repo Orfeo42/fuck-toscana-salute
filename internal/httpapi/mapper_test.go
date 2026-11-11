@@ -121,3 +121,29 @@ func TestFailureReason(t *testing.T) {
 		assert.Equal(t, "upstream_500", failureReason(&upstream.StatusError{Status: 500}))
 	})
 }
+
+func TestToAppointmentsBodyVerdicts(t *testing.T) {
+	t.Run("verdicts follow unbooked order keyed by upper NRE", func(t *testing.T) {
+		result := agenda.Result{
+			Unbooked: []string{"0900a0000000002", "0900A0000000001", "0900A0000000003"},
+			Verdicts: map[string]cup.Verdict{
+				"0900A0000000001": {Reason: cup.VerdictExpired, Message: "scaduta"},
+				"0900A0000000002": {Reason: cup.VerdictBookable, Message: "ok"},
+			},
+		}
+
+		got := toAppointmentsBody(result)
+
+		assert.Equal(t, []VerdictBody{
+			{NRE: "0900a0000000002", Reason: "bookable", Message: "ok"},
+			{NRE: "0900A0000000001", Reason: "expired", Message: "scaduta"},
+		}, got.Verdicts)
+	})
+
+	t.Run("no verdicts is an empty slice", func(t *testing.T) {
+		got := toAppointmentsBody(agenda.Result{})
+
+		assert.NotNil(t, got.Verdicts)
+		assert.Empty(t, got.Verdicts)
+	})
+}

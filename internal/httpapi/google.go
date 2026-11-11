@@ -27,6 +27,50 @@ type GoogleConnectBody struct {
 	AuthURL string `json:"authUrl"`
 }
 
+type redirectInput struct {
+	redirectURL string
+}
+
+func (i *redirectInput) Resolve(ctx huma.Context) []error {
+	scheme := "http"
+	if ctx.Header("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	i.redirectURL = scheme + "://" + ctx.Host() + google.CallbackPath
+	return nil
+}
+
+type googleConnectInput struct {
+	redirectInput
+}
+
+type googleSettingsInput struct {
+	redirectInput
+}
+
+type googleSettingsOutput struct {
+	Body GoogleSettingsBody
+}
+
+type GoogleSettingsBody struct {
+	ClientID      string `json:"clientId"`
+	CalendarID    string `json:"calendarId"`
+	DriveFolderID string `json:"driveFolderId"`
+	HasSecret     bool   `json:"hasSecret"`
+	RedirectURI   string `json:"redirectUri"`
+}
+
+type saveGoogleSettingsInput struct {
+	Body GoogleSettingsRequest
+}
+
+type GoogleSettingsRequest struct {
+	ClientID      string `json:"clientId" required:"true" maxLength:"200"`
+	ClientSecret  string `json:"clientSecret,omitempty" maxLength:"200"`
+	CalendarID    string `json:"calendarId,omitempty" maxLength:"200"`
+	DriveFolderID string `json:"driveFolderId,omitempty" maxLength:"100"`
+}
+
 type createCalendarEventInput struct {
 	Body CalendarEventRequest
 }
@@ -70,12 +114,50 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 		Method:        http.MethodPost,
 		Path:          "/api/google/connect",
 		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, _ *struct{}) (*googleConnectOutput, error) {
-		authURL, err := g.AuthURL()
+	}, func(ctx context.Context, in *googleConnectInput) (*googleConnectOutput, error) {
+		authURL, err := g.AuthURL(ctx, in.redirectURL)
 		if err != nil {
 			return nil, toHTTPError(ctx, "start-google-connect", err)
 		}
 		return &googleConnectOutput{Body: GoogleConnectBody{AuthURL: authURL}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "get-google-settings",
+		Method:        http.MethodGet,
+		Path:          "/api/google/settings",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *googleSettingsInput) (*googleSettingsOutput, error) {
+		settings, err := g.Settings(ctx)
+		if err != nil {
+			return nil, toHTTPError(ctx, "get-google-settings", err)
+		}
+		return &googleSettingsOutput{Body: GoogleSettingsBody{
+			ClientID:      settings.ClientID,
+			CalendarID:    settings.CalendarID,
+			DriveFolderID: settings.DriveFolderID,
+			HasSecret:     settings.HasSecret,
+			RedirectURI:   in.redirectURL,
+		}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "save-google-settings",
+		Method:        http.MethodPut,
+		Path:          "/api/google/settings",
+		DefaultStatus: http.StatusNoContent,
+		Middlewares:   sameOrigin(api),
+	}, func(ctx context.Context, in *saveGoogleSettingsInput) (*emptyOutput, error) {
+		err := g.SaveSettings(ctx, google.Settings{
+			ClientID:      in.Body.ClientID,
+			ClientSecret:  in.Body.ClientSecret,
+			CalendarID:    in.Body.CalendarID,
+			DriveFolderID: in.Body.DriveFolderID,
+		})
+		if err != nil {
+			return nil, toHTTPError(ctx, "save-google-settings", err)
+		}
+		return &emptyOutput{}, nil
 	})
 
 	huma.Register(api, huma.Operation{

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/config"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
@@ -23,7 +24,9 @@ import (
 	"fuck-toscana-salute/internal/keycloak"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
+	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/store"
 	"fuck-toscana-salute/internal/upstream"
 	"fuck-toscana-salute/internal/vault"
 	"fuck-toscana-salute/internal/viewer"
@@ -33,10 +36,11 @@ import (
 const (
 	lookupConcurrency = 4
 	superviseTick     = time.Minute
-	keyringService    = "fuck-toscana-salute"
-	keyringUser       = "session"
-	keyringGoogleUser = "google"
+	secretService     = "fuck-toscana-salute"
+	sessionUser       = "session"
+	googleUser        = "google"
 	secretsFile       = "secrets.enc"
+	migratedSuffix    = ".migrated"
 )
 
 type documents struct {
@@ -46,6 +50,23 @@ type documents struct {
 
 func (d documents) Promemoria(ctx context.Context, bookingID string) ([]byte, error) {
 	return d.bookings.Promemoria(ctx, bookingID)
+}
+
+type reports struct {
+	*referti.Client
+	cached *cache.Reports
+}
+
+func (r reports) List(ctx context.Context) (referti.Listing, error) {
+	return r.cached.List(ctx)
+}
+
+type freshness struct {
+	st *store.Store
+}
+
+func (f freshness) FetchedAt(ctx context.Context, source string) (map[string]time.Time, error) {
+	return cache.FetchedAt(ctx, f.st, source)
 }
 
 func main() {
@@ -76,33 +97,55 @@ func run(ctx context.Context) error {
 
 func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	secrets, err := secretBackend(ctx, cfg)
+	key, err := vault.LoadKey(cfg.SecretKeyFile)
 	if err != nil {
+		return fmt.Errorf("load secret key: %w", err)
+	}
+	dsn, err := cfg.DatabaseDSN()
+	if err != nil {
+		return fmt.Errorf("database dsn: %w", err)
+	}
+	st, err := store.Open(ctx, dsn, key)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer func() {
+		if err := st.Close(); err != nil {
+			slog.WarnContext(ctx, "store close failed", slog.String("error", err.Error()))
+		}
+	}()
+	if err := migrateSecrets(ctx, filepath.Join(cfg.DataDir, secretsFile), key, st); err != nil {
 		return err
 	}
-	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.NewWithBackend(secrets, keyringService, keyringUser), cfg.RefreshMargin)
-	if err := store.Restore(ctx); err != nil {
+
+	sessions := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.NewWithBackend(st, secretService, sessionUser), cfg.RefreshMargin)
+	if err := sessions.Restore(ctx); err != nil {
 		slog.WarnContext(ctx, "session restore failed", slog.String("error", err.Error()))
 	}
-	go store.Run(ctx, cfg.RefreshTick)
+	go sessions.Run(ctx, cfg.RefreshTick)
 
-	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.ProfileDir, cfg.LoginTimeout), store)
+	flow := loginflow.New(login.New(cfg.BrowserChannel, cfg.ProfileDir, cfg.LoginTimeout), sessions)
 	if cfg.LoginMode == config.LoginModeWindow {
-		go flow.Supervise(ctx, store, superviseTick)
+		go flow.Supervise(ctx, sessions, superviseTick)
 	}
 	up := upstream.New(httpClient)
-	fseClient := fse.New(up, store)
-	cupClient := cup.New(up, store)
-	ag := agenda.New(cupClient, fseClient, lookupConcurrency)
-	googleCfg, err := google.ConfigFromFile(cfg.GoogleClientFile, "http://"+ln.Addr().String()+google.CallbackPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		slog.WarnContext(ctx, "google not configured: client file missing")
-	} else if err != nil {
-		return fmt.Errorf("google config: %w", err)
-	}
-	googleClient := google.New(googleCfg, vault.NewTokenVaultWithBackend(secrets, keyringService, keyringGoogleUser), httpClient)
+	fseClient := fse.New(up, sessions)
+	cupClient := cup.New(up, sessions)
+	refertiClient := referti.New(up, sessions)
+	ag := agenda.New(cache.NewCUP(cupClient, st, cache.DefaultPolicy()), cache.NewFSE(fseClient, st, cache.DefaultPolicy()), lookupConcurrency)
+	googleClient := google.New(st, vault.NewTokenVaultWithBackend(st, secretService, googleUser), httpClient)
 	mux := http.NewServeMux()
-	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient, cfg.LoginMode, cfg.ViewerAddr != "")
+	api := httpapi.New(
+		sessions,
+		flow,
+		ag,
+		documents{Client: fseClient, bookings: cupClient},
+		googleClient,
+		reports{Client: refertiClient, cached: cache.NewReports(refertiClient, st, cache.DefaultPolicy())},
+		freshness{st: st},
+		cfg.LoginMode,
+		cfg.ViewerAddr != "",
+	)
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}
@@ -139,19 +182,25 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	return nil
 }
 
-func secretBackend(ctx context.Context, cfg config.Config) (vault.Backend, error) {
-	if cfg.SecretKeyFile == "" {
-		slog.InfoContext(ctx, "secrets in system keyring")
-		return vault.KeyringBackend{}, nil
+func migrateSecrets(ctx context.Context, path string, key []byte, dst vault.Backend) error {
+	_, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	key, err := vault.LoadKey(cfg.SecretKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("load secret key: %w", err)
+		return fmt.Errorf("stat legacy secrets file: %w", err)
 	}
-	backend, err := vault.NewFileBackend(filepath.Join(cfg.DataDir, secretsFile), key)
+	src, err := vault.NewFileBackend(path, key)
 	if err != nil {
-		return nil, fmt.Errorf("open secrets file: %w", err)
+		return fmt.Errorf("open legacy secrets file: %w", err)
 	}
-	slog.InfoContext(ctx, "secrets in encrypted file", slog.String("dir", cfg.DataDir))
-	return backend, nil
+	copied, err := vault.Copy(dst, src, secretService, []string{sessionUser, googleUser})
+	if err != nil {
+		return fmt.Errorf("migrate legacy secrets: %w", err)
+	}
+	if err := os.Rename(path, path+migratedSuffix); err != nil {
+		return fmt.Errorf("rename legacy secrets file: %w", err)
+	}
+	slog.InfoContext(ctx, "legacy secrets migrated", slog.Int("copied", copied))
+	return nil
 }

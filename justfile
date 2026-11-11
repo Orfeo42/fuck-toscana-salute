@@ -24,8 +24,8 @@ lint pkg="./...":
 web-lint:
     npm --prefix web run lint
 
-openapi addr="127.0.0.1:8787":
-    curl -fsS http://{{ addr }}/openapi.json | jq . > web/openapi.json
+openapi:
+    go run ./cmd/openapi | jq . > web/openapi.json
 
 run: build
     ./bin/fts

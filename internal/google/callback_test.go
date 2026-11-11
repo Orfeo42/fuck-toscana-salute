@@ -18,8 +18,9 @@ func TestCallbackHandler(t *testing.T) {
 	t.Run("success serves the static page with security headers", func(t *testing.T) {
 		ts := newTokenServer(t, http.StatusOK, tokenBody)
 		store := &MockTokenStore{SaveFunc: func(context.Context, *oauth2.Token) error { return nil }}
-		c := newTestClient(testConfig(ts.srv.URL), store)
-		authURL, err := c.AuthURL()
+		c := newTestClient(storedSettings(t, testSettings()), store)
+		c.endpoint.TokenURL = ts.srv.URL
+		authURL, err := c.AuthURL(context.Background(), testRedirect)
 		require.NoError(t, err)
 
 		rec := httptest.NewRecorder()
@@ -35,7 +36,7 @@ func TestCallbackHandler(t *testing.T) {
 	})
 
 	t.Run("bad state is 400 and reflects nothing", func(t *testing.T) {
-		c := newTestClient(testConfig("http://unused.test"), &MockTokenStore{})
+		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
 
 		rec := httptest.NewRecorder()
 		c.CallbackHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, CallbackPath+"?code=SECRETCODE&state=REFLECTME", nil))
@@ -48,7 +49,7 @@ func TestCallbackHandler(t *testing.T) {
 	})
 
 	t.Run("error parameter is 400 and not echoed", func(t *testing.T) {
-		c := newTestClient(testConfig("http://unused.test"), &MockTokenStore{})
+		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
 
 		rec := httptest.NewRecorder()
 		c.CallbackHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, CallbackPath+"?error=access_denied%3Cscript%3E", nil))
@@ -59,8 +60,9 @@ func TestCallbackHandler(t *testing.T) {
 
 	t.Run("token endpoint rejection is 400", func(t *testing.T) {
 		ts := newTokenServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`)
-		c := newTestClient(testConfig(ts.srv.URL), &MockTokenStore{})
-		authURL, err := c.AuthURL()
+		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
+		c.endpoint.TokenURL = ts.srv.URL
+		authURL, err := c.AuthURL(context.Background(), testRedirect)
 		require.NoError(t, err)
 
 		rec := httptest.NewRecorder()
@@ -70,7 +72,7 @@ func TestCallbackHandler(t *testing.T) {
 	})
 
 	t.Run("non-GET is 405", func(t *testing.T) {
-		c := newTestClient(testConfig("http://unused.test"), &MockTokenStore{})
+		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
 
 		rec := httptest.NewRecorder()
 		c.CallbackHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, CallbackPath, nil))

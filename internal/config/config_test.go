@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -9,12 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setRequired(t *testing.T) {
+	t.Helper()
+	t.Setenv("FTS_SECRET_KEY_FILE", "/run/secrets/fts_key")
+	t.Setenv("FTS_DATABASE_HOST", "db")
+	t.Setenv("FTS_DATABASE_PASSWORD_FILE", "/run/secrets/fts_db_password")
+}
+
+func unsetEnv(t *testing.T, name string) {
+	t.Helper()
+	old, ok := os.LookupEnv(name)
+	require.NoError(t, os.Unsetenv(name))
+	t.Cleanup(func() {
+		if ok {
+			require.NoError(t, os.Setenv(name, old))
+		}
+	})
+}
+
 func TestLoad(t *testing.T) {
+	setRequired(t)
+
 	t.Run("defaults", func(t *testing.T) {
 		dataHome := t.TempDir()
-		configHome := t.TempDir()
 		t.Setenv("XDG_DATA_HOME", dataHome)
-		t.Setenv("XDG_CONFIG_HOME", configHome)
 		got, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, Config{
@@ -26,8 +45,13 @@ func TestLoad(t *testing.T) {
 			ProfileDir:     filepath.Join(dataHome, "fuck-toscana-salute", "chrome-profile"),
 			DataDir:        filepath.Join(dataHome, "fuck-toscana-salute"),
 			LoginMode:      LoginModeWindow,
+			SecretKeyFile:  "/run/secrets/fts_key",
 
-			GoogleClientFile: filepath.Join(configHome, "fuck-toscana-salute", "google-client.json"),
+			DatabaseHost:         "db",
+			DatabasePort:         5432,
+			DatabaseName:         "fts",
+			DatabaseUser:         "fts",
+			DatabasePasswordFile: "/run/secrets/fts_db_password",
 		}, got)
 	})
 
@@ -57,19 +81,33 @@ func TestLoad(t *testing.T) {
 		assert.Equal(t, dir, got.ProfileDir)
 	})
 
-	t.Run("google client file from env", func(t *testing.T) {
-		t.Setenv("FTS_GOOGLE_CLIENT_FILE", "/tmp/client.json")
+	t.Run("database overrides", func(t *testing.T) {
+		t.Setenv("FTS_DATABASE_PORT", "6543")
+		t.Setenv("FTS_DATABASE_NAME", "other")
+		t.Setenv("FTS_DATABASE_USER", "me")
 		got, err := Load()
 		require.NoError(t, err)
-		assert.Equal(t, "/tmp/client.json", got.GoogleClientFile)
+		assert.Equal(t, 6543, got.DatabasePort)
+		assert.Equal(t, "other", got.DatabaseName)
+		assert.Equal(t, "me", got.DatabaseUser)
 	})
 
-	t.Run("google client file default under user config dir", func(t *testing.T) {
-		configHome := t.TempDir()
-		t.Setenv("XDG_CONFIG_HOME", configHome)
-		got, err := Load()
-		require.NoError(t, err)
-		assert.Equal(t, filepath.Join(configHome, "fuck-toscana-salute", "google-client.json"), got.GoogleClientFile)
+	t.Run("missing database host rejected", func(t *testing.T) {
+		unsetEnv(t, "FTS_DATABASE_HOST")
+		_, err := Load()
+		require.Error(t, err)
+	})
+
+	t.Run("missing database password file rejected", func(t *testing.T) {
+		unsetEnv(t, "FTS_DATABASE_PASSWORD_FILE")
+		_, err := Load()
+		require.Error(t, err)
+	})
+
+	t.Run("missing secret key file rejected", func(t *testing.T) {
+		unsetEnv(t, "FTS_SECRET_KEY_FILE")
+		_, err := Load()
+		require.Error(t, err)
 	})
 
 	t.Run("relative profile dir rejected", func(t *testing.T) {
@@ -183,5 +221,36 @@ func TestLoad(t *testing.T) {
 		t.Setenv("FTS_REFRESH_TICK", "soon")
 		_, err := Load()
 		require.Error(t, err)
+	})
+}
+
+func TestDatabaseDSN(t *testing.T) {
+	cfg := func(t *testing.T, password string) Config {
+		t.Helper()
+		file := filepath.Join(t.TempDir(), "password")
+		require.NoError(t, os.WriteFile(file, []byte(password), 0o600))
+		return Config{DatabaseHost: "db", DatabasePort: 5432, DatabaseName: "fts", DatabaseUser: "fts", DatabasePasswordFile: file}
+	}
+
+	t.Run("builds dsn and trims whitespace", func(t *testing.T) {
+		got, err := cfg(t, "secret\n").DatabaseDSN()
+		require.NoError(t, err)
+		assert.Equal(t, "postgres://fts:secret@db:5432/fts?sslmode=disable", got)
+	})
+
+	t.Run("escapes the password", func(t *testing.T) {
+		got, err := cfg(t, "p@ss/w:rd").DatabaseDSN()
+		require.NoError(t, err)
+		assert.Equal(t, "postgres://fts:p%40ss%2Fw%3Ard@db:5432/fts?sslmode=disable", got)
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := Config{DatabasePasswordFile: filepath.Join(t.TempDir(), "absent")}.DatabaseDSN()
+		require.ErrorIs(t, err, ErrDatabasePassword)
+	})
+
+	t.Run("empty file", func(t *testing.T) {
+		_, err := cfg(t, " \n").DatabaseDSN()
+		require.ErrorIs(t, err, ErrDatabasePasswordEmpty)
 	})
 }

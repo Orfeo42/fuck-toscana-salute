@@ -22,11 +22,17 @@ var _ Google = &MockGoogle{}
 //			AddEventFunc: func(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error) {
 //				panic("mock out the AddEvent method")
 //			},
-//			AuthURLFunc: func() (string, error) {
+//			AuthURLFunc: func(ctx context.Context, redirectURL string) (string, error) {
 //				panic("mock out the AuthURL method")
 //			},
 //			DisconnectFunc: func(ctx context.Context) error {
 //				panic("mock out the Disconnect method")
+//			},
+//			SaveSettingsFunc: func(ctx context.Context, s google.Settings) error {
+//				panic("mock out the SaveSettings method")
+//			},
+//			SettingsFunc: func(ctx context.Context) (google.Settings, error) {
+//				panic("mock out the Settings method")
 //			},
 //			StatusFunc: func(ctx context.Context) (google.Status, error) {
 //				panic("mock out the Status method")
@@ -42,10 +48,16 @@ type MockGoogle struct {
 	AddEventFunc func(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error)
 
 	// AuthURLFunc mocks the AuthURL method.
-	AuthURLFunc func() (string, error)
+	AuthURLFunc func(ctx context.Context, redirectURL string) (string, error)
 
 	// DisconnectFunc mocks the Disconnect method.
 	DisconnectFunc func(ctx context.Context) error
+
+	// SaveSettingsFunc mocks the SaveSettings method.
+	SaveSettingsFunc func(ctx context.Context, s google.Settings) error
+
+	// SettingsFunc mocks the Settings method.
+	SettingsFunc func(ctx context.Context) (google.Settings, error)
 
 	// StatusFunc mocks the Status method.
 	StatusFunc func(ctx context.Context) (google.Status, error)
@@ -63,9 +75,25 @@ type MockGoogle struct {
 		}
 		// AuthURL holds details about calls to the AuthURL method.
 		AuthURL []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// RedirectURL is the redirectURL argument value.
+			RedirectURL string
 		}
 		// Disconnect holds details about calls to the Disconnect method.
 		Disconnect []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+		// SaveSettings holds details about calls to the SaveSettings method.
+		SaveSettings []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// S is the s argument value.
+			S google.Settings
+		}
+		// Settings holds details about calls to the Settings method.
+		Settings []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
@@ -75,10 +103,12 @@ type MockGoogle struct {
 			Ctx context.Context
 		}
 	}
-	lockAddEvent   sync.RWMutex
-	lockAuthURL    sync.RWMutex
-	lockDisconnect sync.RWMutex
-	lockStatus     sync.RWMutex
+	lockAddEvent     sync.RWMutex
+	lockAuthURL      sync.RWMutex
+	lockDisconnect   sync.RWMutex
+	lockSaveSettings sync.RWMutex
+	lockSettings     sync.RWMutex
+	lockStatus       sync.RWMutex
 }
 
 // AddEvent calls AddEventFunc.
@@ -122,16 +152,21 @@ func (mock *MockGoogle) AddEventCalls() []struct {
 }
 
 // AuthURL calls AuthURLFunc.
-func (mock *MockGoogle) AuthURL() (string, error) {
+func (mock *MockGoogle) AuthURL(ctx context.Context, redirectURL string) (string, error) {
 	if mock.AuthURLFunc == nil {
 		panic("MockGoogle.AuthURLFunc: method is nil but Google.AuthURL was just called")
 	}
 	callInfo := struct {
-	}{}
+		Ctx         context.Context
+		RedirectURL string
+	}{
+		Ctx:         ctx,
+		RedirectURL: redirectURL,
+	}
 	mock.lockAuthURL.Lock()
 	mock.calls.AuthURL = append(mock.calls.AuthURL, callInfo)
 	mock.lockAuthURL.Unlock()
-	return mock.AuthURLFunc()
+	return mock.AuthURLFunc(ctx, redirectURL)
 }
 
 // AuthURLCalls gets all the calls that were made to AuthURL.
@@ -139,8 +174,12 @@ func (mock *MockGoogle) AuthURL() (string, error) {
 //
 //	len(mockedGoogle.AuthURLCalls())
 func (mock *MockGoogle) AuthURLCalls() []struct {
+	Ctx         context.Context
+	RedirectURL string
 } {
 	var calls []struct {
+		Ctx         context.Context
+		RedirectURL string
 	}
 	mock.lockAuthURL.RLock()
 	calls = mock.calls.AuthURL
@@ -177,6 +216,74 @@ func (mock *MockGoogle) DisconnectCalls() []struct {
 	mock.lockDisconnect.RLock()
 	calls = mock.calls.Disconnect
 	mock.lockDisconnect.RUnlock()
+	return calls
+}
+
+// SaveSettings calls SaveSettingsFunc.
+func (mock *MockGoogle) SaveSettings(ctx context.Context, s google.Settings) error {
+	if mock.SaveSettingsFunc == nil {
+		panic("MockGoogle.SaveSettingsFunc: method is nil but Google.SaveSettings was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		S   google.Settings
+	}{
+		Ctx: ctx,
+		S:   s,
+	}
+	mock.lockSaveSettings.Lock()
+	mock.calls.SaveSettings = append(mock.calls.SaveSettings, callInfo)
+	mock.lockSaveSettings.Unlock()
+	return mock.SaveSettingsFunc(ctx, s)
+}
+
+// SaveSettingsCalls gets all the calls that were made to SaveSettings.
+// Check the length with:
+//
+//	len(mockedGoogle.SaveSettingsCalls())
+func (mock *MockGoogle) SaveSettingsCalls() []struct {
+	Ctx context.Context
+	S   google.Settings
+} {
+	var calls []struct {
+		Ctx context.Context
+		S   google.Settings
+	}
+	mock.lockSaveSettings.RLock()
+	calls = mock.calls.SaveSettings
+	mock.lockSaveSettings.RUnlock()
+	return calls
+}
+
+// Settings calls SettingsFunc.
+func (mock *MockGoogle) Settings(ctx context.Context) (google.Settings, error) {
+	if mock.SettingsFunc == nil {
+		panic("MockGoogle.SettingsFunc: method is nil but Google.Settings was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockSettings.Lock()
+	mock.calls.Settings = append(mock.calls.Settings, callInfo)
+	mock.lockSettings.Unlock()
+	return mock.SettingsFunc(ctx)
+}
+
+// SettingsCalls gets all the calls that were made to Settings.
+// Check the length with:
+//
+//	len(mockedGoogle.SettingsCalls())
+func (mock *MockGoogle) SettingsCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockSettings.RLock()
+	calls = mock.calls.Settings
+	mock.lockSettings.RUnlock()
 	return calls
 }
 

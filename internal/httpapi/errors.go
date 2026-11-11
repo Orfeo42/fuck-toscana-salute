@@ -12,6 +12,7 @@ import (
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 )
@@ -26,9 +27,16 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	if errors.Is(err, cup.ErrGestioneNotReady) {
 		return huma.Error409Conflict("complete the Gestione Prenotazioni login step")
 	}
-	if errors.Is(err, fse.ErrNoDocument) || errors.Is(err, cup.ErrNoDocument) {
+	if errors.Is(err, fse.ErrNoDocument) || errors.Is(err, cup.ErrNoDocument) || errors.Is(err, referti.ErrNoDocument) {
 		slog.WarnContext(ctx, "document not found", slog.String("op", op), slog.String("error", err.Error()))
 		return huma.Error404NotFound("document not found")
+	}
+	if errors.Is(err, referti.ErrNotPDF) || errors.Is(err, referti.ErrAllFailed) {
+		slog.WarnContext(ctx, "upstream error", slog.String("op", op), slog.String("error", err.Error()))
+		return huma.Error502BadGateway("upstream error")
+	}
+	if errors.Is(err, google.ErrClientIDRequired) || errors.Is(err, google.ErrClientIDInvalid) || errors.Is(err, google.ErrClientSecretRequired) || errors.Is(err, google.ErrDriveFolderInvalid) {
+		return huma.Error422UnprocessableEntity(err.Error())
 	}
 	if errors.Is(err, google.ErrNotConfigured) {
 		return huma.Error409Conflict("google_not_configured")

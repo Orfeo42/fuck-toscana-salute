@@ -18,6 +18,7 @@ import (
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 )
@@ -45,6 +46,27 @@ func TestToHTTPError(t *testing.T) {
 	t.Run("gestione not ready is 409", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", cup.ErrGestioneNotReady)
 		assert.Equal(t, http.StatusConflict, statusOf(t, err))
+	})
+
+	t.Run("referti no document is 404", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", referti.ErrNoDocument))
+		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
+	})
+
+	t.Run("referti not a pdf is 502", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", referti.ErrNotPDF)
+		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
+	})
+
+	t.Run("referti all failed is 502", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", referti.ErrAllFailed)
+		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
+	})
+
+	t.Run("google settings validation is 422 with message", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", google.ErrDriveFolderInvalid))
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+		assert.Contains(t, err.Error(), google.ErrDriveFolderInvalid.Error())
 	})
 
 	t.Run("no document is 404", func(t *testing.T) {

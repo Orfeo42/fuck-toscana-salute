@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
@@ -15,15 +14,13 @@ func TestTokenVault(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("load returns nil when nothing is stored", func(t *testing.T) {
-		keyring.MockInit()
-		got, err := NewTokenVault(testService, "google").Load(ctx)
+		got, err := NewTokenVaultWithBackend(newMemoryBackend(), testService, "google").Load(ctx)
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("save then load round trips", func(t *testing.T) {
-		keyring.MockInit()
-		v := NewTokenVault(testService, "google")
+		v := NewTokenVaultWithBackend(newMemoryBackend(), testService, "google")
 		expiry := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		require.NoError(t, v.Save(ctx, &oauth2.Token{AccessToken: "at", RefreshToken: "rt", TokenType: "Bearer", Expiry: expiry}))
 
@@ -36,8 +33,7 @@ func TestTokenVault(t *testing.T) {
 	})
 
 	t.Run("delete removes the token and tolerates absence", func(t *testing.T) {
-		keyring.MockInit()
-		v := NewTokenVault(testService, "google")
+		v := NewTokenVaultWithBackend(newMemoryBackend(), testService, "google")
 		require.NoError(t, v.Save(ctx, &oauth2.Token{AccessToken: "at"}))
 
 		require.NoError(t, v.Delete(ctx))
@@ -48,28 +44,27 @@ func TestTokenVault(t *testing.T) {
 	})
 
 	t.Run("corrupt payload is reported", func(t *testing.T) {
-		keyring.MockInit()
-		require.NoError(t, keyring.Set(testService, "google", "not-json"))
+		b := newMemoryBackend()
+		require.NoError(t, b.Set(testService, "google", "not-json"))
 
-		_, err := NewTokenVault(testService, "google").Load(ctx)
+		_, err := NewTokenVaultWithBackend(b, testService, "google").Load(ctx)
 		require.ErrorIs(t, err, ErrCorrupt)
 	})
 
 	t.Run("does not touch the session entry", func(t *testing.T) {
-		keyring.MockInit()
-		require.NoError(t, keyring.Set(testService, testUser, "session-data"))
-		require.NoError(t, NewTokenVault(testService, "google").Delete(ctx))
+		b := newMemoryBackend()
+		require.NoError(t, b.Set(testService, testUser, "session-data"))
+		require.NoError(t, NewTokenVaultWithBackend(b, testService, "google").Delete(ctx))
 
-		got, err := keyring.Get(testService, testUser)
+		got, err := b.Get(testService, testUser)
 		require.NoError(t, err)
 		assert.Equal(t, "session-data", got)
 	})
 
 	t.Run("cancelled context is rejected", func(t *testing.T) {
-		keyring.MockInit()
 		cancelled, cancel := context.WithCancel(ctx)
 		cancel()
-		v := NewTokenVault(testService, "google")
+		v := NewTokenVaultWithBackend(newMemoryBackend(), testService, "google")
 
 		_, err := v.Load(cancelled)
 		require.ErrorIs(t, err, context.Canceled)

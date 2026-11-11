@@ -48,6 +48,7 @@ type fakeGoogle struct {
 	updateQuery  []string
 	deletedFiles []string
 	insertQuery  []string
+	insertPaths  []string
 	uploadMeta   []drive.File
 	uploadMedia  [][]byte
 }
@@ -66,7 +67,7 @@ func (f *fakeGoogle) handle(t *testing.T) http.HandlerFunc {
 		defer f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/calendar/v3/calendars/primary/events/"):
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/calendar/v3/calendars/") && strings.Contains(r.URL.Path, "/events/"):
 			f.gets++
 			status, body := f.getStatus, f.getBody
 			if f.gets > 1 && f.laterGetStatus != 0 {
@@ -75,7 +76,7 @@ func (f *fakeGoogle) handle(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(status)
 			_, err := w.Write([]byte(body))
 			assert.NoError(t, err)
-		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/calendar/v3/calendars/primary/events/"):
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/calendar/v3/calendars/") && strings.Contains(r.URL.Path, "/events/"):
 			var ev calendar.Event
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&ev))
 			f.updates = append(f.updates, ev)
@@ -91,11 +92,12 @@ func (f *fakeGoogle) handle(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/drive/v3/files/"):
 			f.deletedFiles = append(f.deletedFiles, strings.TrimPrefix(r.URL.Path, "/drive/v3/files/"))
 			w.WriteHeader(f.deleteStatus)
-		case r.Method == http.MethodPost && r.URL.Path == "/calendar/v3/calendars/primary/events":
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/calendar/v3/calendars/") && strings.HasSuffix(r.URL.Path, "/events"):
 			var ev calendar.Event
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&ev))
 			f.inserts = append(f.inserts, ev)
 			f.insertQuery = append(f.insertQuery, r.URL.RawQuery)
+			f.insertPaths = append(f.insertPaths, r.URL.Path)
 			w.WriteHeader(f.insertStatus)
 			if f.insertStatus != http.StatusOK {
 				_, err := fmt.Fprintf(w, `{"error":{"code":%d,"message":"insert failed"}}`, f.insertStatus)
@@ -152,8 +154,14 @@ func validToken() *oauth2.Token {
 	return &oauth2.Token{AccessToken: "at", RefreshToken: "rt", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}
 }
 
-func fakeClient(f *fakeGoogle, store TokenStore) *Client {
-	c := newTestClient(testConfig("http://unused.test"), store)
+func fakeClient(t *testing.T, f *fakeGoogle, store TokenStore) *Client {
+	t.Helper()
+	return fakeClientWith(t, f, store, testSettings())
+}
+
+func fakeClientWith(t *testing.T, f *fakeGoogle, store TokenStore, settings Settings) *Client {
+	t.Helper()
+	c := newTestClient(storedSettings(t, settings), store)
 	c.calendarEndpoint = f.srv.URL + "/calendar/v3/"
 	c.driveEndpoint = f.srv.URL + "/drive/v3/"
 	return c
@@ -189,13 +197,13 @@ func TestAddEvent(t *testing.T) {
 	pdf := []byte("%PDF-fake")
 
 	t.Run("not configured", func(t *testing.T) {
-		_, err := newTestClient(nil, &MockTokenStore{}).AddEvent(ctx, sampleEvent(), nil)
+		_, err := newTestClient(emptySettings(), &MockTokenStore{}).AddEvent(ctx, sampleEvent(), nil)
 		require.ErrorIs(t, err, ErrNotConfigured)
 	})
 
 	t.Run("not connected", func(t *testing.T) {
 		store := &MockTokenStore{LoadFunc: func(context.Context) (*oauth2.Token, error) { return nil, nil }}
-		_, err := newTestClient(testConfig("http://unused.test"), store).AddEvent(ctx, sampleEvent(), nil)
+		_, err := newTestClient(storedSettings(t, testSettings()), store).AddEvent(ctx, sampleEvent(), nil)
 		require.ErrorIs(t, err, ErrNotConnected)
 	})
 
@@ -204,7 +212,7 @@ func TestAddEvent(t *testing.T) {
 		f.getStatus = http.StatusOK
 		f.getBody = `{"id":"x","status":"confirmed","htmlLink":"https://calendar.example.test/existing"}`
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/existing", Created: false}, got)
 		assert.Empty(t, f.uploadMeta)
@@ -214,7 +222,7 @@ func TestAddEvent(t *testing.T) {
 	t.Run("new event with pdf uploads once and attaches it", func(t *testing.T) {
 		f := newFakeGoogle(t)
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/event", Created: true}, got)
 
@@ -245,10 +253,34 @@ func TestAddEvent(t *testing.T) {
 		assert.Contains(t, f.insertQuery[0], "supportsAttachments=true")
 	})
 
+	t.Run("uses the calendar id and drive folder from settings", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		settings := testSettings()
+		settings.CalendarID = "team-cal@example.test"
+		settings.DriveFolderID = "folder-id-12345"
+
+		_, err := fakeClientWith(t, f, connectedStore(validToken()), settings).AddEvent(ctx, sampleEvent(), pdf)
+		require.NoError(t, err)
+		require.Len(t, f.insertPaths, 1)
+		assert.Equal(t, "/calendar/v3/calendars/team-cal@example.test/events", f.insertPaths[0])
+		require.Len(t, f.uploadMeta, 1)
+		assert.Equal(t, []string{"folder-id-12345"}, f.uploadMeta[0].Parents)
+	})
+
+	t.Run("without a drive folder the upload has no parents", func(t *testing.T) {
+		f := newFakeGoogle(t)
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		require.NoError(t, err)
+		require.Len(t, f.uploadMeta, 1)
+		assert.Empty(t, f.uploadMeta[0].Parents)
+		assert.Equal(t, "/calendar/v3/calendars/primary/events", f.insertPaths[0])
+	})
+
 	t.Run("without pdf nothing is uploaded", func(t *testing.T) {
 		f := newFakeGoogle(t)
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), nil)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), nil)
 		require.NoError(t, err)
 		assert.True(t, got.Created)
 		assert.Empty(t, f.uploadMeta)
@@ -261,7 +293,7 @@ func TestAddEvent(t *testing.T) {
 		f.getStatus = http.StatusOK
 		f.getBody = `{"id":"x","status":"cancelled"}`
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/updated", Created: true}, got)
 		assert.Len(t, f.uploadMeta, 1)
@@ -281,7 +313,7 @@ func TestAddEvent(t *testing.T) {
 		f.laterGetStatus = http.StatusOK
 		f.laterGetBody = `{"id":"x","status":"cancelled"}`
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.True(t, got.Created)
 		assert.Len(t, f.inserts, 1)
@@ -296,7 +328,7 @@ func TestAddEvent(t *testing.T) {
 		f.laterGetStatus = http.StatusOK
 		f.laterGetBody = `{"id":"x","status":"confirmed","htmlLink":"https://calendar.example.test/raced"}`
 
-		got, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/raced", Created: false}, got)
 		assert.Equal(t, []string{"file1"}, f.deletedFiles)
@@ -306,7 +338,7 @@ func TestAddEvent(t *testing.T) {
 		f := newFakeGoogle(t)
 		f.insertStatus = http.StatusInternalServerError
 
-		_, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotConnected)
 		var apiErr *googleapi.Error
@@ -320,7 +352,7 @@ func TestAddEvent(t *testing.T) {
 		f.insertStatus = http.StatusInternalServerError
 		f.deleteStatus = http.StatusForbidden
 
-		_, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		var apiErr *googleapi.Error
 		require.ErrorAs(t, err, &apiErr)
 		assert.Equal(t, http.StatusInternalServerError, apiErr.Code)
@@ -333,7 +365,7 @@ func TestAddEvent(t *testing.T) {
 		f.getBody = `{"id":"x","status":"cancelled"}`
 		f.updateStatus = http.StatusInternalServerError
 
-		_, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
 		require.Error(t, err)
 		assert.Equal(t, []string{"file1"}, f.deletedFiles)
 	})
@@ -342,7 +374,7 @@ func TestAddEvent(t *testing.T) {
 		f := newFakeGoogle(t)
 		f.insertStatus = http.StatusInternalServerError
 
-		_, err := fakeClient(f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), nil)
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), nil)
 		require.Error(t, err)
 		assert.Empty(t, f.deletedFiles)
 	})
@@ -353,7 +385,7 @@ func TestAddEvent(t *testing.T) {
 		f.getBody = `{"error":{"code":401,"message":"unauthorized"}}`
 		store := connectedStore(validToken())
 
-		_, err := fakeClient(f, store).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, store).AddEvent(ctx, sampleEvent(), pdf)
 		require.ErrorIs(t, err, ErrNotConnected)
 		assert.Len(t, store.DeleteCalls(), 1)
 	})
@@ -363,7 +395,7 @@ func TestAddEvent(t *testing.T) {
 		f.uploadStatus = http.StatusUnauthorized
 		store := connectedStore(validToken())
 
-		_, err := fakeClient(f, store).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, store).AddEvent(ctx, sampleEvent(), pdf)
 		require.ErrorIs(t, err, ErrNotConnected)
 		assert.Len(t, store.DeleteCalls(), 1)
 		assert.Empty(t, f.inserts)
@@ -375,7 +407,7 @@ func TestAddEvent(t *testing.T) {
 		f.getBody = `{"error":{"code":500,"message":"boom"}}`
 		store := connectedStore(validToken())
 
-		_, err := fakeClient(f, store).AddEvent(ctx, sampleEvent(), nil)
+		_, err := fakeClient(t, f, store).AddEvent(ctx, sampleEvent(), nil)
 		require.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotConnected)
 		assert.Empty(t, store.DeleteCalls())
@@ -385,8 +417,8 @@ func TestAddEvent(t *testing.T) {
 		f := newFakeGoogle(t)
 		ts := newTokenServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`)
 		store := connectedStore(&oauth2.Token{AccessToken: "old", RefreshToken: "rt", Expiry: time.Now().Add(-time.Hour)})
-		c := fakeClient(f, store)
-		c.cfg = testConfig(ts.srv.URL)
+		c := fakeClient(t, f, store)
+		c.endpoint.TokenURL = ts.srv.URL
 
 		_, err := c.AddEvent(ctx, sampleEvent(), nil)
 		require.ErrorIs(t, err, ErrNotConnected)
@@ -397,8 +429,8 @@ func TestAddEvent(t *testing.T) {
 		f := newFakeGoogle(t)
 		ts := newTokenServer(t, http.StatusOK, `{"access_token":"fresh","token_type":"Bearer","expires_in":3600}`)
 		store := connectedStore(&oauth2.Token{AccessToken: "old", RefreshToken: "rt", Expiry: time.Now().Add(-time.Hour)})
-		c := fakeClient(f, store)
-		c.cfg = testConfig(ts.srv.URL)
+		c := fakeClient(t, f, store)
+		c.endpoint.TokenURL = ts.srv.URL
 
 		_, err := c.AddEvent(ctx, sampleEvent(), nil)
 		require.NoError(t, err)
@@ -411,7 +443,7 @@ func TestAddEvent(t *testing.T) {
 		f := newFakeGoogle(t)
 		store := connectedStore(validToken())
 
-		_, err := fakeClient(f, store).AddEvent(ctx, sampleEvent(), pdf)
+		_, err := fakeClient(t, f, store).AddEvent(ctx, sampleEvent(), pdf)
 		require.NoError(t, err)
 		assert.Empty(t, store.SaveCalls())
 	})
@@ -421,8 +453,8 @@ func TestAddEvent(t *testing.T) {
 		ts := newTokenServer(t, http.StatusOK, `{"access_token":"fresh","token_type":"Bearer","expires_in":3600}`)
 		store := connectedStore(&oauth2.Token{AccessToken: "old", RefreshToken: "rt", Expiry: time.Now().Add(-time.Hour)})
 		store.SaveFunc = func(context.Context, *oauth2.Token) error { return errors.New("keyring down") }
-		c := fakeClient(f, store)
-		c.cfg = testConfig(ts.srv.URL)
+		c := fakeClient(t, f, store)
+		c.endpoint.TokenURL = ts.srv.URL
 
 		_, err := c.AddEvent(ctx, sampleEvent(), nil)
 		require.Error(t, err)

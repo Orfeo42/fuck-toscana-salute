@@ -23,6 +23,8 @@ function appointment(
   };
 }
 
+const noUpdates = { lists: null, appointments: {}, verdicts: {} };
+
 describe("buildIndexes", () => {
   it("returns empty indexes for undefined input", () => {
     const result = buildIndexes(undefined, undefined);
@@ -33,8 +35,14 @@ describe("buildIndexes", () => {
 
   it("handles null arrays", () => {
     const result = buildIndexes(
-      { appointments: null, failed: null, unbooked: null },
-      { prescriptions: null },
+      {
+        appointments: null,
+        failed: null,
+        unbooked: null,
+        verdicts: null,
+        updated: noUpdates,
+      },
+      { prescriptions: null, updated: null },
     );
     expect(result.bookingByNre.size).toBe(0);
     expect(result.unbooked.size).toBe(0);
@@ -48,7 +56,13 @@ describe("buildIndexes", () => {
       at: "2026-12-01T09:30:00Z",
     });
     const result = buildIndexes(
-      { appointments: [cancelled, live], failed: [], unbooked: [] },
+      {
+        appointments: [cancelled, live],
+        failed: [],
+        unbooked: [],
+        verdicts: [],
+        updated: noUpdates,
+      },
       undefined,
     );
     expect(result.bookingByNre.get("0900A0000000001")?.id).toBe("a");
@@ -58,7 +72,13 @@ describe("buildIndexes", () => {
     const early = appointment("a", { at: "2026-11-12T09:30:00Z" });
     const late = appointment("b", { at: "2026-12-12T09:30:00Z" });
     const result = buildIndexes(
-      { appointments: [late, early], failed: [], unbooked: [] },
+      {
+        appointments: [late, early],
+        failed: [],
+        unbooked: [],
+        verdicts: [],
+        updated: noUpdates,
+      },
       undefined,
     );
     expect(result.bookingByNre.get("0900A0000000001")?.id).toBe("b");
@@ -74,7 +94,13 @@ describe("buildIndexes", () => {
       at: "2026-12-12T09:30:00Z",
     });
     const result = buildIndexes(
-      { appointments: [early, late], failed: [], unbooked: [] },
+      {
+        appointments: [early, late],
+        failed: [],
+        unbooked: [],
+        verdicts: [],
+        updated: noUpdates,
+      },
       undefined,
     );
     expect(result.bookingByNre.get("0900A0000000001")?.id).toBe("b");
@@ -89,7 +115,13 @@ describe("buildIndexes", () => {
     };
     const dated = appointment("b");
     const result = buildIndexes(
-      { appointments: [dated, undated], failed: [], unbooked: [] },
+      {
+        appointments: [dated, undated],
+        failed: [],
+        unbooked: [],
+        verdicts: [],
+        updated: noUpdates,
+      },
       undefined,
     );
     expect(result.bookingByNre.get("0900A0000000001")?.id).toBe("b");
@@ -101,8 +133,10 @@ describe("buildIndexes", () => {
         appointments: [appointment("a", { nre: "0900a0000000001" })],
         failed: [],
         unbooked: ["0900a0000000002"],
+        verdicts: [],
+        updated: noUpdates,
       },
-      { prescriptions: [{ nre: "0900a0000000003" }] },
+      { prescriptions: [{ nre: "0900a0000000003" }], updated: null },
     );
     expect(result.bookingByNre.has("0900A0000000001")).toBe(true);
     expect(result.unbooked.has("0900A0000000002")).toBe(true);
@@ -111,7 +145,13 @@ describe("buildIndexes", () => {
 
   it("builds the unbooked set from the unbooked list", () => {
     const result = buildIndexes(
-      { appointments: [], failed: [], unbooked: ["0900A0000000002"] },
+      {
+        appointments: [],
+        failed: [],
+        unbooked: ["0900A0000000002"],
+        verdicts: [],
+        updated: noUpdates,
+      },
       undefined,
     );
     expect([...result.unbooked]).toEqual(["0900A0000000002"]);

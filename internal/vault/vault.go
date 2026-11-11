@@ -46,10 +46,6 @@ type Vault struct {
 
 var _ session.Persister = (*Vault)(nil)
 
-func New(service, user string) *Vault {
-	return NewWithBackend(KeyringBackend{}, service, user)
-}
-
 func NewWithBackend(b Backend, service, user string) *Vault {
 	return &Vault{backend: b, service: service, user: user}
 }

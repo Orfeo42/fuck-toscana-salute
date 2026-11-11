@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -32,6 +33,7 @@ const (
 type CUP interface {
 	Prescriptions(ctx context.Context) ([]cup.Prescription, error)
 	Appointments(ctx context.Context, nre string) ([]cup.Appointment, error)
+	Verdict(ctx context.Context, nre string) (cup.Verdict, error)
 }
 
 type FSE interface {
@@ -61,6 +63,7 @@ type Result struct {
 	Entries  []Entry
 	Failed   []Failure
 	Unbooked []string
+	Verdicts map[string]cup.Verdict
 }
 
 type Row struct {
@@ -93,7 +96,7 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	result := Result{Entries: []Entry{}, Failed: []Failure{}, Unbooked: []string{}}
+	result := Result{Entries: []Entry{}, Failed: []Failure{}, Unbooked: []string{}, Verdicts: map[string]cup.Verdict{}}
 	for i, c := range candidates {
 		if errs[i] != nil {
 			result.Failed = append(result.Failed, Failure{NRE: c.nre, FSE: c.fse, Err: errs[i]})
@@ -107,7 +110,40 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 		}
 	}
 	slices.SortStableFunc(result.Entries, compareEntries)
+	result.Verdicts = a.lookupVerdicts(ctx, result.Unbooked)
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	return result, nil
+}
+
+func (a *Agenda) lookupVerdicts(ctx context.Context, nres []string) map[string]cup.Verdict {
+	verdicts := make([]cup.Verdict, len(nres))
+	errs := make([]error, len(nres))
+	semaphore := make(chan struct{}, a.concurrency)
+	var wg sync.WaitGroup
+	for i := range nres {
+		semaphore <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-semaphore }()
+			verdicts[i], errs[i] = a.cup.Verdict(ctx, nres[i])
+		})
+	}
+	wg.Wait()
+
+	out := make(map[string]cup.Verdict, len(nres))
+	failed := 0
+	for i, nre := range nres {
+		if errs[i] != nil {
+			failed++
+			continue
+		}
+		out[strings.ToUpper(nre)] = verdicts[i]
+	}
+	if failed > 0 {
+		slog.WarnContext(ctx, "verdict lookups failed", slog.Int("failed", failed), slog.Int("total", len(nres)))
+	}
+	return out
 }
 
 func (a *Agenda) sources(ctx context.Context) ([]cup.Prescription, []fse.Prescription, error) {

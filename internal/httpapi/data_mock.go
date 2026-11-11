@@ -6,7 +6,9 @@ package httpapi
 import (
 	"context"
 	"fuck-toscana-salute/internal/agenda"
+	"fuck-toscana-salute/internal/referti"
 	"sync"
+	"time"
 )
 
 // Ensure, that MockAgenda does implement Agenda.
@@ -238,5 +240,249 @@ func (mock *MockDocuments) PromemoriaCalls() []struct {
 	mock.lockPromemoria.RLock()
 	calls = mock.calls.Promemoria
 	mock.lockPromemoria.RUnlock()
+	return calls
+}
+
+// Ensure, that MockReports does implement Reports.
+// If this is not the case, regenerate this file with moq.
+var _ Reports = &MockReports{}
+
+// MockReports is a mock implementation of Reports.
+//
+//	func TestSomethingThatUsesReports(t *testing.T) {
+//
+//		// make and configure a mocked Reports
+//		mockedReports := &MockReports{
+//			DocumentsFunc: func(ctx context.Context, ref referti.Ref) ([]referti.Document, error) {
+//				panic("mock out the Documents method")
+//			},
+//			DownloadFunc: func(ctx context.Context, ref referti.Ref, position string) ([]byte, error) {
+//				panic("mock out the Download method")
+//			},
+//			ListFunc: func(ctx context.Context) (referti.Listing, error) {
+//				panic("mock out the List method")
+//			},
+//		}
+//
+//		// use mockedReports in code that requires Reports
+//		// and then make assertions.
+//
+//	}
+type MockReports struct {
+	// DocumentsFunc mocks the Documents method.
+	DocumentsFunc func(ctx context.Context, ref referti.Ref) ([]referti.Document, error)
+
+	// DownloadFunc mocks the Download method.
+	DownloadFunc func(ctx context.Context, ref referti.Ref, position string) ([]byte, error)
+
+	// ListFunc mocks the List method.
+	ListFunc func(ctx context.Context) (referti.Listing, error)
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Documents holds details about calls to the Documents method.
+		Documents []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Ref is the ref argument value.
+			Ref referti.Ref
+		}
+		// Download holds details about calls to the Download method.
+		Download []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Ref is the ref argument value.
+			Ref referti.Ref
+			// Position is the position argument value.
+			Position string
+		}
+		// List holds details about calls to the List method.
+		List []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+	}
+	lockDocuments sync.RWMutex
+	lockDownload  sync.RWMutex
+	lockList      sync.RWMutex
+}
+
+// Documents calls DocumentsFunc.
+func (mock *MockReports) Documents(ctx context.Context, ref referti.Ref) ([]referti.Document, error) {
+	if mock.DocumentsFunc == nil {
+		panic("MockReports.DocumentsFunc: method is nil but Reports.Documents was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Ref referti.Ref
+	}{
+		Ctx: ctx,
+		Ref: ref,
+	}
+	mock.lockDocuments.Lock()
+	mock.calls.Documents = append(mock.calls.Documents, callInfo)
+	mock.lockDocuments.Unlock()
+	return mock.DocumentsFunc(ctx, ref)
+}
+
+// DocumentsCalls gets all the calls that were made to Documents.
+// Check the length with:
+//
+//	len(mockedReports.DocumentsCalls())
+func (mock *MockReports) DocumentsCalls() []struct {
+	Ctx context.Context
+	Ref referti.Ref
+} {
+	var calls []struct {
+		Ctx context.Context
+		Ref referti.Ref
+	}
+	mock.lockDocuments.RLock()
+	calls = mock.calls.Documents
+	mock.lockDocuments.RUnlock()
+	return calls
+}
+
+// Download calls DownloadFunc.
+func (mock *MockReports) Download(ctx context.Context, ref referti.Ref, position string) ([]byte, error) {
+	if mock.DownloadFunc == nil {
+		panic("MockReports.DownloadFunc: method is nil but Reports.Download was just called")
+	}
+	callInfo := struct {
+		Ctx      context.Context
+		Ref      referti.Ref
+		Position string
+	}{
+		Ctx:      ctx,
+		Ref:      ref,
+		Position: position,
+	}
+	mock.lockDownload.Lock()
+	mock.calls.Download = append(mock.calls.Download, callInfo)
+	mock.lockDownload.Unlock()
+	return mock.DownloadFunc(ctx, ref, position)
+}
+
+// DownloadCalls gets all the calls that were made to Download.
+// Check the length with:
+//
+//	len(mockedReports.DownloadCalls())
+func (mock *MockReports) DownloadCalls() []struct {
+	Ctx      context.Context
+	Ref      referti.Ref
+	Position string
+} {
+	var calls []struct {
+		Ctx      context.Context
+		Ref      referti.Ref
+		Position string
+	}
+	mock.lockDownload.RLock()
+	calls = mock.calls.Download
+	mock.lockDownload.RUnlock()
+	return calls
+}
+
+// List calls ListFunc.
+func (mock *MockReports) List(ctx context.Context) (referti.Listing, error) {
+	if mock.ListFunc == nil {
+		panic("MockReports.ListFunc: method is nil but Reports.List was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockList.Lock()
+	mock.calls.List = append(mock.calls.List, callInfo)
+	mock.lockList.Unlock()
+	return mock.ListFunc(ctx)
+}
+
+// ListCalls gets all the calls that were made to List.
+// Check the length with:
+//
+//	len(mockedReports.ListCalls())
+func (mock *MockReports) ListCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockList.RLock()
+	calls = mock.calls.List
+	mock.lockList.RUnlock()
+	return calls
+}
+
+// Ensure, that MockFreshness does implement Freshness.
+// If this is not the case, regenerate this file with moq.
+var _ Freshness = &MockFreshness{}
+
+// MockFreshness is a mock implementation of Freshness.
+//
+//	func TestSomethingThatUsesFreshness(t *testing.T) {
+//
+//		// make and configure a mocked Freshness
+//		mockedFreshness := &MockFreshness{
+//			FetchedAtFunc: func(ctx context.Context, source string) (map[string]time.Time, error) {
+//				panic("mock out the FetchedAt method")
+//			},
+//		}
+//
+//		// use mockedFreshness in code that requires Freshness
+//		// and then make assertions.
+//
+//	}
+type MockFreshness struct {
+	// FetchedAtFunc mocks the FetchedAt method.
+	FetchedAtFunc func(ctx context.Context, source string) (map[string]time.Time, error)
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// FetchedAt holds details about calls to the FetchedAt method.
+		FetchedAt []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Source is the source argument value.
+			Source string
+		}
+	}
+	lockFetchedAt sync.RWMutex
+}
+
+// FetchedAt calls FetchedAtFunc.
+func (mock *MockFreshness) FetchedAt(ctx context.Context, source string) (map[string]time.Time, error) {
+	if mock.FetchedAtFunc == nil {
+		panic("MockFreshness.FetchedAtFunc: method is nil but Freshness.FetchedAt was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		Source string
+	}{
+		Ctx:    ctx,
+		Source: source,
+	}
+	mock.lockFetchedAt.Lock()
+	mock.calls.FetchedAt = append(mock.calls.FetchedAt, callInfo)
+	mock.lockFetchedAt.Unlock()
+	return mock.FetchedAtFunc(ctx, source)
+}
+
+// FetchedAtCalls gets all the calls that were made to FetchedAt.
+// Check the length with:
+//
+//	len(mockedFreshness.FetchedAtCalls())
+func (mock *MockFreshness) FetchedAtCalls() []struct {
+	Ctx    context.Context
+	Source string
+} {
+	var calls []struct {
+		Ctx    context.Context
+		Source string
+	}
+	mock.lockFetchedAt.RLock()
+	calls = mock.calls.FetchedAt
+	mock.lockFetchedAt.RUnlock()
 	return calls
 }

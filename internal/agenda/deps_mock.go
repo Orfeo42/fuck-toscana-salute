@@ -26,6 +26,9 @@ var _ CUP = &MockCUP{}
 //			PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) {
 //				panic("mock out the Prescriptions method")
 //			},
+//			VerdictFunc: func(ctx context.Context, nre string) (cup.Verdict, error) {
+//				panic("mock out the Verdict method")
+//			},
 //		}
 //
 //		// use mockedCUP in code that requires CUP
@@ -38,6 +41,9 @@ type MockCUP struct {
 
 	// PrescriptionsFunc mocks the Prescriptions method.
 	PrescriptionsFunc func(ctx context.Context) ([]cup.Prescription, error)
+
+	// VerdictFunc mocks the Verdict method.
+	VerdictFunc func(ctx context.Context, nre string) (cup.Verdict, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -53,9 +59,17 @@ type MockCUP struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
+		// Verdict holds details about calls to the Verdict method.
+		Verdict []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Nre is the nre argument value.
+			Nre string
+		}
 	}
 	lockAppointments  sync.RWMutex
 	lockPrescriptions sync.RWMutex
+	lockVerdict       sync.RWMutex
 }
 
 // Appointments calls AppointmentsFunc.
@@ -123,6 +137,42 @@ func (mock *MockCUP) PrescriptionsCalls() []struct {
 	mock.lockPrescriptions.RLock()
 	calls = mock.calls.Prescriptions
 	mock.lockPrescriptions.RUnlock()
+	return calls
+}
+
+// Verdict calls VerdictFunc.
+func (mock *MockCUP) Verdict(ctx context.Context, nre string) (cup.Verdict, error) {
+	if mock.VerdictFunc == nil {
+		panic("MockCUP.VerdictFunc: method is nil but CUP.Verdict was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Nre string
+	}{
+		Ctx: ctx,
+		Nre: nre,
+	}
+	mock.lockVerdict.Lock()
+	mock.calls.Verdict = append(mock.calls.Verdict, callInfo)
+	mock.lockVerdict.Unlock()
+	return mock.VerdictFunc(ctx, nre)
+}
+
+// VerdictCalls gets all the calls that were made to Verdict.
+// Check the length with:
+//
+//	len(mockedCUP.VerdictCalls())
+func (mock *MockCUP) VerdictCalls() []struct {
+	Ctx context.Context
+	Nre string
+} {
+	var calls []struct {
+		Ctx context.Context
+		Nre string
+	}
+	mock.lockVerdict.RLock()
+	calls = mock.calls.Verdict
+	mock.lockVerdict.RUnlock()
 	return calls
 }
 

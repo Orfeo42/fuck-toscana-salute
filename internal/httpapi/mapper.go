@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
@@ -59,9 +60,23 @@ func timePtr(t time.Time) *time.Time {
 }
 
 type AppointmentsBody struct {
-	Appointments []AppointmentBody `json:"appointments"`
-	Failed       []FailedBody      `json:"failed"`
-	Unbooked     []string          `json:"unbooked"`
+	Appointments []AppointmentBody       `json:"appointments"`
+	Failed       []FailedBody            `json:"failed"`
+	Unbooked     []string                `json:"unbooked"`
+	Verdicts     []VerdictBody           `json:"verdicts"`
+	Updated      AppointmentsUpdatedBody `json:"updated"`
+}
+
+type VerdictBody struct {
+	NRE     string `json:"nre"`
+	Reason  string `json:"reason" enum:"bookable,handled,expired,other"`
+	Message string `json:"message"`
+}
+
+type AppointmentsUpdatedBody struct {
+	Lists        *time.Time           `json:"lists" nullable:"true"`
+	Appointments map[string]time.Time `json:"appointments"`
+	Verdicts     map[string]time.Time `json:"verdicts"`
 }
 
 type FailedBody struct {
@@ -111,7 +126,8 @@ type PrescriptionFSEBody struct {
 }
 
 type PrescriptionsBody struct {
-	Prescriptions []RowBody `json:"prescriptions"`
+	Prescriptions []RowBody  `json:"prescriptions"`
+	Updated       *time.Time `json:"updated" nullable:"true"`
 }
 
 type RowBody struct {
@@ -161,7 +177,15 @@ func toAppointmentsBody(result agenda.Result) AppointmentsBody {
 	}
 	unbooked := make([]string, 0, len(result.Unbooked))
 	unbooked = append(unbooked, result.Unbooked...)
-	return AppointmentsBody{Appointments: appointments, Failed: failed, Unbooked: unbooked}
+	verdicts := make([]VerdictBody, 0, len(result.Verdicts))
+	for _, nre := range result.Unbooked {
+		v, ok := result.Verdicts[strings.ToUpper(nre)]
+		if !ok {
+			continue
+		}
+		verdicts = append(verdicts, VerdictBody{NRE: nre, Reason: string(v.Reason), Message: v.Message})
+	}
+	return AppointmentsBody{Appointments: appointments, Failed: failed, Unbooked: unbooked, Verdicts: verdicts}
 }
 
 func toPrescriptionsBody(rows []agenda.Row) PrescriptionsBody {

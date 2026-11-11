@@ -8,6 +8,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -141,23 +142,28 @@ func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, createIndex); err != nil {
 		return fmt.Errorf("store: create index: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, createSecretsTable); err != nil {
+		return fmt.Errorf("store: create secrets table: %w", err)
+	}
 	var r row
-	rows, err := s.db.QueryxContext(ctx, anyRowQuery)
-	if err != nil {
+	err := s.db.GetContext(ctx, &r, anyRowQuery)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("store: probe: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			slog.WarnContext(ctx, "store: close rows", slog.String("error", err.Error()))
+	if err == nil {
+		if _, err := s.decode(r); err != nil {
+			return err
 		}
-	}()
-	if !rows.Next() {
-		return rows.Err()
 	}
-	if err := rows.StructScan(&r); err != nil {
-		return fmt.Errorf("store: probe scan: %w", err)
+	var sr secretRow
+	err = s.db.GetContext(ctx, &sr, anySecretQuery)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
 	}
-	if _, err := s.decode(r); err != nil {
+	if err != nil {
+		return fmt.Errorf("store: probe secrets: %w", err)
+	}
+	if _, err := s.open(sr.ValueEnc, secretAAD, sr.KeyMAC); err != nil {
 		return err
 	}
 	return nil

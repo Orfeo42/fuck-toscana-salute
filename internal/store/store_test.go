@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"fuck-toscana-salute/internal/vault"
 )
 
 const (
@@ -66,7 +68,7 @@ func run(m *testing.M) int {
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
-	_, err := testDB.ExecContext(context.Background(), "DROP TABLE IF EXISTS responses")
+	_, err := testDB.ExecContext(context.Background(), "DROP TABLE IF EXISTS responses, secrets")
 	require.NoError(t, err)
 	s, err := Open(context.Background(), testDSN, testKey(1))
 	require.NoError(t, err)
@@ -115,6 +117,25 @@ func TestOpen(t *testing.T) {
 		require.NoError(t, s1.Close())
 		_, err := Open(ctx, testDSN, testKey(2))
 		require.ErrorIs(t, err, ErrDecrypt)
+	})
+
+	t.Run("wrong key fails when only secrets exist", func(t *testing.T) {
+		s1 := openTest(t)
+		require.NoError(t, s1.Set("svc", "usr", "v"))
+		require.NoError(t, s1.Close())
+		_, err := Open(ctx, testDSN, testKey(2))
+		require.ErrorIs(t, err, ErrDecrypt)
+	})
+
+	t.Run("idempotent with secrets table", func(t *testing.T) {
+		s1 := openTest(t)
+		require.NoError(t, s1.Set("svc", "usr", "v"))
+		s2, err := Open(ctx, testDSN, testKey(1))
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, s2.Close()) })
+		got, err := s2.Get("svc", "usr")
+		require.NoError(t, err)
+		assert.Equal(t, "v", got)
 	})
 
 	t.Run("bad key length", func(t *testing.T) {
@@ -236,5 +257,91 @@ func TestClose(t *testing.T) {
 	t.Run("closes", func(t *testing.T) {
 		s := openTest(t)
 		require.NoError(t, s.Close())
+	})
+}
+
+const secretMarker = "SECRET_MARKER_XYZ"
+
+func TestSet(t *testing.T) {
+	t.Run("overwrite", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc", "usr", "one"))
+		require.NoError(t, s.Set("svc", "usr", "two"))
+		got, err := s.Get("svc", "usr")
+		require.NoError(t, err)
+		assert.Equal(t, "two", got)
+		var n int
+		require.NoError(t, testDB.GetContext(context.Background(), &n, "SELECT COUNT(*) FROM secrets"))
+		assert.Equal(t, 1, n)
+	})
+
+	t.Run("no clear service user or value stored", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc-clear", "usr-clear", secretMarker))
+		var r secretRow
+		require.NoError(t, testDB.GetContext(context.Background(), &r, anySecretQuery))
+		assert.NotContains(t, r.KeyMAC, "svc-clear")
+		assert.NotContains(t, r.KeyMAC, "usr-clear")
+		assert.False(t, bytes.Contains(r.ValueEnc, []byte(secretMarker)))
+		assert.False(t, bytes.Contains(r.ValueEnc, []byte("svc-clear")))
+	})
+}
+
+func TestGet(t *testing.T) {
+	t.Run("round trip", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc", "usr", secretMarker))
+		got, err := s.Get("svc", "usr")
+		require.NoError(t, err)
+		assert.Equal(t, secretMarker, got)
+	})
+
+	t.Run("missing returns vault not found", func(t *testing.T) {
+		s := openTest(t)
+		_, err := s.Get("svc", "usr")
+		require.ErrorIs(t, err, vault.ErrNotFound)
+	})
+
+	t.Run("different service and user isolated", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc", "usr", "a"))
+		require.NoError(t, s.Set("svc", "other", "b"))
+		require.NoError(t, s.Set("other", "usr", "c"))
+		a, err := s.Get("svc", "usr")
+		require.NoError(t, err)
+		b, err := s.Get("svc", "other")
+		require.NoError(t, err)
+		c, err := s.Get("other", "usr")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a", "b", "c"}, []string{a, b, c})
+	})
+
+	t.Run("row AAD swap detected", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc", "one", "a"))
+		require.NoError(t, s.Set("svc", "two", "b"))
+		swap := struct {
+			From string `db:"from_mac"`
+			To   string `db:"to_mac"`
+		}{From: s.secretMAC("svc", "two"), To: s.secretMAC("svc", "one")}
+		_, err := sqlx.NamedExecContext(context.Background(), s.db, `UPDATE secrets SET value_enc = (SELECT value_enc FROM secrets WHERE key_mac = :from_mac) WHERE key_mac = :to_mac`, swap)
+		require.NoError(t, err)
+		_, err = s.Get("svc", "one")
+		require.ErrorIs(t, err, ErrDecrypt)
+	})
+}
+
+func TestDelete(t *testing.T) {
+	t.Run("delete then get not found", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Set("svc", "usr", "v"))
+		require.NoError(t, s.Delete("svc", "usr"))
+		_, err := s.Get("svc", "usr")
+		require.ErrorIs(t, err, vault.ErrNotFound)
+	})
+
+	t.Run("delete missing is nil", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.Delete("svc", "usr"))
 	})
 }

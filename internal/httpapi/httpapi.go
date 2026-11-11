@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/jwtclaims"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
@@ -61,15 +62,46 @@ type bookingPDFInput struct {
 	ID string `query:"id" required:"true" minLength:"1" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
 }
 
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, loginMode string, viewer bool) http.Handler {
+type refreshInput struct {
+	Body RefreshRequest
+}
+
+type RefreshRequest struct {
+	All  bool     `json:"all,omitempty"`
+	NREs []string `json:"nres,omitempty" maxItems:"200" pattern:"^[0-9A-Za-z]{10,20}$"`
+}
+
+func (r *RefreshRequest) Resolve(_ huma.Context, prefix *huma.PathBuffer) []error {
+	if r.All || len(r.NREs) > 0 {
+		return nil
+	}
+	return []error{&huma.ErrorDetail{Message: "all or nres is required", Location: prefix.With("all"), Value: r.All}}
+}
+
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, fresh Freshness, loginMode string, viewer bool) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow, ag, docs, g, loginMode, viewer)
+	register(api, store, flow, ag, docs, g, reports, fresh, loginMode, viewer)
 	return mux
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, loginMode string, viewer bool) {
+func sameOrigin(api huma.API) huma.Middlewares {
+	return huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
+		origin, err := url.Parse(ctx.Header("Origin"))
+		if err != nil || origin.Host == "" || origin.Host != ctx.Host() {
+			slog.WarnContext(ctx.Context(), "request rejected: origin mismatch", slog.String("op", ctx.Operation().OperationID))
+			if err := huma.WriteErr(api, ctx, http.StatusForbidden, "origin non consentito"); err != nil {
+				slog.ErrorContext(ctx.Context(), "write forbidden response failed", slog.String("error", err.Error()))
+			}
+			return
+		}
+		next(ctx)
+	}}
+}
+
+func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, fresh Freshness, loginMode string, viewer bool) {
 	registerGoogle(api, g, docs)
+	registerReports(api, reports, fresh)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-session",
@@ -85,17 +117,7 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		Method:        http.MethodPost,
 		Path:          "/api/login/import",
 		DefaultStatus: http.StatusNoContent,
-		Middlewares: huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
-			origin, err := url.Parse(ctx.Header("Origin"))
-			if err != nil || origin.Host == "" || origin.Host != ctx.Host() {
-				slog.WarnContext(ctx.Context(), "login import rejected: origin mismatch")
-				if err := huma.WriteErr(api, ctx, http.StatusForbidden, "origin non consentito"); err != nil {
-					slog.ErrorContext(ctx.Context(), "write forbidden response failed", slog.String("error", err.Error()))
-				}
-				return
-			}
-			next(ctx)
-		}},
+		Middlewares:   sameOrigin(api),
 	}, func(ctx context.Context, in *importLoginInput) (*emptyOutput, error) {
 		portal := session.Portal(in.Body.Portal)
 		res, err := login.ResultFromStorage(portal, in.Body.Access, in.Body.Refresh, in.Body.CF)
@@ -194,7 +216,13 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 				slog.String("first_exception", exception),
 				slog.String("first_shape", shape))
 		}
-		return &appointmentsOutput{Body: toAppointmentsBody(result)}, nil
+		body := toAppointmentsBody(result)
+		body.Updated = AppointmentsUpdatedBody{
+			Lists:        listUpdated(ctx, fresh, cache.SourceCUPPrescriptions, cache.SourceFSEPrescriptions),
+			Appointments: fetchedAt(ctx, fresh, cache.SourceCUPAppointments),
+			Verdicts:     fetchedAt(ctx, fresh, cache.SourceCUPVerdict),
+		}
+		return &appointmentsOutput{Body: body}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -207,7 +235,34 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		if err != nil {
 			return nil, toHTTPError(ctx, "list-prescriptions", err)
 		}
-		return &prescriptionsOutput{Body: toPrescriptionsBody(rows)}, nil
+		body := toPrescriptionsBody(rows)
+		body.Updated = listUpdated(ctx, fresh, cache.SourceFSEPrescriptions)
+		return &prescriptionsOutput{Body: body}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "refresh",
+		Method:        http.MethodPost,
+		Path:          "/api/refresh",
+		DefaultStatus: http.StatusNoContent,
+		Middlewares:   sameOrigin(api),
+	}, func(ctx context.Context, in *refreshInput) (*emptyOutput, error) {
+		refreshCtx := cache.WithRefresh(ctx, cache.Scope{All: in.Body.All, NREs: in.Body.NREs})
+		if _, err := ag.Appointments(refreshCtx); err != nil {
+			return nil, toHTTPError(ctx, "refresh", err)
+		}
+		if !in.Body.All {
+			return &emptyOutput{}, nil
+		}
+		_, err := reports.List(refreshCtx)
+		if errors.Is(err, session.ErrNotLoggedIn) || errors.Is(err, session.ErrSessionExpired) {
+			slog.WarnContext(ctx, "refresh: reports skipped", slog.String("error", err.Error()))
+			return &emptyOutput{}, nil
+		}
+		if err != nil {
+			return nil, toHTTPError(ctx, "refresh", err)
+		}
+		return &emptyOutput{}, nil
 	})
 
 	huma.Register(api, huma.Operation{

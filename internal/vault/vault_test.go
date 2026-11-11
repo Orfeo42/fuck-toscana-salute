@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zalando/go-keyring"
 
 	"fuck-toscana-salute/internal/session"
 )
@@ -44,9 +43,9 @@ func sampleSnapshot() session.Snapshot {
 	}
 }
 
-func TestNew(t *testing.T) {
+func TestNewWithBackend(t *testing.T) {
 	t.Run("stores service and user", func(t *testing.T) {
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 		assert.Equal(t, testService, v.service)
 		assert.Equal(t, testUser, v.user)
 	})
@@ -54,8 +53,7 @@ func TestNew(t *testing.T) {
 
 func TestSave(t *testing.T) {
 	t.Run("round trip", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 		want := sampleSnapshot()
 
 		require.NoError(t, v.Save(context.Background(), want))
@@ -79,8 +77,7 @@ func TestSave(t *testing.T) {
 	})
 
 	t.Run("empty snapshot deletes stored blob", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 		require.NoError(t, v.Save(context.Background(), sampleSnapshot()))
 
 		require.NoError(t, v.Save(context.Background(), session.Snapshot{}))
@@ -89,15 +86,13 @@ func TestSave(t *testing.T) {
 	})
 
 	t.Run("empty snapshot with nothing stored is nil", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 
 		assert.NoError(t, v.Save(context.Background(), session.Snapshot{}))
 	})
 
 	t.Run("cancelled context", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -108,36 +103,35 @@ func TestSave(t *testing.T) {
 
 func TestLoad(t *testing.T) {
 	t.Run("nothing stored", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 
 		_, err := v.Load(context.Background())
 		assert.ErrorIs(t, err, session.ErrNoSnapshot)
 	})
 
 	t.Run("malformed blob", func(t *testing.T) {
-		keyring.MockInit()
-		require.NoError(t, keyring.Set(testService, testUser, "{not json"))
-		v := New(testService, testUser)
+		b := newMemoryBackend()
+		require.NoError(t, b.Set(testService, testUser, "{not json"))
+		v := NewWithBackend(b, testService, testUser)
 
 		_, err := v.Load(context.Background())
 		assert.ErrorIs(t, err, ErrCorrupt)
 	})
 
 	t.Run("wrong version", func(t *testing.T) {
-		keyring.MockInit()
-		require.NoError(t, keyring.Set(testService, testUser, `{"version":99,"tokens":{},"identity":{}}`))
-		v := New(testService, testUser)
+		b := newMemoryBackend()
+		require.NoError(t, b.Set(testService, testUser, `{"version":99,"tokens":{},"identity":{}}`))
+		v := NewWithBackend(b, testService, testUser)
 
 		_, err := v.Load(context.Background())
 		assert.ErrorIs(t, err, ErrCorrupt)
 	})
 
 	t.Run("unknown portal skipped", func(t *testing.T) {
-		keyring.MockInit()
 		blob := `{"version":1,"tokens":{"cup":{"access":"a"},"zzz":{"access":"b"}},"identity":{"codiceFiscale":"X"}}`
-		require.NoError(t, keyring.Set(testService, testUser, blob))
-		v := New(testService, testUser)
+		b := newMemoryBackend()
+		require.NoError(t, b.Set(testService, testUser, blob))
+		v := NewWithBackend(b, testService, testUser)
 
 		got, err := v.Load(context.Background())
 		require.NoError(t, err)
@@ -147,8 +141,7 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("cancelled context", func(t *testing.T) {
-		keyring.MockInit()
-		v := New(testService, testUser)
+		v := NewWithBackend(newMemoryBackend(), testService, testUser)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 

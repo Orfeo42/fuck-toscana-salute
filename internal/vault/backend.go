@@ -3,8 +3,6 @@ package vault
 import (
 	"errors"
 	"fmt"
-
-	"github.com/zalando/go-keyring"
 )
 
 const ErrNotFound = vaultError("vault: entry not found")
@@ -15,35 +13,27 @@ type Backend interface {
 	Delete(service, user string) error
 }
 
-type KeyringBackend struct{}
-
-var _ Backend = KeyringBackend{}
-
-func (KeyringBackend) Get(service, user string) (string, error) {
-	value, err := keyring.Get(service, user)
-	if errors.Is(err, keyring.ErrNotFound) {
-		return "", ErrNotFound
+func Copy(dst, src Backend, service string, users []string) (int, error) {
+	copied := 0
+	for _, user := range users {
+		value, err := src.Get(service, user)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return copied, fmt.Errorf("vault: copy read: %w", err)
+		}
+		_, err = dst.Get(service, user)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return copied, fmt.Errorf("vault: copy check: %w", err)
+		}
+		if err := dst.Set(service, user, value); err != nil {
+			return copied, fmt.Errorf("vault: copy write: %w", err)
+		}
+		copied++
 	}
-	if err != nil {
-		return "", fmt.Errorf("keyring get: %w", err)
-	}
-	return value, nil
-}
-
-func (KeyringBackend) Set(service, user, value string) error {
-	if err := keyring.Set(service, user, value); err != nil {
-		return fmt.Errorf("keyring set: %w", err)
-	}
-	return nil
-}
-
-func (KeyringBackend) Delete(service, user string) error {
-	err := keyring.Delete(service, user)
-	if errors.Is(err, keyring.ErrNotFound) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("keyring delete: %w", err)
-	}
-	return nil
+	return copied, nil
 }

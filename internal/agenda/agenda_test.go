@@ -46,6 +46,9 @@ func noCUP() *MockCUP {
 	return &MockCUP{
 		PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) { return nil, nil },
 		AppointmentsFunc:  func(ctx context.Context, nre string) ([]cup.Appointment, error) { return nil, nil },
+		VerdictFunc: func(ctx context.Context, nre string) (cup.Verdict, error) {
+			return cup.Verdict{Reason: cup.VerdictBookable}, nil
+		},
 	}
 }
 
@@ -181,6 +184,48 @@ func TestAppointments(t *testing.T) {
 		assert.Equal(t, []string{"A", "C"}, result.Unbooked)
 		require.Len(t, result.Failed, 1)
 		assert.Equal(t, "D", result.Failed[0].NRE)
+	})
+
+	t.Run("verdicts fetched for every unbooked NRE keyed by upper NRE", func(t *testing.T) {
+		c := noCUP()
+		c.AppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			if nre == "b" {
+				return []cup.Appointment{{ID: "id-b", Status: "PRENOTATO"}}, nil
+			}
+			return nil, nil
+		}
+		c.VerdictFunc = func(ctx context.Context, nre string) (cup.Verdict, error) {
+			return cup.Verdict{Reason: cup.VerdictHandled, Message: "m-" + nre}, nil
+		}
+		result, err := newAgenda(c, visits("a", "b", "c"), 2).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.Len(t, c.VerdictCalls(), 2)
+		require.Len(t, result.Verdicts, 2)
+		assert.Equal(t, "m-a", result.Verdicts["A"].Message)
+		assert.Equal(t, cup.VerdictHandled, result.Verdicts["C"].Reason)
+		assert.NotContains(t, result.Verdicts, "B")
+	})
+
+	t.Run("verdict error leaves the NRE out without failing", func(t *testing.T) {
+		c := noCUP()
+		c.VerdictFunc = func(ctx context.Context, nre string) (cup.Verdict, error) {
+			if nre == "B" {
+				return cup.Verdict{}, errBoom
+			}
+			return cup.Verdict{Reason: cup.VerdictBookable}, nil
+		}
+		result, err := newAgenda(c, visits("A", "B"), 1).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"A", "B"}, result.Unbooked)
+		assert.Contains(t, result.Verdicts, "A")
+		assert.NotContains(t, result.Verdicts, "B")
+	})
+
+	t.Run("verdicts is empty non-nil without unbooked", func(t *testing.T) {
+		result, err := newAgenda(noCUP(), emptyFSE(), 1).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.NotNil(t, result.Verdicts)
+		assert.Empty(t, result.Verdicts)
 	})
 
 	t.Run("unbooked is empty non-nil without candidates", func(t *testing.T) {

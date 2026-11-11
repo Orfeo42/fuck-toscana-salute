@@ -4,20 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/calendar/v3"
-	"google.golang.org/api/drive/v3"
 )
 
 type googleError string
@@ -42,8 +38,9 @@ type Status struct {
 }
 
 type pendingAuth struct {
-	verifier  string
-	expiresAt time.Time
+	verifier    string
+	redirectURL string
+	expiresAt   time.Time
 }
 
 //go:generate moq -out tokenstore_mock.go . TokenStore:MockTokenStore
@@ -54,8 +51,9 @@ type TokenStore interface {
 }
 
 type Client struct {
-	cfg              *oauth2.Config
+	settings         SettingsStore
 	store            TokenStore
+	endpoint         oauth2.Endpoint
 	httpClient       *http.Client
 	now              func() time.Time
 	calendarEndpoint string
@@ -66,10 +64,11 @@ type Client struct {
 	pending map[string]pendingAuth
 }
 
-func New(cfg *oauth2.Config, store TokenStore, httpClient *http.Client) *Client {
+func New(settings SettingsStore, tokens TokenStore, httpClient *http.Client) *Client {
 	return &Client{
-		cfg:        cfg,
-		store:      store,
+		settings:   settings,
+		store:      tokens,
+		endpoint:   google.Endpoint,
 		httpClient: httpClient,
 		now:        time.Now,
 		revokeURL:  revokeURL,
@@ -77,21 +76,12 @@ func New(cfg *oauth2.Config, store TokenStore, httpClient *http.Client) *Client 
 	}
 }
 
-func ConfigFromFile(path, redirectURL string) (*oauth2.Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("google: read client file: %w", err)
-	}
-	cfg, err := google.ConfigFromJSON(data, calendar.CalendarEventsScope, drive.DriveFileScope)
-	if err != nil {
-		return nil, errors.New("google: invalid client file")
-	}
-	cfg.RedirectURL = redirectURL
-	return cfg, nil
-}
-
 func (c *Client) Status(ctx context.Context) (Status, error) {
-	if c.cfg == nil {
+	settings, err := c.loadSettings()
+	if err != nil {
+		return Status{}, err
+	}
+	if settings.Validate() != nil {
 		return Status{}, nil
 	}
 	token, err := c.store.Load(ctx)
@@ -101,9 +91,10 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	return Status{Configured: true, Connected: token != nil}, nil
 }
 
-func (c *Client) AuthURL() (string, error) {
-	if c.cfg == nil {
-		return "", ErrNotConfigured
+func (c *Client) AuthURL(_ context.Context, redirectURL string) (string, error) {
+	settings, err := c.configured()
+	if err != nil {
+		return "", err
 	}
 
 	raw := make([]byte, stateBytes)
@@ -120,15 +111,16 @@ func (c *Client) AuthURL() (string, error) {
 			delete(c.pending, key)
 		}
 	}
-	c.pending[state] = pendingAuth{verifier: verifier, expiresAt: now.Add(stateTTL)}
+	c.pending[state] = pendingAuth{verifier: verifier, redirectURL: redirectURL, expiresAt: now.Add(stateTTL)}
 	c.mu.Unlock()
 
-	return c.cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce, oauth2.S256ChallengeOption(verifier)), nil
+	return c.oauthConfig(settings, redirectURL).AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce, oauth2.S256ChallengeOption(verifier)), nil
 }
 
 func (c *Client) Exchange(ctx context.Context, state, code string) error {
-	if c.cfg == nil {
-		return ErrNotConfigured
+	settings, err := c.configured()
+	if err != nil {
+		return err
 	}
 
 	c.mu.Lock()
@@ -140,7 +132,7 @@ func (c *Client) Exchange(ctx context.Context, state, code string) error {
 	}
 
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
-	token, err := c.cfg.Exchange(ctx, code, oauth2.VerifierOption(p.verifier))
+	token, err := c.oauthConfig(settings, p.redirectURL).Exchange(ctx, code, oauth2.VerifierOption(p.verifier))
 	if err != nil {
 		return fmt.Errorf("google: exchange: %w", err)
 	}

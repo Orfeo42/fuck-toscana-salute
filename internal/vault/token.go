@@ -15,10 +15,6 @@ type TokenVault struct {
 	user    string
 }
 
-func NewTokenVault(service, user string) *TokenVault {
-	return NewTokenVaultWithBackend(KeyringBackend{}, service, user)
-}
-
 func NewTokenVaultWithBackend(b Backend, service, user string) *TokenVault {
 	return &TokenVault{backend: b, service: service, user: user}
 }
