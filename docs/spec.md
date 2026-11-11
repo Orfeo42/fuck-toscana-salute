@@ -97,7 +97,7 @@ FSE `stato` on prescriptions is NOT a reliable "booked" flag: a prescription sho
 
 FSE "Diario → Appuntamenti" is a user-maintained diary, not CUP bookings.
 
-The gestione appointment lookup answers HTTP 500 with JSON `{"message":"Non esistono richieste per il paziente"}` when the NRE has no bookings; any other HTTP 500 (non-JSON text body) is a transient upstream fault, not a missing booking.
+The gestione appointment lookup answers HTTP 500 with JSON `{"message":"Non esistono richieste per il paziente"}` when the NRE has no bookings. That body is ~11 KB with a Java `stackTrace` before `message`, so the marker must be matched on the parsed `message` of the full body, never on a truncated prefix (a 4 KB prefix looked like a non-JSON text error). Any other HTTP 500 is an upstream fault, not a missing booking.
 
 A prescription with FSE `stato` 30 and a confirmed empty CUP appointment lookup is bookable: FSE 30 alone does not mean booked.
 
