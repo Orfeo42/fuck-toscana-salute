@@ -17,6 +17,7 @@ type SessionBody struct {
 	Portals       []PortalBody `json:"portals"`
 	GestioneReady bool         `json:"gestioneReady"`
 	LoginMode     string       `json:"loginMode" enum:"window,bookmarklet"`
+	Viewer        bool         `json:"viewer"`
 }
 
 type PortalBody struct {
@@ -32,7 +33,7 @@ type LoginBody struct {
 	Error string `json:"error,omitempty"`
 }
 
-func toSessionBody(status session.Status, states map[session.Portal]loginflow.State, loginMode string) SessionBody {
+func toSessionBody(status session.Status, states map[session.Portal]loginflow.State, loginMode string, viewer bool) SessionBody {
 	portals := make([]PortalBody, 0, len(status.Portals))
 	for _, p := range status.Portals {
 		login := LoginBody{Phase: string(loginflow.PhaseIdle)}
@@ -47,7 +48,7 @@ func toSessionBody(status session.Status, states map[session.Portal]loginflow.St
 			Login:            login,
 		})
 	}
-	return SessionBody{Portals: portals, GestioneReady: status.GestioneReady, LoginMode: loginMode}
+	return SessionBody{Portals: portals, GestioneReady: status.GestioneReady, LoginMode: loginMode, Viewer: viewer}
 }
 
 func timePtr(t time.Time) *time.Time {

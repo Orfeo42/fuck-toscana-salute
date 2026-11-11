@@ -144,6 +144,7 @@ func TestLoad(t *testing.T) {
 		got, err := Load()
 		require.NoError(t, err)
 		assert.Equal(t, dir, got.DataDir)
+		assert.Equal(t, filepath.Join(dir, "chrome-profile"), got.ProfileDir)
 		assert.Equal(t, "/run/secrets/fts-key", got.SecretKeyFile)
 	})
 
@@ -151,6 +152,19 @@ func TestLoad(t *testing.T) {
 		t.Setenv("FTS_DATA_DIR", "data")
 		_, err := Load()
 		require.ErrorIs(t, err, ErrInvalidDataDir)
+	})
+
+	t.Run("loopback viewer address", func(t *testing.T) {
+		t.Setenv("FTS_VIEWER_ADDR", "127.0.0.1:6080")
+		got, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "127.0.0.1:6080", got.ViewerAddr)
+	})
+
+	t.Run("non-loopback viewer address rejected", func(t *testing.T) {
+		t.Setenv("FTS_VIEWER_ADDR", "10.0.0.2:6080")
+		_, err := Load()
+		require.ErrorIs(t, err, ErrNonLoopbackViewer)
 	})
 
 	t.Run("zero login timeout", func(t *testing.T) {

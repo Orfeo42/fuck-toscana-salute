@@ -20,6 +20,7 @@ vi.mock("../api/client", () => ({
 const activeSession: SessionBody = {
   gestioneReady: true,
   loginMode: "window",
+  viewer: false,
   portals: [
     {
       portal: "cup",
@@ -34,6 +35,7 @@ const activeSession: SessionBody = {
 const degradedSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     {
       portal: "cup",
@@ -48,6 +50,7 @@ const degradedSession: SessionBody = {
 const loggedOutSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "idle" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
@@ -57,6 +60,7 @@ const loggedOutSession: SessionBody = {
 const waitingLoggedOutSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "waiting" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
@@ -66,6 +70,7 @@ const waitingLoggedOutSession: SessionBody = {
 const waitingLoggedInSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "expired", login: { phase: "waiting" } },
@@ -76,6 +81,7 @@ function failedSession(reason: string): SessionBody {
   return {
     gestioneReady: false,
     loginMode: "window",
+    viewer: false,
     portals: [
       { portal: "cup", state: "active", login: { phase: "idle" } },
       {

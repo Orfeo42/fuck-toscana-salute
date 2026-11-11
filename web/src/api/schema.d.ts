@@ -402,6 +402,7 @@ export interface components {
             /** @enum {string} */
             loginMode: "window" | "bookmarklet";
             portals: components["schemas"]["PortalBody"][] | null;
+            viewer: boolean;
         };
         UnitBody: {
             address: string;

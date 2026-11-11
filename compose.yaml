@@ -12,6 +12,10 @@ services:
     secrets:
       - fts_key
     read_only: true
+    shm_size: "1gb"
+    tmpfs:
+      - /tmp:exec,uid=1000,gid=1000
+      - /home/app:uid=1000,gid=1000
     cap_drop:
       - ALL
     security_opt:

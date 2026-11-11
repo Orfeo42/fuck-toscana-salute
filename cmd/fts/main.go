@@ -26,6 +26,7 @@ import (
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 	"fuck-toscana-salute/internal/vault"
+	"fuck-toscana-salute/internal/viewer"
 	"fuck-toscana-salute/internal/webui"
 )
 
@@ -101,11 +102,14 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	}
 	googleClient := google.New(googleCfg, vault.NewTokenVaultWithBackend(secrets, keyringService, keyringGoogleUser), httpClient)
 	mux := http.NewServeMux()
-	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient, cfg.LoginMode)
+	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient}, googleClient, cfg.LoginMode, cfg.ViewerAddr != "")
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}
 	mux.Handle(google.CallbackPath, googleClient.CallbackHandler())
+	if cfg.ViewerAddr != "" {
+		mux.Handle("/viewer/", viewer.Handler(cfg.ViewerAddr))
+	}
 	mux.Handle("/", webui.Handler())
 	srv := &http.Server{
 		Addr:              cfg.Addr,

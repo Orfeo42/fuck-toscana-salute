@@ -57,6 +57,8 @@ const (
 
 var interactiveRestoredArgs = []string{"--disable-extensions", "--password-store=basic"}
 
+var interactiveArgs = []string{"--start-maximized"}
+
 type storageSnapshot struct {
 	Access, Refresh, CF string
 }
@@ -190,6 +192,8 @@ func (l *Launcher) open(headless bool) (*browser, error) {
 	}
 	if !headless {
 		opts.IgnoreDefaultArgs = interactiveRestoredArgs
+		opts.NoViewport = playwright.Bool(true)
+		opts.Args = interactiveArgs
 	}
 	bctx, err := pw.Chromium.LaunchPersistentContext(l.profileDir, opts)
 	if err != nil {

@@ -77,6 +77,7 @@ function stubScroll(scroll: () => void): void {
 const session: SessionBody = {
   gestioneReady: true,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },

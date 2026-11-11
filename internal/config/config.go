@@ -20,6 +20,7 @@ const (
 	ErrInvalidProfileDir configError = "profile directory must be an absolute path"
 	ErrInvalidDataDir    configError = "data directory must be an absolute path"
 	ErrInvalidLoginMode  configError = "login mode must be window or bookmarklet"
+	ErrNonLoopbackViewer configError = "viewer address must be loopback"
 )
 
 const (
@@ -38,6 +39,7 @@ type Config struct {
 	LoginMode      string        `env:"FTS_LOGIN_MODE" envDefault:"window"`
 	ListenAny      bool          `env:"FTS_LISTEN_ANY"`
 	SecretKeyFile  string        `env:"FTS_SECRET_KEY_FILE"`
+	ViewerAddr     string        `env:"FTS_VIEWER_ADDR"`
 
 	GoogleClientFile string `env:"FTS_GOOGLE_CLIENT_FILE"`
 }
@@ -48,11 +50,10 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("parse env: %w", err)
 	}
 
-	host, _, err := net.SplitHostPort(cfg.Addr)
-	if err != nil {
+	if _, _, err := net.SplitHostPort(cfg.Addr); err != nil {
 		return Config{}, fmt.Errorf("split addr: %w", ErrNonLoopbackAddr)
 	}
-	if !cfg.ListenAny && host != "127.0.0.1" && host != "::1" && host != "localhost" {
+	if !cfg.ListenAny && !loopbackAddr(cfg.Addr) {
 		return Config{}, ErrNonLoopbackAddr
 	}
 
@@ -60,27 +61,29 @@ func Load() (Config, error) {
 		return Config{}, ErrInvalidDuration
 	}
 
+	if cfg.ViewerAddr != "" && !loopbackAddr(cfg.ViewerAddr) {
+		return Config{}, ErrNonLoopbackViewer
+	}
+
 	if cfg.LoginMode != LoginModeWindow && cfg.LoginMode != LoginModeBookmarklet {
 		return Config{}, ErrInvalidLoginMode
 	}
 
-	if cfg.DataDir == "" || cfg.ProfileDir == "" {
+	if cfg.DataDir == "" {
 		appData, err := defaultDataDir()
 		if err != nil {
 			return Config{}, err
 		}
-		if cfg.DataDir == "" {
-			cfg.DataDir = appData
-		}
-		if cfg.ProfileDir == "" {
-			cfg.ProfileDir = filepath.Join(appData, "chrome-profile")
-		}
-	}
-	if !filepath.IsAbs(cfg.ProfileDir) {
-		return Config{}, ErrInvalidProfileDir
+		cfg.DataDir = appData
 	}
 	if !filepath.IsAbs(cfg.DataDir) {
 		return Config{}, ErrInvalidDataDir
+	}
+	if cfg.ProfileDir == "" {
+		cfg.ProfileDir = filepath.Join(cfg.DataDir, "chrome-profile")
+	}
+	if !filepath.IsAbs(cfg.ProfileDir) {
+		return Config{}, ErrInvalidProfileDir
 	}
 
 	if cfg.GoogleClientFile == "" {
@@ -104,4 +107,12 @@ func defaultDataDir() (string, error) {
 		dataHome = filepath.Join(home, ".local", "share")
 	}
 	return filepath.Join(dataHome, "fuck-toscana-salute"), nil
+}
+
+func loopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }

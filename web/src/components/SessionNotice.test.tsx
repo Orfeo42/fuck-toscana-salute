@@ -18,6 +18,7 @@ vi.mock("../api/client", () => ({
 const activeSession: SessionBody = {
   gestioneReady: true,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -27,6 +28,7 @@ const activeSession: SessionBody = {
 const noGestioneSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "active", login: { phase: "idle" } },
@@ -36,6 +38,7 @@ const noGestioneSession: SessionBody = {
 const loggedOutSession: SessionBody = {
   gestioneReady: false,
   loginMode: "window",
+  viewer: false,
   portals: [
     { portal: "cup", state: "logged_out", login: { phase: "idle" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },

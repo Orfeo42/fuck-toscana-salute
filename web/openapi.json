@@ -458,9 +458,12 @@
               "$ref": "#/components/schemas/PortalBody"
             },
             "type": ["array", "null"]
+          },
+          "viewer": {
+            "type": "boolean"
           }
         },
-        "required": ["portals", "gestioneReady", "loginMode"],
+        "required": ["portals", "gestioneReady", "loginMode", "viewer"],
         "type": "object"
       },
       "UnitBody": {

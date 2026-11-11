@@ -4,6 +4,7 @@ import { HeartPulse } from "lucide-react";
 import type { JSX } from "react";
 
 import { AppNav } from "./components/AppNav";
+import { LoginViewer } from "./components/LoginViewer";
 import { SessionMenu } from "./components/SessionMenu";
 import { SessionNotice } from "./components/SessionNotice";
 import { HealthDataProvider } from "./data/HealthDataProvider";
@@ -70,6 +71,7 @@ export function App(): JSX.Element {
             </AppShell.Navbar>
             <AppShell.Main>
               <Stack gap="md">
+                <LoginViewer />
                 <SessionNotice />
                 <Content />
               </Stack>

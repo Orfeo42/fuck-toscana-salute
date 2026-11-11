@@ -22,6 +22,7 @@ const fseOrigin = "https://fse.sanita.toscana.it";
 const session: SessionBody = {
   gestioneReady: true,
   loginMode: "bookmarklet",
+  viewer: false,
   portals: [
     { portal: "cup", state: "active", login: { phase: "idle" } },
     { portal: "fse", state: "logged_out", login: { phase: "idle" } },
