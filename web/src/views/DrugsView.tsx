@@ -10,17 +10,19 @@ import {
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent } from "react";
 
 import { CopyButton } from "../components/CopyButton";
 import { PdfLink } from "../components/PdfLink";
+import { StopClick } from "../components/StopClick";
 import { StatusBadge } from "../components/StatusBadge";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate } from "../lib/format";
-import { tableBackground } from "../theme";
+import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
+import { DrugDetailModal } from "./drugs/DrugDetailModal";
 import {
   defaultExcludedDrugLabels,
   drugLabelCounts,
@@ -37,6 +39,7 @@ import {
 
 const descFirst: readonly DrugSortKey[] = ["data"];
 const focusedBg = "var(--mantine-primary-color-light)";
+const rowPointer = { cursor: "pointer" };
 
 export function DrugsView(): JSX.Element {
   const { data: body, error, loading, reload } = useHealthData().prescriptions;
@@ -47,6 +50,7 @@ export function DrugsView(): JSX.Element {
     defaultExcludedDrugLabels,
   );
   const [search, setSearch] = useState("");
+  const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
   const sort = useSort<DrugSortKey>("data", "desc", descFirst);
   const focus = useFocusTarget("farmaci", body !== undefined);
 
@@ -122,19 +126,29 @@ export function DrugsView(): JSX.Element {
       title: "NRE",
       sortable: true,
       noWrap: true,
-      render: (row) => <CopyButton value={row.nre} label="Copia NRE" />,
+      render: (row) => (
+        <StopClick>
+          <CopyButton value={row.nre} label="Copia NRE" />
+        </StopClick>
+      ),
     },
     {
       accessor: "azioni",
       title: "Azioni",
       render: (row) => (
-        <Group gap={2} wrap="nowrap">
-          <PdfLink documentRef={row.fse.documentRef} />
-        </Group>
+        <StopClick>
+          <Group gap={2} wrap="nowrap">
+            <PdfLink documentRef={row.fse.documentRef} />
+          </Group>
+        </StopClick>
       ),
     },
   ];
 
+  const detailRow =
+    detailNre === undefined
+      ? undefined
+      : drugs.find((row) => row.nre === detailNre);
   const ready = !loading && error === undefined;
 
   return (
@@ -182,7 +196,7 @@ export function DrugsView(): JSX.Element {
           striped
           highlightOnHover
           withTableBorder
-          backgroundColor={tableBackground}
+          {...tableColors}
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}
@@ -197,19 +211,38 @@ export function DrugsView(): JSX.Element {
               sort.toggle(key);
             }
           }}
+          onRowClick={({ record }) => {
+            setDetailNre(record.nre);
+          }}
           customRowAttributes={(row) => ({
             id: focusId("farmaci", row.nre),
-            tabIndex: -1,
+            tabIndex: 0,
+            onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+              if (
+                event.key === "Enter" &&
+                event.target === event.currentTarget
+              ) {
+                setDetailNre(row.nre);
+              }
+            },
             "data-focused":
               row.nre.toUpperCase() === focus ? "true" : undefined,
           })}
           rowStyle={(row) =>
             row.nre.toUpperCase() === focus
-              ? { backgroundColor: focusedBg }
-              : undefined
+              ? { ...rowPointer, backgroundColor: focusedBg }
+              : rowPointer
           }
         />
       ) : null}
+      {detailRow === undefined ? null : (
+        <DrugDetailModal
+          row={detailRow}
+          onClose={() => {
+            setDetailNre(undefined);
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -303,6 +303,58 @@ describe("DrugsView", () => {
     expect(writeText).toHaveBeenCalledWith("0900A0000000002");
   });
 
+  it("opens the detail modal on row click", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+
+    await user.click(within(at(bodyRows(), 0)).getByText("Farmaco esempio"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Farmaco esempio",
+    });
+    expect(within(dialog).getByText("Da ritirare")).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Copia NRE 0900A0000000002",
+      }),
+    ).toBeVisible();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Apri ricetta (PDF)" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Ricetta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the detail modal with Enter on a focused row", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+
+    at(bodyRows(), 0).focus();
+    await user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByRole("dialog", { name: "Farmaco esempio" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not open the detail modal from the NRE copy button", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    render(<Harness />);
+    await screen.findByText("Farmaco esempio");
+
+    await user.click(
+      within(at(bodyRows(), 0)).getByRole("button", {
+        name: "Copia NRE 0900A0000000002",
+      }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("shows the login message on 401", async () => {
     mocks.get.mockResolvedValue({
       error: { detail: "no session" },

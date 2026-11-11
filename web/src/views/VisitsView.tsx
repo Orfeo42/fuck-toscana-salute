@@ -10,23 +10,24 @@ import {
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent } from "react";
 
 import { CopyButton } from "../components/CopyButton";
+import { StopClick } from "../components/StopClick";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate } from "../lib/format";
-import { tableBackground } from "../theme";
+import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
 import type { RowBody } from "../api/client";
-import { AppointmentDetailModal } from "./visits/AppointmentDetailModal";
 import {
   ActionsCell,
   AppointmentCell,
+  PlaceCell,
   StatusCell,
-  StructureCell,
 } from "./visits/VisitCells";
+import { VisitDetailModal } from "./visits/VisitDetailModal";
 import {
   buildRows,
   defaultExcludedLabels,
@@ -44,6 +45,7 @@ import {
 
 const descFirst: readonly VisitSortKey[] = ["prescritta"];
 const focusedBg = "var(--mantine-primary-color-light)";
+const rowPointer = { cursor: "pointer" };
 
 interface Props {
   now?: Date;
@@ -164,17 +166,14 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     },
     {
       accessor: "struttura",
-      title: "Struttura",
+      title: "Luogo",
       sortable: true,
-      noWrap: true,
-      width: 220,
+      width: 96,
+      textAlign: "center",
       render: (row) => (
-        <StructureCell
+        <PlaceCell
           state={effectiveState(row, bookingByNre, unbooked, currentNow)}
           booking={bookingByNre.get(row.nre.toUpperCase())}
-          onOpen={() => {
-            setDetailNre(row.nre);
-          }}
         />
       ),
     },
@@ -183,18 +182,24 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       title: "NRE",
       sortable: true,
       noWrap: true,
-      render: (row) => <CopyButton value={row.nre} label="Copia NRE" />,
+      render: (row) => (
+        <StopClick>
+          <CopyButton value={row.nre} label="Copia NRE" />
+        </StopClick>
+      ),
     },
     {
       accessor: "azioni",
       title: "Azioni",
       render: (row) => (
-        <ActionsCell
-          row={row}
-          state={effectiveState(row, bookingByNre, unbooked, currentNow)}
-          booking={bookingByNre.get(row.nre.toUpperCase())}
-          now={currentNow}
-        />
+        <StopClick>
+          <ActionsCell
+            row={row}
+            state={effectiveState(row, bookingByNre, unbooked, currentNow)}
+            booking={bookingByNre.get(row.nre.toUpperCase())}
+            now={currentNow}
+          />
+        </StopClick>
       ),
     },
   ];
@@ -203,10 +208,6 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     detailNre === undefined
       ? undefined
       : data.find((row) => row.nre === detailNre);
-  const detailBooking =
-    detailRow === undefined
-      ? undefined
-      : bookingByNre.get(detailRow.nre.toUpperCase());
 
   const summary = `${String(visible.length)} visite/esami`;
   const ready = !prescriptions.loading && prescriptions.error === undefined;
@@ -274,7 +275,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           striped
           highlightOnHover
           withTableBorder
-          backgroundColor={tableBackground}
+          {...tableColors}
           maxHeight="75vh"
           idAccessor="nre"
           records={visible}
@@ -289,30 +290,41 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
               sort.toggle(key);
             }
           }}
+          onRowClick={({ record }) => {
+            setDetailNre(record.nre);
+          }}
           customRowAttributes={(row) => ({
             id: focusId("visite", row.nre),
-            tabIndex: -1,
+            tabIndex: 0,
+            onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+              if (
+                event.key === "Enter" &&
+                event.target === event.currentTarget
+              ) {
+                setDetailNre(row.nre);
+              }
+            },
             "data-focused":
               row.nre.toUpperCase() === focus ? "true" : undefined,
           })}
           rowStyle={(row) =>
             row.nre.toUpperCase() === focus
-              ? { backgroundColor: focusedBg }
-              : undefined
+              ? { ...rowPointer, backgroundColor: focusedBg }
+              : rowPointer
           }
         />
       ) : null}
-      {detailRow !== undefined && detailBooking !== undefined ? (
-        <AppointmentDetailModal
+      {detailRow === undefined ? null : (
+        <VisitDetailModal
           row={detailRow}
           state={effectiveState(detailRow, bookingByNre, unbooked, currentNow)}
-          booking={detailBooking}
+          booking={bookingByNre.get(detailRow.nre.toUpperCase())}
           now={currentNow}
           onClose={() => {
             setDetailNre(undefined);
           }}
         />
-      ) : null}
+      )}
     </section>
   );
 }

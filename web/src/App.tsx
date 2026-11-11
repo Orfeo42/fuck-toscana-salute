@@ -49,17 +49,18 @@ export function App(): JSX.Element {
                     onClick={toggle}
                     hiddenFrom="sm"
                     size="sm"
+                    color="white"
                     aria-label={opened ? "Chiudi menu" : "Apri menu"}
                   />
                   <HeartPulse
                     size={22}
-                    color="var(--mantine-primary-color-filled)"
+                    color="var(--mantine-color-navy-2)"
                     aria-hidden="true"
                   />
-                  <Text fw={700} size="lg">
+                  <Text fw={700} size="lg" c="white">
                     Toscana Salute
                   </Text>
-                  <Text c="dimmed" size="sm" visibleFrom="sm">
+                  <Text c="navy.2" size="sm" visibleFrom="sm">
                     ma usabile
                   </Text>
                 </Group>

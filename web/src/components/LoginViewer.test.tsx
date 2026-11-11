@@ -10,6 +10,15 @@ import { LoginViewer } from "./LoginViewer";
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  disconnect: vi.fn(),
+}));
+
+vi.mock("@novnc/novnc", () => ({
+  default: class {
+    addEventListener = vi.fn();
+    removeEventListener = vi.fn();
+    disconnect = mocks.disconnect;
+  },
 }));
 
 vi.mock("../api/client", () => ({
@@ -46,6 +55,7 @@ describe("LoginViewer", () => {
   beforeEach(() => {
     mocks.get.mockReset();
     mocks.post.mockReset();
+    mocks.disconnect.mockReset();
   });
 
   it("shows the remote browser while a portal login is waiting", async () => {
@@ -56,10 +66,7 @@ describe("LoginViewer", () => {
       await screen.findByRole("dialog", { name: "Accesso ai portali" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Accedi con SPID\/CIE/)).toBeInTheDocument();
-    expect(screen.getByTitle("Browser di accesso")).toHaveAttribute(
-      "src",
-      "/viewer/vnc.html?autoconnect=true&resize=remote&reconnect=true&path=viewer/websockify",
-    );
+    expect(screen.getByTestId("remote-target")).toBeInTheDocument();
   });
 
   it("stays hidden when the viewer is not available", async () => {
@@ -71,7 +78,7 @@ describe("LoginViewer", () => {
     await vi.waitFor(() => {
       expect(mocks.get).toHaveBeenCalled();
     });
-    expect(screen.queryByTitle("Browser di accesso")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("remote-target")).not.toBeInTheDocument();
   });
 
   it("stays hidden when no login is waiting", async () => {
@@ -81,7 +88,7 @@ describe("LoginViewer", () => {
     await vi.waitFor(() => {
       expect(mocks.get).toHaveBeenCalled();
     });
-    expect(screen.queryByTitle("Browser di accesso")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("remote-target")).not.toBeInTheDocument();
   });
 
   it("hides on the close button without cancelling the login", async () => {
@@ -89,12 +96,13 @@ describe("LoginViewer", () => {
     mocks.get.mockResolvedValue({ data: waitingSession });
     renderViewer();
 
-    await screen.findByTitle("Browser di accesso");
+    await screen.findByTestId("remote-target");
     await user.click(screen.getByRole("button", { name: "Chiudi" }));
 
     await vi.waitFor(() => {
-      expect(screen.queryByTitle("Browser di accesso")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("remote-target")).not.toBeInTheDocument();
     });
     expect(mocks.post).not.toHaveBeenCalled();
+    expect(mocks.disconnect).toHaveBeenCalled();
   });
 });

@@ -55,7 +55,7 @@ export function SessionMenu(): JSX.Element | null {
   const { session, loginAll, logout } = useSession();
 
   if (session === undefined) {
-    return <Loader size="sm" aria-label="Caricamento sessione" />;
+    return <Loader size="sm" color="white" aria-label="Caricamento sessione" />;
   }
 
   const handleLogin = (): void => {
@@ -76,7 +76,8 @@ export function SessionMenu(): JSX.Element | null {
   if (!loggedIn) {
     return (
       <Button
-        variant="filled"
+        variant="white"
+        color="navy"
         leftSection={<LogIn size={16} />}
         loading={waiting}
         onClick={handleLogin}
@@ -95,7 +96,8 @@ export function SessionMenu(): JSX.Element | null {
       <Menu.Target>
         <Indicator color="orange" disabled={!degraded} offset={4}>
           <Button
-            variant="default"
+            variant="outline"
+            color="navy.0"
             aria-label="Account"
             leftSection={<UserRound size={16} />}
             rightSection={<ChevronDown size={16} />}

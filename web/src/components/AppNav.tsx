@@ -36,7 +36,6 @@ export function AppNav({ onNavigate }: Props): JSX.Element {
                 label={label}
                 leftSection={<Icon size={18} aria-hidden="true" />}
                 active={active}
-                variant="light"
                 onClick={onNavigate}
                 {...(active ? { "aria-current": "page" as const } : {})}
               />
@@ -44,9 +43,10 @@ export function AppNav({ onNavigate }: Props): JSX.Element {
           })}
         </Stack>
       </Box>
-      <Text size="xs" c="dimmed">
-        Dati letti in tempo reale dai portali della Regione Toscana. Nessuna
-        copia locale.
+      <Text size="xs" c="navy.1">
+        Dati letti in tempo reale dai portali della Regione Toscana. Sul server
+        restano solo la sessione di accesso (cifrata) e il profilo del browser
+        di accesso.
       </Text>
     </Stack>
   );

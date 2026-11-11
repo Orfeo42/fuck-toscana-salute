@@ -13,6 +13,7 @@ import {
 import type { AppointmentBody, RowBody, SessionBody } from "../api/client";
 import { HealthDataProvider } from "../data/HealthDataProvider";
 import { GoogleContext } from "../google/useGoogle";
+import { formatDate } from "../lib/format";
 import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { VisitsView } from "./VisitsView";
@@ -256,6 +257,10 @@ function titles(): string[] {
   });
 }
 
+async function openStatusInfo(user: User, row: HTMLElement): Promise<void> {
+  await user.click(within(row).getByRole("button", { name: "Dettagli stato" }));
+}
+
 function rowOf(text: string): HTMLElement {
   const found = bodyRows().find(
     (row) => within(row).queryByText(text) !== null,
@@ -296,7 +301,7 @@ describe("VisitsView", () => {
       "Prestazione",
       "Stato",
       "Appuntamento",
-      "Struttura",
+      "Luogo",
       "NRE",
       "Azioni",
     ]);
@@ -334,7 +339,15 @@ describe("VisitsView", () => {
     const row = await bookedRowOf();
     expect(within(row).getByText("gio 12/11 · 10:30")).toBeVisible();
     expect(within(row).queryByText("tra 2 giorni")).not.toBeInTheDocument();
-    expect(within(row).getByText("Unita esempio")).toBeVisible();
+    expect(
+      within(row).getByRole("link", {
+        name: "Apri in Google Maps: Unita esempio",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/search/?api=1&query=Via%20Esempio%201%2C%20Firenze",
+    );
+    expect(within(row).queryByText("Unita esempio")).not.toBeInTheDocument();
     expect(
       within(row).queryByText("Via Esempio 1, Firenze, FI"),
     ).not.toBeInTheDocument();
@@ -342,8 +355,14 @@ describe("VisitsView", () => {
       within(row).queryByRole("link", { name: "Apri su mappa" }),
     ).not.toBeInTheDocument();
     expect(
-      within(row).getAllByRole("button", { name: "Dettagli appuntamento" }),
-    ).toHaveLength(2);
+      within(row).getByRole("button", { name: "Dettagli appuntamento" }),
+    ).toBeVisible();
+    expect(
+      within(row).getByRole("link", { name: /^Apri in Google Maps/ }),
+    ).toHaveAttribute("target", "_blank");
+    expect(
+      within(row).getByRole("link", { name: /^Apri in Google Maps/ }),
+    ).toHaveAttribute("rel", "noopener noreferrer");
     expect(
       within(row).getByRole("button", { name: "Aggiungi a Google Calendar" }),
     ).toBeVisible();
@@ -358,14 +377,11 @@ describe("VisitsView", () => {
     renderView();
 
     const row = await bookedRowOf();
-    const buttons = within(row).getAllByRole("button", {
-      name: "Dettagli appuntamento",
-    });
-    const structure = buttons[1];
-    if (structure === undefined) {
-      throw new Error("no structure button");
-    }
-    await user.hover(structure);
+    await user.hover(
+      within(row).getByRole("link", {
+        name: "Apri in Google Maps: Unita esempio",
+      }),
+    );
 
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       "Unita esempio",
@@ -392,15 +408,13 @@ describe("VisitsView", () => {
     renderView();
 
     const row = await bookedRowOf();
-    const [open] = within(row).getAllByRole("button", {
-      name: "Dettagli appuntamento",
-    });
-    if (open === undefined) {
-      throw new Error("no detail button");
-    }
-    await user.click(open);
+    await user.click(
+      within(row).getByRole("button", { name: "Dettagli appuntamento" }),
+    );
 
-    const dialog = await screen.findByRole("dialog", { name: "Appuntamento" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Visita esempio",
+    });
     expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
     expect(within(dialog).getByText("tra 2 giorni")).toBeVisible();
     expect(within(dialog).getByText("Unita esempio")).toBeVisible();
@@ -447,20 +461,210 @@ describe("VisitsView", () => {
     renderView();
 
     const row = await bookedRowOf();
-    const [open] = within(row).getAllByRole("button", {
-      name: "Dettagli appuntamento",
-    });
-    if (open === undefined) {
-      throw new Error("no detail button");
-    }
-    await user.click(open);
+    await user.click(
+      within(row).getByRole("button", { name: "Dettagli appuntamento" }),
+    );
 
-    const dialog = await screen.findByRole("dialog", { name: "Appuntamento" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Visita esempio",
+    });
     expect(
       within(dialog).queryByRole("link", { name: "Indicazioni stradali" }),
     ).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("link", { name: "Apri in Google Maps" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the status on one line with an info button only when there are details", async () => {
+    mockData([], ["0900A0000000005"]);
+    renderView();
+
+    const verify = await waitFor(() => rowOf("Da verificare"));
+    const plain = rowOf("Visita esempio");
+    expect(
+      within(verify).getByRole("button", { name: "Dettagli stato" }),
+    ).toBeVisible();
+    expect(
+      within(plain).queryByRole("button", { name: "Dettagli stato" }),
+    ).not.toBeInTheDocument();
+    expect(within(verify).queryAllByText(/FSE la segna/)).toHaveLength(0);
+  });
+
+  it("shows the status details in a tooltip on hover", async () => {
+    const user = userEvent.setup();
+    mockData([], ["0900A0000000005"]);
+    renderView();
+
+    const verify = await waitFor(() => rowOf("Da verificare"));
+    await user.hover(
+      within(verify).getByRole("button", { name: "Dettagli stato" }),
+    );
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /FSE la segna come prenotata/,
+    );
+  });
+
+  it("shows the status details in a popover on click without opening the row modal", async () => {
+    const user = userEvent.setup();
+    mockData([], ["0900A0000000005"]);
+    renderView();
+
+    const verify = await waitFor(() => rowOf("Da verificare"));
+    await openStatusInfo(user, verify);
+
+    expect(
+      await screen.findByText(/FSE la segna come prenotata/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: "Controllo esempio" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no map link for a row without a booking address", async () => {
+    mockData([], []);
+    renderView();
+
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    expect(
+      within(row).queryByRole("link", { name: /^Apri in Google Maps/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no map link when the booked unit has no address", async () => {
+    mockData(
+      [
+        {
+          ...appointment("0900A0000000001", "2026-11-12T09:30:00Z"),
+          unit: {
+            name: "Unita esempio",
+            description: "",
+            address: "",
+            city: "",
+            province: "",
+          },
+        },
+      ],
+      [],
+    );
+    renderView();
+
+    const row = await bookedRowOf();
+    expect(
+      within(row).queryByRole("link", { name: /^Apri in Google Maps/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the detail modal on row click for an unbooked row", async () => {
+    const user = userEvent.setup();
+    mockData([], ["0900A0000000005"]);
+    renderView();
+
+    const row = await waitFor(() => rowOf("Da verificare"));
+    await user.click(within(row).getByText("Controllo esempio"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Controllo esempio",
+    });
+    expect(within(dialog).getByText("Stato")).toBeVisible();
+    expect(within(dialog).getByText("Da verificare")).toBeVisible();
+    expect(
+      within(dialog).getByText(/FSE la segna come prenotata/),
+    ).toBeVisible();
+    expect(within(dialog).getByText("Prescrizione")).toBeVisible();
+    expect(
+      within(dialog).getByText(formatDate("2026-10-15T09:00:00Z")),
+    ).toBeVisible();
+    expect(within(dialog).getByText("Azioni")).toBeVisible();
+    expect(within(dialog).queryByText("Appuntamento")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("link", { name: "Apri in Google Maps" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("link", { name: "Prenota sul CUP" }),
+    ).toHaveTextContent("Prenota sul CUP");
+  });
+
+  it("opens the detail modal on row click for a booked row with appointment and maps", async () => {
+    const user = userEvent.setup();
+    mockData([appointment("0900A0000000001", "2026-11-12T09:30:00Z")], []);
+    renderView();
+
+    const row = await bookedRowOf();
+    await user.click(within(row).getByText("Visita esempio"));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Visita esempio",
+    });
+    expect(within(dialog).getByText("Appuntamento")).toBeVisible();
+    expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
+    expect(
+      within(dialog).getByRole("link", { name: "Indicazioni stradali" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("link", { name: "Apri in Google Maps" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Aggiungi a Google Calendar",
+      }),
+    ).toHaveTextContent("Aggiungi a Google Calendar");
+  });
+
+  it("opens the detail modal with Enter on a focused row", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    row.focus();
+    await user.keyboard("{Enter}");
+
+    expect(
+      await screen.findByRole("dialog", { name: "Visita esempio" }),
+    ).toBeInTheDocument();
+  });
+
+  it("runs the modal actions: opens the PDF and copies the NRE", async () => {
+    const user = userEvent.setup();
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    renderView();
+
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    await user.click(within(row).getByText("Visita esempio"));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Visita esempio",
+    });
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Copia NRE 0900A0000000001" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("0900A0000000001");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Apri ricetta (PDF)" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Ricetta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not open the detail modal from an Azioni icon", async () => {
+    const user = userEvent.setup();
+    renderView();
+
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    await user.click(
+      within(row).getByRole("button", { name: "Apri ricetta (PDF)" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Ricetta" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Visita esempio" }),
     ).not.toBeInTheDocument();
   });
 
@@ -513,16 +717,18 @@ describe("VisitsView", () => {
     mockData([], ["0900A0000000005"]);
     renderView();
 
+    const user = userEvent.setup();
+    const row = await waitFor(() => rowOf("Da verificare"));
+    expect(
+      within(row).queryByText(/FSE la segna come prenotata/),
+    ).not.toBeInTheDocument();
+    await openStatusInfo(user, row);
     const note = await screen.findByText(
       "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile",
     );
-    const row = note.closest("tr");
-    expect(row).not.toBeNull();
+    expect(note).toBeVisible();
     expect(
-      within(row as HTMLElement).getByText("Da verificare"),
-    ).toBeInTheDocument();
-    expect(
-      within(row as HTMLElement).getByRole("link", { name: "Prenota sul CUP" }),
+      within(row).getByRole("link", { name: "Prenota sul CUP" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Prenotata fuori dal CUP regionale"),
@@ -544,12 +750,16 @@ describe("VisitsView", () => {
         documentRef: "",
       },
     };
+    const user = userEvent.setup();
     mockRows([estimated], []);
     renderView();
 
-    expect(
-      await screen.findByText(/scade il .*\(stimata\)/),
-    ).toBeInTheDocument();
+    await openStatusInfo(
+      user,
+      await waitFor(() => rowOf("Visita stimata esempio")),
+    );
+
+    expect(await screen.findByText(/scade il .*\(stimata\)/)).toBeVisible();
   });
 
   it("adds a row for an appointment without a prescription", async () => {
@@ -682,7 +892,9 @@ describe("VisitsView", () => {
     mockData([appointment("0900A0000000005", "2026-11-20T09:00:00Z")], []);
     renderView();
     await screen.findByText("Visita esempio");
-    await screen.findByText("Unita esempio");
+    await screen.findByRole("link", {
+      name: "Apri in Google Maps: Unita esempio",
+    });
 
     await user.type(screen.getByRole("searchbox"), "firenze");
 
@@ -712,7 +924,9 @@ describe("VisitsView", () => {
   it("keeps prescription date desc by default when appointments exist", async () => {
     mockData([appointment("0900A0000000005", "2026-11-20T09:00:00Z")], []);
     renderView();
-    await screen.findByText("Unita esempio");
+    await screen.findByRole("link", {
+      name: "Apri in Google Maps: Unita esempio",
+    });
 
     expect(titles()).toEqual([
       "Ecografia esempio, Prelievo esempio",
@@ -882,7 +1096,9 @@ describe("VisitsView", () => {
     expect(titles()).toHaveLength(2);
     const row = rowOf("Visita scaduta");
     expect(within(row).getByText("Scaduta")).toBeInTheDocument();
-    expect(within(row).getByText(/^scaduta il /)).toBeInTheDocument();
+    expect(within(row).queryByText(/^scaduta il /)).not.toBeInTheDocument();
+    await openStatusInfo(user, row);
+    expect(await screen.findByText(/^scaduta il /)).toBeVisible();
     expect(
       within(row).queryByRole("link", { name: "Prenota sul CUP" }),
     ).not.toBeInTheDocument();
@@ -920,7 +1136,8 @@ describe("VisitsView", () => {
 
     const row = rowOf("Controllo scaduto");
     expect(within(row).getByText("Scaduta")).toBeInTheDocument();
-    expect(within(row).getByText(/\(stimata\)/)).toBeInTheDocument();
+    await openStatusInfo(user, row);
+    expect(await screen.findByText(/\(stimata\)/)).toBeVisible();
     expect(within(row).queryByText("Da verificare")).not.toBeInTheDocument();
   });
 
@@ -966,6 +1183,7 @@ describe("VisitsView", () => {
   });
 
   it("shows scade il for a valid status 3 prescription", async () => {
+    const user = userEvent.setup();
     mockRows(
       [fseVisit("0900A0000000062", "Visita valida", "2026-11-20T09:00:00Z")],
       [],
@@ -973,7 +1191,8 @@ describe("VisitsView", () => {
     renderView();
 
     const row = await waitFor(() => rowOf("Visita valida"));
-    expect(within(row).getByText(/^scade il /)).toBeInTheDocument();
+    await openStatusInfo(user, row);
+    expect(await screen.findByText(/^scade il /)).toBeVisible();
     expect(within(row).getByText("Da prenotare")).toBeInTheDocument();
     expect(
       within(row).getByRole("link", { name: "Prenota sul CUP" }),

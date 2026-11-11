@@ -8,9 +8,13 @@ import { PdfViewerModal } from "../../components/PdfViewerModal";
 
 interface Props {
   bookingId: string | undefined;
+  labelled?: boolean;
 }
 
-export function PromemoriaLink({ bookingId }: Props): JSX.Element | null {
+export function PromemoriaLink({
+  bookingId,
+  labelled = false,
+}: Props): JSX.Element | null {
   const [opened, setOpened] = useState(false);
   if (bookingId === undefined || bookingId === "") {
     return null;
@@ -20,6 +24,7 @@ export function PromemoriaLink({ bookingId }: Props): JSX.Element | null {
       <IconAction
         label="Apri promemoria prenotazione (PDF)"
         icon={Ticket}
+        labelled={labelled}
         onClick={() => {
           setOpened(true);
         }}

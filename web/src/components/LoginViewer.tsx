@@ -3,17 +3,11 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useState, type JSX } from "react";
 
 import { useSession } from "../session/useSession";
+import { RemoteViewer } from "./viewer/RemoteViewer";
 
-const viewerSrc =
-  "/viewer/vnc.html?autoconnect=true&resize=remote&reconnect=true&path=viewer/websockify";
 const helpText =
   "Accedi con SPID/CIE nella finestra qui sotto. Per il CUP completa anche Gestione prenotazioni (captcha e tessera). Si chiude da sola alla fine.";
 const closeButtonProps = { "aria-label": "Chiudi" };
-const frameStyle = {
-  width: "100%",
-  height: "calc(100dvh - 160px)",
-  border: 0,
-};
 
 export function LoginViewer(): JSX.Element | null {
   const { session } = useSession();
@@ -45,7 +39,7 @@ export function LoginViewer(): JSX.Element | null {
     >
       <Stack gap="xs">
         <Text size="sm">{helpText}</Text>
-        <iframe title="Browser di accesso" src={viewerSrc} style={frameStyle} />
+        <RemoteViewer />
       </Stack>
     </Modal>
   );

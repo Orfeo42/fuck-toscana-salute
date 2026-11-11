@@ -56,4 +56,33 @@ describe("IconAction", () => {
 
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Copia");
   });
+
+  it("renders a labelled button with visible text", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(<IconAction label="Copia" icon={Copy} onClick={onClick} labelled />);
+
+    const button = screen.getByRole("button", { name: "Copia" });
+    expect(button).toHaveTextContent("Copia");
+    await user.click(button);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("renders a labelled external link with visible text", () => {
+    render(
+      <IconAction
+        label="Apri"
+        icon={Copy}
+        href="https://example.com/"
+        external
+        labelled
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Apri" });
+    expect(link).toHaveTextContent("Apri");
+    expect(link).toHaveAttribute("href", "https://example.com/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
 });
