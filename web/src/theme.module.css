@@ -1,13 +1,13 @@
 .navLink {
-  color: var(--mantine-color-white);
+  color: #ffffff;
 }
 
 .navLink:is(a, button):hover {
-  background-color: var(--mantine-color-navy-7);
+  background-color: #24354f;
 }
 
 .navLink:is(a, button)[data-active],
 .navLink:is(a, button)[aria-current="page"] {
-  background-color: var(--mantine-color-navy-6);
-  color: var(--mantine-color-white);
+  background-color: #2e4468;
+  color: #ffffff;
 }

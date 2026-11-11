@@ -77,7 +77,7 @@ export function SessionMenu(): JSX.Element | null {
     return (
       <Button
         variant="white"
-        color="navy"
+        color="dark"
         leftSection={<LogIn size={16} />}
         loading={waiting}
         onClick={handleLogin}
@@ -97,7 +97,7 @@ export function SessionMenu(): JSX.Element | null {
         <Indicator color="orange" disabled={!degraded} offset={4}>
           <Button
             variant="outline"
-            color="navy.0"
+            color="white"
             aria-label="Account"
             leftSection={<UserRound size={16} />}
             rightSection={<ChevronDown size={16} />}

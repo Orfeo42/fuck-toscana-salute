@@ -3,6 +3,7 @@ import { Pill, Stethoscope, type LucideIcon } from "lucide-react";
 import type { JSX } from "react";
 
 import { useRoute, type TabId } from "../lib/route";
+import { chromeColors } from "../theme";
 
 interface NavItem {
   id: TabId;
@@ -43,7 +44,7 @@ export function AppNav({ onNavigate }: Props): JSX.Element {
           })}
         </Stack>
       </Box>
-      <Text size="xs" c="navy.1">
+      <Text size="xs" c={chromeColors.secondaryText}>
         Dati letti in tempo reale dai portali della Regione Toscana. Sul server
         restano solo la sessione di accesso (cifrata) e il profilo del browser
         di accesso.

@@ -11,6 +11,7 @@ import { HealthDataProvider } from "./data/HealthDataProvider";
 import { GoogleProvider } from "./google/GoogleProvider";
 import { useRoute } from "./lib/route";
 import { SessionProvider } from "./session/SessionProvider";
+import { chromeColors } from "./theme";
 import { DrugsView } from "./views/DrugsView";
 import { LinkView } from "./views/LinkView";
 import { VisitsView } from "./views/VisitsView";
@@ -54,13 +55,17 @@ export function App(): JSX.Element {
                   />
                   <HeartPulse
                     size={22}
-                    color="var(--mantine-color-navy-2)"
+                    color={chromeColors.secondaryText}
                     aria-hidden="true"
                   />
                   <Text fw={700} size="lg" c="white">
                     Toscana Salute
                   </Text>
-                  <Text c="navy.2" size="sm" visibleFrom="sm">
+                  <Text
+                    c={chromeColors.secondaryText}
+                    size="sm"
+                    visibleFrom="sm"
+                  >
                     ma usabile
                   </Text>
                 </Group>
