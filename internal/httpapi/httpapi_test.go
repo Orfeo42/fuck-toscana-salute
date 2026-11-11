@@ -201,6 +201,7 @@ func TestRegisterListAppointments(t *testing.T) {
 				{NRE: "n3", Err: cup.ErrGestioneNotReady},
 				{NRE: "n4", Err: fmt.Errorf("wrap: %w", &upstream.StatusError{Status: 500})},
 				{NRE: "n5", Err: errors.New("boom")},
+				{NRE: "n6", Err: &upstream.StatusError{Status: 502}},
 			}}, nil
 		}}
 		_, api := humatest.New(t)
@@ -214,8 +215,9 @@ func TestRegisterListAppointments(t *testing.T) {
 				{"nre":"n1","reason":"session_expired"},
 				{"nre":"n2","reason":"session_expired"},
 				{"nre":"n3","reason":"gestione_not_ready"},
-				{"nre":"n4","reason":"upstream_500"},
-				{"nre":"n5","reason":"error"}
+				{"nre":"n4","reason":"not_in_cup"},
+				{"nre":"n5","reason":"error"},
+				{"nre":"n6","reason":"upstream_502"}
 			]
 		}`, resp.Body.String())
 	})

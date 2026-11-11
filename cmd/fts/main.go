@@ -23,6 +23,7 @@ import (
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 	"fuck-toscana-salute/internal/vault"
+	"fuck-toscana-salute/internal/webui"
 )
 
 const (
@@ -51,6 +52,14 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	return serve(ctx, cfg, ln)
+}
+
+func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	store := session.NewStore(keycloak.New(httpClient, keycloak.TokenURL), vault.New(keyringService, keyringUser), cfg.RefreshMargin)
 	if err := store.Restore(ctx); err != nil {
@@ -63,15 +72,16 @@ func run(ctx context.Context) error {
 	up := upstream.New(httpClient)
 	fseClient := fse.New(up, store)
 	ag := agenda.New(cup.New(up, store), fseClient, lookupConcurrency)
+	mux := http.NewServeMux()
+	api := httpapi.New(store, flow, ag, fseClient)
+	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
+		mux.Handle(pattern, api)
+	}
+	mux.Handle("/", webui.Handler())
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(store, flow, ag, fseClient),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
-	}
-
-	ln, err := net.Listen("tcp", cfg.Addr)
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
 	}
 
 	serveErr := make(chan error, 1)

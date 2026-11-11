@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
@@ -119,6 +120,8 @@ func failureReason(err error) string {
 		return "session_expired"
 	case errors.Is(err, cup.ErrGestioneNotReady):
 		return "gestione_not_ready"
+	case errors.As(err, &statusErr) && statusErr.Status == http.StatusInternalServerError:
+		return "not_in_cup"
 	case errors.As(err, &statusErr):
 		return fmt.Sprintf("upstream_%d", statusErr.Status)
 	}
