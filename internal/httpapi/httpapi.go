@@ -23,14 +23,32 @@ type startLoginInput struct {
 
 type emptyOutput struct{}
 
-func New(store SessionStore, flow LoginFlow) http.Handler {
+type appointmentsOutput struct {
+	Body AppointmentsBody
+}
+
+type prescriptionsOutput struct {
+	Body PrescriptionsBody
+}
+
+type prescriptionPDFInput struct {
+	Ref string `query:"ref" required:"true" minLength:"1" maxLength:"200"`
+}
+
+type prescriptionPDFOutput struct {
+	ContentType        string `header:"Content-Type"`
+	ContentDisposition string `header:"Content-Disposition"`
+	Body               []byte
+}
+
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow)
+	register(api, store, flow, ag, docs)
 	return mux
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow) {
+func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-session",
 		Method:        http.MethodGet,
@@ -65,5 +83,48 @@ func register(api huma.API, store SessionStore, flow LoginFlow) {
 	}, func(_ context.Context, _ *struct{}) (*emptyOutput, error) {
 		store.Clear()
 		return &emptyOutput{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "list-appointments",
+		Method:        http.MethodGet,
+		Path:          "/api/appointments",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, _ *struct{}) (*appointmentsOutput, error) {
+		entries, err := ag.Appointments(ctx)
+		if err != nil {
+			return nil, toHTTPError(ctx, "list-appointments", err)
+		}
+		return &appointmentsOutput{Body: toAppointmentsBody(entries)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "list-prescriptions",
+		Method:        http.MethodGet,
+		Path:          "/api/prescriptions",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, _ *struct{}) (*prescriptionsOutput, error) {
+		rows, err := ag.Prescriptions(ctx)
+		if err != nil {
+			return nil, toHTTPError(ctx, "list-prescriptions", err)
+		}
+		return &prescriptionsOutput{Body: toPrescriptionsBody(rows)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "get-prescription-pdf",
+		Method:        http.MethodGet,
+		Path:          "/api/documents/prescription",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *prescriptionPDFInput) (*prescriptionPDFOutput, error) {
+		pdf, err := docs.PrescriptionPDF(ctx, in.Ref)
+		if err != nil {
+			return nil, toHTTPError(ctx, "get-prescription-pdf", err)
+		}
+		return &prescriptionPDFOutput{
+			ContentType:        "application/pdf",
+			ContentDisposition: `inline; filename="ricetta.pdf"`,
+			Body:               pdf,
+		}, nil
 	})
 }
