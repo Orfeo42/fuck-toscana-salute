@@ -1,7 +1,9 @@
+import { CalendarCheck, MapPin } from "lucide-react";
 import type { JSX } from "react";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
+import { IconAction } from "../../components/IconAction";
 import { PdfLink } from "../../components/PdfLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { formatDate, formatTime } from "../../lib/format";
@@ -88,31 +90,27 @@ export function VisitRow({
           <>
             {unitName(unit)}
             {place === "" ? null : <small className="vs-sub">{place}</small>}
-            <a
+            <IconAction
+              label="Apri su mappa"
+              icon={MapPin}
               href={mapUrl(unit.address, unit.city)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Mappa
-            </a>
+              external
+            />
           </>
         )}
       </td>
       <td data-label="NRE" className="col-nowrap">
-        <span className="vs-mono">{row.nre}</span>
         <CopyButton value={row.nre} label="Copia NRE" />
       </td>
       <td data-label="Azioni">
         <div className="col-actions">
           {calendarUrl === undefined ? null : (
-            <a
+            <IconAction
+              label="Aggiungi a Google Calendar"
+              icon={CalendarCheck}
               href={calendarUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Aggiungi a Google Calendar"
-            >
-              Calendar
-            </a>
+              external
+            />
           )}
           <PdfLink documentRef={row.fse?.documentRef} />
           {state.kind === "official" && state.status === 3 ? (

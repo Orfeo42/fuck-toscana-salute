@@ -1,11 +1,17 @@
+import { CalendarPlus } from "lucide-react";
 import type { JSX } from "react";
+
+import { IconAction } from "../../components/IconAction";
 
 const cupUrl = "https://prenota.sanita.toscana.it/";
 
 export function BookAction(): JSX.Element {
   return (
-    <a href={cupUrl} target="_blank" rel="noopener noreferrer">
-      Prenota sul CUP
-    </a>
+    <IconAction
+      label="Prenota sul CUP"
+      icon={CalendarPlus}
+      href={cupUrl}
+      external
+    />
   );
 }

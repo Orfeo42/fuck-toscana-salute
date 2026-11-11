@@ -56,7 +56,6 @@ function DrugRow({ row }: RowProps): JSX.Element {
         </StatusBadge>
       </td>
       <td data-label="NRE" className="col-nowrap">
-        <span className="drugs-nre">{row.nre}</span>
         <CopyButton value={row.nre} label="Copia NRE" />
       </td>
       <td data-label="Azioni" className="col-actions">

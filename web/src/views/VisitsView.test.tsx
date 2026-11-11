@@ -237,8 +237,8 @@ describe("VisitsView", () => {
     expect(within(row).getByText("Da prenotare")).toBeInTheDocument();
     expect(within(row).getByText("0900A0000000001")).toBeInTheDocument();
     expect(
-      within(row).getByRole("button", { name: "Copia NRE" }),
-    ).toBeVisible();
+      within(row).getByRole("button", { name: "Copia NRE 0900A0000000001" }),
+    ).toHaveTextContent("0900A0000000001");
     expect(
       within(row).getByRole("link", { name: "Apri ricetta (PDF)" }),
     ).toHaveAttribute("href", "/api/documents/prescription?ref=ref-1");
@@ -264,7 +264,7 @@ describe("VisitsView", () => {
     expect(within(row).getByText("tra 2 giorni")).toBeVisible();
     expect(within(row).getByText("Unita esempio")).toBeVisible();
     expect(within(row).getByText("Via Esempio 1, Firenze, FI")).toBeVisible();
-    const map = within(row).getByRole("link", { name: "Mappa" });
+    const map = within(row).getByRole("link", { name: "Apri su mappa" });
     expect(map.getAttribute("href")).toContain("openstreetmap.org");
     expect(map).toHaveAttribute("target", "_blank");
     expect(map).toHaveAttribute("rel", "noopener noreferrer");

@@ -259,7 +259,7 @@ describe("DrugsView", () => {
 
     await user.click(
       within(at(bodyRows(), 0)).getByRole("button", {
-        name: "Copia NRE",
+        name: "Copia NRE 0900A0000000002",
       }),
     );
 

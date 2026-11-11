@@ -1,6 +1,8 @@
+import { FileText } from "lucide-react";
 import type { JSX } from "react";
 
 import { prescriptionPdfUrl } from "../api/client";
+import { IconAction } from "./IconAction";
 
 interface Props {
   documentRef: string | undefined;
@@ -15,13 +17,11 @@ export function PdfLink({
     return null;
   }
   return (
-    <a
-      className="pdf-link"
+    <IconAction
+      label={label}
+      icon={FileText}
       href={prescriptionPdfUrl(documentRef)}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {label}
-    </a>
+      external
+    />
   );
 }

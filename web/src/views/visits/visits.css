@@ -69,8 +69,3 @@
   display: block;
   color: var(--muted);
 }
-
-.vs-mono {
-  font-family: ui-monospace, monospace;
-  margin-right: 0.5rem;
-}
