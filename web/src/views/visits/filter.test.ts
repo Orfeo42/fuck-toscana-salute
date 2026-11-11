@@ -4,7 +4,6 @@ import type { AppointmentBody, RowBody } from "../../api/client";
 import {
   buildRows,
   countByStatus,
-  countExpired,
   effectiveState,
   filterRows,
   rowDate,
@@ -91,7 +90,7 @@ function contextOf(
 }
 
 const empty = contextOf([]);
-const base: Criteria = { status: "all", search: "", showExpired: false };
+const base: Criteria = { status: "all", search: "" };
 
 describe("effectiveState", () => {
   it("is booked with the booked tone and label, beating the fse status", () => {
@@ -287,48 +286,87 @@ describe("expired rows in filters and counts", () => {
   const expired = expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z");
   const rows = [toBook, expired];
 
-  it("Tutte hides expired rows when showExpired is false", () => {
-    expect(filterRows(rows, base, empty)).toEqual([toBook]);
+  it("Tutte includes expired rows", () => {
+    expect(filterRows(rows, base, empty)).toEqual(rows);
   });
 
-  it("Tutte shows expired rows when showExpired is true", () => {
-    expect(filterRows(rows, { ...base, showExpired: true }, empty)).toEqual(
-      rows,
-    );
+  it("Scadute keeps only expired rows", () => {
+    expect(filterRows(rows, { ...base, status: "expired" }, empty)).toEqual([
+      expired,
+    ]);
   });
 
   it("Da prenotare never shows expired rows", () => {
-    const criteria: Criteria = { ...base, status: "bookable" };
-    expect(filterRows(rows, criteria, empty)).toEqual([toBook]);
-    expect(filterRows(rows, { ...criteria, showExpired: true }, empty)).toEqual(
-      [toBook],
-    );
+    expect(filterRows(rows, { ...base, status: "bookable" }, empty)).toEqual([
+      toBook,
+    ]);
   });
 
   it("Aperte never shows expired rows", () => {
-    const criteria: Criteria = { ...base, status: "open" };
-    expect(filterRows(rows, criteria, empty)).toEqual([toBook]);
-    expect(filterRows(rows, { ...criteria, showExpired: true }, empty)).toEqual(
-      [toBook],
+    expect(filterRows(rows, { ...base, status: "open" }, empty)).toEqual([
+      toBook,
+    ]);
+  });
+
+  it("Prossimi never shows expired rows", () => {
+    expect(filterRows(rows, { ...base, status: "upcoming" }, empty)).toEqual(
+      [],
     );
   });
 
-  it("counts hide expired rows when showExpired is false", () => {
-    expect(countByStatus(rows, "", false, empty)).toEqual({
+  it("Erogate never shows expired rows", () => {
+    expect(filterRows(rows, { ...base, status: "done" }, empty)).toEqual([]);
+  });
+
+  it("counts expired rows in Scadute and Tutte only", () => {
+    expect(countByStatus(rows, "", empty)).toEqual({
       upcoming: 0,
       bookable: 1,
       open: 1,
-      all: 1,
+      done: 0,
+      expired: 1,
+      all: 2,
     });
   });
 
-  it("counts include expired rows in Tutte when showExpired is true", () => {
-    expect(countByStatus(rows, "", true, empty)).toEqual({
-      upcoming: 0,
-      bookable: 1,
-      open: 1,
-      all: 2,
-    });
+  it("applies the search to the Scadute count", () => {
+    expect(countByStatus(rows, "0900A0000000056", empty).expired).toBe(1);
+    expect(countByStatus(rows, "0900A0000000001", empty).expired).toBe(0);
+  });
+});
+
+describe("Erogate filter", () => {
+  const after = fseRow("0900A0000000070", "visit", 9, "2026-10-02T09:00:00Z");
+  const partial = fseRow("0900A0000000071", "visit", 7, "2026-10-03T09:00:00Z");
+  const rows = [done, after, partial, toBook, closed];
+
+  it("keeps rows with FSE status 8 or 9 only", () => {
+    expect(filterRows(rows, { ...base, status: "done" }, empty)).toEqual([
+      done,
+      after,
+    ]);
+  });
+
+  it("excludes a row with an active booking", () => {
+    const booked = contextOf([
+      booking("0900A0000000003", "PRENOTATO", "2026-12-01T09:00:00Z"),
+    ]);
+    expect(filterRows(rows, { ...base, status: "done" }, booked)).toEqual([
+      after,
+    ]);
+  });
+
+  it("keeps a row whose only booking is DISDETTO", () => {
+    const cancelled = contextOf([
+      booking("0900A0000000003", "DISDETTO", "2026-12-01T09:00:00Z"),
+    ]);
+    expect(filterRows([done], { ...base, status: "done" }, cancelled)).toEqual([
+      done,
+    ]);
+  });
+
+  it("counts them", () => {
+    expect(countByStatus(rows, "", empty).done).toBe(2);
   });
 });
 
@@ -337,30 +375,16 @@ describe("unbooked FSE status 30 rows in counts", () => {
   const context = contextOf([], ["0900A0000000060"]);
 
   it("counts as open but not bookable", () => {
-    expect(countByStatus([row], "", false, context)).toMatchObject({
+    expect(countByStatus([row], "", context)).toMatchObject({
       bookable: 0,
       open: 1,
     });
   });
 
   it("is not bookable when the CUP lookup did not confirm it", () => {
-    expect(countByStatus([row], "", false, empty)).toMatchObject({
+    expect(countByStatus([row], "", empty)).toMatchObject({
       bookable: 0,
     });
-  });
-});
-
-describe("countExpired", () => {
-  const expired = expiringRow("0900A0000000057", 3, "2026-11-09T09:00:00Z");
-  const rows = [toBook, expired, cupOnly];
-
-  it("counts expired rows", () => {
-    expect(countExpired(rows, "", empty)).toBe(1);
-  });
-
-  it("applies the search", () => {
-    expect(countExpired(rows, "ecografia", empty)).toBe(0);
-    expect(countExpired(rows, "0900A0000000057", empty)).toBe(1);
   });
 });
 
@@ -488,19 +512,23 @@ describe("countByStatus", () => {
   ]);
 
   it("counts each status filter", () => {
-    expect(countByStatus(rows, "", false, context)).toEqual({
+    expect(countByStatus(rows, "", context)).toEqual({
       upcoming: 1,
       bookable: 2,
       open: 3,
+      done: 1,
+      expired: 0,
       all: 4,
     });
   });
 
   it("applies the search before counting", () => {
-    expect(countByStatus(rows, "ecografia", false, context)).toEqual({
+    expect(countByStatus(rows, "ecografia", context)).toEqual({
       upcoming: 0,
       bookable: 1,
       open: 1,
+      done: 0,
+      expired: 0,
       all: 1,
     });
   });

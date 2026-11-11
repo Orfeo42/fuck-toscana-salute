@@ -1,9 +1,9 @@
 import {
   Alert,
   Button,
-  Checkbox,
   Group,
   Loader,
+  ScrollArea,
   SegmentedControl,
   Stack,
   Table,
@@ -23,7 +23,6 @@ import { VisitRow } from "./visits/VisitRow";
 import {
   buildRows,
   countByStatus,
-  countExpired,
   effectiveState,
   filterRows,
   sortRows,
@@ -35,6 +34,8 @@ const statusOptions: readonly { value: StatusFilter; label: string }[] = [
   { value: "upcoming", label: "Prossimi" },
   { value: "bookable", label: "Da prenotare" },
   { value: "open", label: "Aperte" },
+  { value: "done", label: "Erogate" },
+  { value: "expired", label: "Scadute" },
   { value: "all", label: "Tutte" },
 ];
 
@@ -55,8 +56,7 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   );
   const [status, setStatus] = useState<StatusFilter>("open");
   const [search, setSearch] = useState("");
-  const [showExpired, setShowExpired] = useState(false);
-  const sort = useSort<VisitSortKey>("appuntamento", "asc", descFirst);
+  const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
 
   const currentNow = now ?? mountedAt;
   const context = { bookingByNre, unbooked, now: currentNow };
@@ -64,10 +64,9 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     prescriptions.data?.prescriptions ?? [],
     appointments.data?.appointments ?? [],
   );
-  const counts = countByStatus(data, search, showExpired, context);
-  const expiredCount = countExpired(data, search, context);
+  const counts = countByStatus(data, search, context);
   const visible = sortRows(
-    filterRows(data, { status, search, showExpired }, context),
+    filterRows(data, { status, search }, context),
     sort.key,
     sort.dir,
     context,
@@ -84,12 +83,6 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     if (focused !== undefined && !shown) {
       setStatus("all");
       setSearch("");
-      if (
-        effectiveState(focused, bookingByNre, unbooked, currentNow).kind ===
-        "expired"
-      ) {
-        setShowExpired(true);
-      }
     }
   }
 
@@ -112,33 +105,26 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
         Visite ed esami
       </Title>
       <Group align="flex-end" wrap="wrap" mb="md">
-        <Stack gap={4}>
+        <Stack gap={4} maw="100%">
           <Text id="vs-status-label" size="sm">
             Mostra
           </Text>
-          <SegmentedControl
-            aria-labelledby="vs-status-label"
-            data={segmentData}
-            value={status}
-            onChange={(value) => {
-              const picked = statusOptions.find(
-                (option) => option.value === value,
-              );
-              if (picked !== undefined) {
-                setStatus(picked.value);
-              }
-            }}
-          />
+          <ScrollArea type="never" maw="100%">
+            <SegmentedControl
+              aria-labelledby="vs-status-label"
+              data={segmentData}
+              value={status}
+              onChange={(value) => {
+                const picked = statusOptions.find(
+                  (option) => option.value === value,
+                );
+                if (picked !== undefined) {
+                  setStatus(picked.value);
+                }
+              }}
+            />
+          </ScrollArea>
         </Stack>
-        {expiredCount > 0 ? (
-          <Checkbox
-            label={`Mostra scadute (${String(expiredCount)})`}
-            checked={showExpired}
-            onChange={(event) => {
-              setShowExpired(event.currentTarget.checked);
-            }}
-          />
-        ) : null}
         <TextInput
           label="Cerca"
           type="search"

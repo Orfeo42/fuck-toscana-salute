@@ -419,14 +419,23 @@ describe("VisitsView", () => {
     expect(
       screen.getByRole("radio", { name: "Da prenotare (2)" }),
     ).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Erogate (1)" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Scadute (0)" })).toBeVisible();
     expect(screen.getByRole("radio", { name: "Tutte (4)" })).toBeVisible();
+    expect(
+      screen.getAllByRole("radio").map((radio) => radio.getAttribute("value")),
+    ).toEqual(["upcoming", "bookable", "open", "done", "expired", "all"]);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.getByText("3 visite/esami")).toBeInTheDocument();
   });
 
-  it("sorts the default view by prescription date desc without appointments", async () => {
+  it("sorts the default view by prescription date desc", async () => {
     renderView();
 
     await screen.findByText("Visita esempio");
+    expect(
+      screen.getByRole("columnheader", { name: /Prescritta/ }),
+    ).toHaveAttribute("aria-sort", "descending");
     expect(titles()).toEqual([
       "Ecografia esempio, Prelievo esempio",
       "Visita esempio",
@@ -469,6 +478,16 @@ describe("VisitsView", () => {
 
     expect(titles()).toHaveLength(4);
     expect(screen.getByText("Esame chiuso esempio")).toBeInTheDocument();
+  });
+
+  it("filters Erogate", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Visita esempio");
+
+    await user.click(screen.getByRole("radio", { name: /Erogate/ }));
+
+    expect(titles()).toEqual(["Esame chiuso esempio"]);
   });
 
   it("narrows the list with the search box and recounts", async () => {
@@ -522,17 +541,19 @@ describe("VisitsView", () => {
     expect(titles()[0]).toBe("Visita esempio");
   });
 
-  it("sorts upcoming appointments first by default", async () => {
+  it("keeps prescription date desc by default when appointments exist", async () => {
     mockData([appointment("0900A0000000005", "2026-11-20T09:00:00Z")], []);
     renderView();
-    await screen.findByText("Visita esempio");
+    await screen.findByRole("radio", { name: "Prossimi (1)" });
 
-    await waitFor(() => {
-      expect(titles()[0]).toBe("Controllo esempio");
-    });
+    expect(titles()).toEqual([
+      "Ecografia esempio, Prelievo esempio",
+      "Visita esempio",
+      "Controllo esempio",
+    ]);
     expect(
       screen.getByRole("columnheader", { name: /Appuntamento/ }),
-    ).toHaveAttribute("aria-sort", "ascending");
+    ).toHaveAttribute("aria-sort", "none");
   });
 
   it("shows a notice for appointment errors and keeps the table", async () => {
@@ -676,10 +697,7 @@ describe("VisitsView", () => {
       [],
     );
     renderView();
-    await user.click(
-      await screen.findByRole("checkbox", { name: "Mostra scadute (1)" }),
-    );
-    await user.click(screen.getByRole("radio", { name: /Tutte/ }));
+    await user.click(await screen.findByRole("radio", { name: "Scadute (1)" }));
     await screen.findByText("Visita scaduta");
 
     const row = rowOf("Visita scaduta");
@@ -690,7 +708,7 @@ describe("VisitsView", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides expired rows under Tutte by default", async () => {
+  it("shows only expired rows under Scadute", async () => {
     const user = userEvent.setup();
     mockRows(
       [
@@ -700,15 +718,12 @@ describe("VisitsView", () => {
       [],
     );
     renderView();
-    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+    await user.click(await screen.findByRole("radio", { name: "Scadute (1)" }));
 
-    expect(titles()).toEqual(["Visita valida"]);
-    expect(
-      screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
-    ).not.toBeChecked();
+    expect(titles()).toEqual(["Visita scaduta"]);
   });
 
-  it("shows expired rows once Mostra scadute is checked", async () => {
+  it("includes expired rows under Tutte and hides them under Aperte", async () => {
     const user = userEvent.setup();
     mockRows(
       [
@@ -718,27 +733,29 @@ describe("VisitsView", () => {
       [],
     );
     renderView();
-    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+    await screen.findByText("Visita valida");
+    expect(titles()).toEqual(["Visita valida"]);
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
-    );
+    await user.click(screen.getByRole("radio", { name: "Tutte (2)" }));
 
     expect(titles()).toHaveLength(2);
     expect(screen.getByText("Visita scaduta")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Tutte (2)" })).toBeVisible();
   });
 
-  it("omits the Mostra scadute checkbox without expired rows", async () => {
+  it("has no Mostra scadute checkbox", async () => {
+    mockRows(
+      [fseVisit("0900A0000000063", "Visita scaduta", "2026-11-09T09:00:00Z")],
+      [],
+    );
     renderView();
-    await screen.findByText("Visita esempio");
+    await screen.findByRole("radio", { name: "Scadute (1)" });
 
     expect(
       screen.queryByRole("checkbox", { name: /Mostra scadute/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("checks Mostra scadute for a deep link to an expired NRE", async () => {
+  it("selects Tutte for a deep link to an expired NRE", async () => {
     const spy = stubScroll(vi.fn());
     window.location.hash = "#/visite/0900A0000000065";
     mockRows(
@@ -750,9 +767,7 @@ describe("VisitsView", () => {
       const row = (await screen.findByText("Visita scaduta")).closest("tr");
 
       expect(row).toHaveAttribute("data-focused", "true");
-      expect(
-        screen.getByRole("checkbox", { name: "Mostra scadute (1)" }),
-      ).toBeChecked();
+      expect(screen.getByRole("radio", { name: /Tutte/ })).toBeChecked();
     } finally {
       spy.mockRestore();
     }

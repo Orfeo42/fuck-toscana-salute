@@ -25,7 +25,8 @@ const officialTones: Readonly<Record<number, StatusTone>> = {
 
 const closedStatuses: ReadonlySet<number> = new Set([4, 8, 9]);
 
-export type StatusFilter = "upcoming" | "bookable" | "open" | "all";
+export type StatusFilter =
+  "upcoming" | "bookable" | "open" | "done" | "expired" | "all";
 
 export type VisitSortKey =
   "prescritta" | "prestazione" | "stato" | "appuntamento" | "struttura" | "nre";
@@ -33,7 +34,6 @@ export type VisitSortKey =
 export interface Criteria {
   status: StatusFilter;
   search: string;
-  showExpired: boolean;
 }
 
 export type StatusCounts = Record<StatusFilter, number>;
@@ -214,13 +214,6 @@ function isOpen(row: RowBody, context: BookingContext): boolean {
   return !closedStatuses.has(row.fse.status);
 }
 
-function isExpired(row: RowBody, context: BookingContext): boolean {
-  return (
-    effectiveState(row, context.bookingByNre, context.unbooked, context.now)
-      .kind === "expired"
-  );
-}
-
 function matchesStatus(
   row: RowBody,
   status: StatusFilter,
@@ -240,6 +233,23 @@ function matchesStatus(
   }
   if (status === "open") {
     return isFutureBooking(row, context) || isOpen(row, context);
+  }
+  if (status === "done") {
+    const state = effectiveState(
+      row,
+      context.bookingByNre,
+      context.unbooked,
+      context.now,
+    );
+    return (
+      state.kind === "official" && (state.status === 8 || state.status === 9)
+    );
+  }
+  if (status === "expired") {
+    return (
+      effectiveState(row, context.bookingByNre, context.unbooked, context.now)
+        .kind === "expired"
+    );
   }
   return true;
 }
@@ -271,7 +281,6 @@ export function filterRows(
 ): RowBody[] {
   return rows.filter(
     (row) =>
-      (criteria.showExpired || !isExpired(row, context)) &&
       matchesStatus(row, criteria.status, context) &&
       matchesSearch(row, criteria.search, context),
   );
@@ -280,32 +289,20 @@ export function filterRows(
 export function countByStatus(
   rows: readonly RowBody[],
   search: string,
-  showExpired: boolean,
   context: BookingContext,
 ): StatusCounts {
-  const base = rows.filter(
-    (row) =>
-      (showExpired || !isExpired(row, context)) &&
-      matchesSearch(row, search, context),
-  );
+  const base = rows.filter((row) => matchesSearch(row, search, context));
   return {
     upcoming: base.filter((row) => matchesStatus(row, "upcoming", context))
       .length,
     bookable: base.filter((row) => matchesStatus(row, "bookable", context))
       .length,
     open: base.filter((row) => matchesStatus(row, "open", context)).length,
+    done: base.filter((row) => matchesStatus(row, "done", context)).length,
+    expired: base.filter((row) => matchesStatus(row, "expired", context))
+      .length,
     all: base.length,
   };
-}
-
-export function countExpired(
-  rows: readonly RowBody[],
-  search: string,
-  context: BookingContext,
-): number {
-  return rows.filter(
-    (row) => isExpired(row, context) && matchesSearch(row, search, context),
-  ).length;
 }
 
 function dateMs(row: RowBody): number | undefined {
