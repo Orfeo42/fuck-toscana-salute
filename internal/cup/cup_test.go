@@ -2,6 +2,7 @@ package cup
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,9 +17,10 @@ import (
 )
 
 const (
-	testCF      = "RSSMRA80A01H501U"
-	testNRE     = "0900A0000000001"
-	testTessera = "80380000000000000000"
+	testBookingID = "ABC123456789"
+	testCF        = "RSSMRA80A01H501U"
+	testNRE       = "0900A0000000001"
+	testTessera   = "80380000000000000000"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc, identity session.Identity) *Client {
@@ -162,7 +164,7 @@ func TestAppointments(t *testing.T) {
 			assert.Equal(t, testNRE, r.URL.Query().Get("accessCode"))
 			assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
 			assert.Equal(t, testCF, r.Header.Get("cf"))
-			_, err := w.Write([]byte(`{"response":{"listaPrescrizioni":{"prescrizione":[{"listaAppuntamenti":{"appuntamento":[{"idAppuntamento":"77","statoAppuntamento":"PRENOTATO","dataAppuntamento":"20261215","oraAppuntamento":"09:30","unita":{"descUnita":"Desc","nomeUnita":"Name","indirizzoUnita":"Via Roma 1","nomeComuneUnita":"Firenze","provinciaUnita":"FI"}}]}}]}}}`))
+			_, err := w.Write([]byte(`{"response":{"listaPrescrizioni":{"prescrizione":[{"idPrescrizione":"ABC123456789","listaAppuntamenti":{"appuntamento":[{"idAppuntamento":"77","statoAppuntamento":"PRENOTATO","dataAppuntamento":"20261215","oraAppuntamento":"09:30","unita":{"descUnita":"Desc","nomeUnita":"Name","indirizzoUnita":"Via Roma 1","nomeComuneUnita":"Firenze","provinciaUnita":"FI"}}]}}]}}}`))
 			require.NoError(t, err)
 		}, identity)
 
@@ -171,6 +173,7 @@ func TestAppointments(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, "77", got[0].ID)
+		assert.Equal(t, testBookingID, got[0].BookingID)
 		assert.Equal(t, testNRE, got[0].NRE)
 		assert.Equal(t, "PRENOTATO", got[0].Status)
 		assert.Equal(t, time.Date(2026, 12, 15, 9, 30, 0, 0, c.loc), got[0].At)
@@ -257,6 +260,101 @@ func TestAppointments(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.True(t, got[0].At.IsZero())
+	})
+}
+
+func TestPromemoria(t *testing.T) {
+	identity := session.Identity{CodiceFiscale: testCF, TesseraSanitaria: testTessera}
+	encoded := base64.StdEncoding.EncodeToString([]byte("%PDF-fake"))
+
+	t.Run("sends query and headers and decodes", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/be/promemoria", r.URL.Path)
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, testBookingID, r.URL.Query().Get("idPrescrizione"))
+			assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			assert.Equal(t, testCF, r.Header.Get("cf"))
+			_, err := w.Write([]byte(`{"response":{"file":"` + encoded + `","mediaType":"application/pdf"}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.NoError(t, err)
+		assert.Equal(t, []byte("%PDF-fake"), got)
+	})
+
+	t.Run("empty file returns ErrNoDocument", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"response":{"file":""}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.ErrorIs(t, err, ErrNoDocument)
+		assert.Nil(t, got)
+	})
+
+	t.Run("missing response returns ErrNoDocument", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{}`))
+			require.NoError(t, err)
+		}, identity)
+
+		_, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.ErrorIs(t, err, ErrNoDocument)
+	})
+
+	t.Run("bad base64 returns error without the value", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"response":{"file":"!!!not-base64"}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNoDocument)
+		assert.NotContains(t, err.Error(), "!!!not-base64")
+		assert.Nil(t, got)
+	})
+
+	t.Run("gestione not ready does not call upstream", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("no request expected")
+		}, identity)
+		c.tokens = &MockTokenSource{
+			IdentityFunc: func() session.Identity { return identity },
+			StatusFunc:   func() session.Status { return session.Status{} },
+		}
+
+		_, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.ErrorIs(t, err, ErrGestioneNotReady)
+	})
+
+	t.Run("missing codice fiscale", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("no request expected")
+		}, session.Identity{TesseraSanitaria: testTessera})
+
+		_, err := c.Promemoria(context.Background(), testBookingID)
+
+		require.ErrorIs(t, err, session.ErrNotLoggedIn)
+	})
+
+	t.Run("upstream error is propagated", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+		}, identity)
+
+		_, err := c.Promemoria(context.Background(), testBookingID)
+
+		var statusErr *upstream.StatusError
+		require.ErrorAs(t, err, &statusErr)
+		assert.Equal(t, http.StatusBadGateway, statusErr.Status)
 	})
 }
 

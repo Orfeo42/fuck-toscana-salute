@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata"
 
@@ -30,6 +32,7 @@ type Prescription struct {
 	Status      int
 	Date        time.Time
 	DocumentRef string
+	ExpiresAt   time.Time
 }
 
 type fseError string
@@ -42,6 +45,9 @@ const (
 	defaultVisitBase = "https://apit.sanita.toscana.it/C06/fse-ricette-visite/v1"
 	defaultDrugBase  = "https://apit.sanita.toscana.it/C06/fse-ricette-farmaci/v1"
 	drugRefMarker    = "_PREFARM"
+	openStatus       = 3
+	detailLimit      = 4
+	expiryLayout     = "2006-01-02T15:04:05.000"
 )
 
 //go:generate moq -out tokensource_mock.go . TokenSource:MockTokenSource
@@ -86,6 +92,10 @@ type downloadResponse struct {
 	} `json:"ricetta"`
 }
 
+type detailResponse struct {
+	DataScadenza string `json:"dataScadenza"`
+}
+
 func New(up *upstream.Client, tokens TokenSource) *Client {
 	loc, err := time.LoadLocation("Europe/Rome")
 	if err != nil {
@@ -117,7 +127,70 @@ func (c *Client) Prescriptions(ctx context.Context) ([]Prescription, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := c.fillExpiry(ctx, visits); err != nil {
+		return nil, err
+	}
 	return append(visits, drugs...), nil
+}
+
+func (c *Client) fillExpiry(ctx context.Context, visits []Prescription) error {
+	var open []int
+	for i := range visits {
+		if visits[i].Status == openStatus {
+			open = append(open, i)
+		}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+	errs := make([]error, len(open))
+	semaphore := make(chan struct{}, detailLimit)
+	var wg sync.WaitGroup
+	for n, i := range open {
+		select {
+		case semaphore <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return fmt.Errorf("fse expiry lookups: %w", ctx.Err())
+		}
+		wg.Go(func() {
+			defer func() { <-semaphore }()
+			visits[i].ExpiresAt, errs[n] = c.expiry(ctx, visits[i].NRE)
+		})
+	}
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("fse expiry lookups: %w", err)
+	}
+	failed := 0
+	for _, err := range errs {
+		if err != nil {
+			failed++
+		}
+	}
+	if failed > 0 {
+		slog.WarnContext(ctx, "fse expiry lookups failed", slog.Int("failed", failed), slog.Int("looked_up", len(open)))
+	}
+	return nil
+}
+
+func (c *Client) expiry(ctx context.Context, nre string) (time.Time, error) {
+	header, err := c.header(ctx)
+	if err != nil {
+		return time.Time{}, err
+	}
+	resp, err := upstream.PostJSON[downloadRequest, detailResponse](ctx, c.up, c.visitBase+"/nre/dettaglio", header, downloadRequest{NRE: nre})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("fse detail: %w", err)
+	}
+	if resp.DataScadenza == "" {
+		return time.Time{}, nil
+	}
+	expiresAt, err := time.ParseInLocation(expiryLayout, resp.DataScadenza, c.loc)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("fse detail: parse expiry: %w", err)
+	}
+	return expiresAt, nil
 }
 
 func (c *Client) list(ctx context.Context, base string, kind Kind) ([]Prescription, error) {

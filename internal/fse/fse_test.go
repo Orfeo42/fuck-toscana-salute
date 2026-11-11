@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -151,6 +154,177 @@ func TestPrescriptions(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.True(t, errors.Is(err, session.ErrNotLoggedIn))
+	})
+}
+
+func detailServer(t *testing.T, rec *[]recordedRequest, visits string, detail http.HandlerFunc) *Client {
+	t.Helper()
+	var mu sync.Mutex
+	return newTestClient(t, newTokens("tok", nil), func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		mu.Lock()
+		*rec = append(*rec, recordedRequest{Path: r.URL.Path, Auth: r.Header.Get("Authorization"), Method: r.Method, Body: string(body)})
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/visite/listanew":
+			_, err = w.Write([]byte(visits))
+			require.NoError(t, err)
+		case "/farmaci/listanew":
+			_, err = w.Write([]byte(`{"content":[{"id":"d1","nre":"0900A0000000009","stato":"3","actInternalIdAbstract":"X_PREFARM"}]}`))
+			require.NoError(t, err)
+		default:
+			detail(w, r)
+		}
+	})
+}
+
+const twoVisits = `{"content":[{"id":"v1","nre":"0900A0000000001","stato":"3"},{"id":"v2","nre":"0900A0000000002","stato":"8"}]}`
+
+func TestPrescriptionsExpiry(t *testing.T) {
+	t.Run("status 3 visits get the expiry in Rome time", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":"2026-05-10T00:00:00.000","other":1}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		require.Len(t, got, 3)
+		assert.Equal(t, time.Date(2026, 5, 10, 0, 0, 0, 0, c.loc), got[0].ExpiresAt)
+		assert.True(t, got[1].ExpiresAt.IsZero())
+		assert.True(t, got[2].ExpiresAt.IsZero())
+	})
+
+	t.Run("only status 3 visits are looked up and drugs never", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{}`))
+			require.NoError(t, err)
+		})
+
+		_, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		var details []recordedRequest
+		for _, r := range rec {
+			if r.Path != "/visite/listanew" && r.Path != "/farmaci/listanew" {
+				details = append(details, r)
+			}
+		}
+		require.Len(t, details, 1)
+		assert.Equal(t, "/visite/nre/dettaglio", details[0].Path)
+	})
+
+	t.Run("detail request body and headers", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{}`))
+			require.NoError(t, err)
+		})
+
+		_, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		var detail recordedRequest
+		for _, r := range rec {
+			if r.Path == "/visite/nre/dettaglio" {
+				detail = r
+			}
+		}
+		assert.Equal(t, http.MethodPost, detail.Method)
+		assert.Equal(t, "Bearer tok", detail.Auth)
+		assert.JSONEq(t, `{"cfDelegante":null,"nre":"0900A0000000001","cfAssistito":null}`, detail.Body)
+	})
+
+	t.Run("detail 500 leaves zero and the list succeeds", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		require.Len(t, got, 3)
+		assert.True(t, got[0].ExpiresAt.IsZero())
+	})
+
+	t.Run("unparsable date leaves zero", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":"not-a-date"}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, got[0].ExpiresAt.IsZero())
+	})
+
+	t.Run("empty date leaves zero", func(t *testing.T) {
+		var rec []recordedRequest
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"dataScadenza":""}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, got[0].ExpiresAt.IsZero())
+	})
+
+	t.Run("looks up every open visit with bounded concurrency", func(t *testing.T) {
+		var rec []recordedRequest
+		visits := `{"content":[`
+		for i := range 10 {
+			if i > 0 {
+				visits += ","
+			}
+			visits += fmt.Sprintf(`{"id":"v%d","nre":"0900A00000001%02d","stato":"3"}`, i, i)
+		}
+		visits += `]}`
+		var inflight, peak atomic.Int32
+		c := detailServer(t, &rec, visits, func(w http.ResponseWriter, r *http.Request) {
+			n := inflight.Add(1)
+			defer inflight.Add(-1)
+			for {
+				p := peak.Load()
+				if n <= p || peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+			_, err := w.Write([]byte(`{"dataScadenza":"2026-05-10T00:00:00.000"}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(context.Background())
+
+		require.NoError(t, err)
+		for _, p := range got[:10] {
+			assert.False(t, p.ExpiresAt.IsZero())
+		}
+		assert.LessOrEqual(t, peak.Load(), int32(detailLimit))
+	})
+
+	t.Run("cancelled context returns the context error", func(t *testing.T) {
+		var rec []recordedRequest
+		ctx, cancel := context.WithCancel(context.Background())
+		c := detailServer(t, &rec, twoVisits, func(w http.ResponseWriter, r *http.Request) {
+			cancel()
+			_, err := w.Write([]byte(`{}`))
+			require.NoError(t, err)
+		})
+
+		got, err := c.Prescriptions(ctx)
+
+		require.ErrorIs(t, err, context.Canceled)
+		assert.Nil(t, got)
 	})
 }
 

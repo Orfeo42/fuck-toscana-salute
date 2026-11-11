@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/booking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-booking-pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/prescription": {
         parameters: {
             query?: never;
@@ -123,6 +139,7 @@ export interface components {
         AppointmentBody: {
             /** Format: date-time */
             at?: string;
+            bookingId?: string;
             cup?: components["schemas"]["PrescriptionCUPBody"];
             fse?: components["schemas"]["PrescriptionFSEBody"];
             id: string;
@@ -221,6 +238,8 @@ export interface components {
             date?: string;
             description: string;
             documentRef: string;
+            /** Format: date-time */
+            expiresOn?: string;
             id: string;
             kind: string;
             nre: string;
@@ -283,6 +302,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AppointmentsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-booking-pdf": {
+        parameters: {
+            query: {
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
                 };
             };
             /** @description Error */

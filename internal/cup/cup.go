@@ -2,6 +2,7 @@ package cup
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,11 +71,12 @@ type Unit struct {
 }
 
 type Appointment struct {
-	ID     string
-	NRE    string
-	Status string
-	At     time.Time
-	Unit   Unit
+	ID        string
+	BookingID string
+	NRE       string
+	Status    string
+	At        time.Time
+	Unit      Unit
 }
 
 type cupError string
@@ -84,6 +86,7 @@ func (e cupError) Error() string { return string(e) }
 const (
 	ErrGestioneNotReady = cupError("cup: tessera not captured, complete the Gestione Prenotazioni login step")
 	ErrUpstreamOutcome  = cupError("cup: upstream outcome not ok")
+	ErrNoDocument       = cupError("cup: document not found in response")
 )
 
 const (
@@ -161,6 +164,7 @@ type appointmentsResponse struct {
 	Response *struct {
 		ListaPrescrizioni *struct {
 			Prescrizione []struct {
+				IDPrescrizione    string `json:"idPrescrizione"`
 				ListaAppuntamenti *struct {
 					Appuntamento []appuntamento `json:"appuntamento"`
 				} `json:"listaAppuntamenti"`
@@ -181,6 +185,12 @@ type appuntamento struct {
 		NomeComuneUnita string `json:"nomeComuneUnita"`
 		ProvinciaUnita  string `json:"provinciaUnita"`
 	} `json:"unita"`
+}
+
+type promemoriaResponse struct {
+	Response *struct {
+		File string `json:"file"`
+	} `json:"response"`
 }
 
 func (c *Client) authHeader(ctx context.Context) (http.Header, error) {
@@ -290,13 +300,42 @@ func (c *Client) Appointments(ctx context.Context, nre string) ([]Appointment, e
 			continue
 		}
 		for _, a := range p.ListaAppuntamenti.Appuntamento {
-			appointments = append(appointments, c.mapAppointment(nre, a))
+			appointments = append(appointments, c.mapAppointment(nre, p.IDPrescrizione, a))
 		}
 	}
 	return appointments, nil
 }
 
-func (c *Client) mapAppointment(nre string, a appuntamento) Appointment {
+func (c *Client) Promemoria(ctx context.Context, bookingID string) ([]byte, error) {
+	if !c.tokens.Status().GestioneReady {
+		return nil, ErrGestioneNotReady
+	}
+	id := c.tokens.Identity()
+	if id.CodiceFiscale == "" {
+		return nil, session.ErrNotLoggedIn
+	}
+	header, err := c.authHeader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	header.Set("cf", id.CodiceFiscale)
+	query := url.Values{}
+	query.Set("idPrescrizione", bookingID)
+	resp, err := upstream.GetJSON[promemoriaResponse](ctx, c.up, c.cupBe+"/promemoria?"+query.Encode(), header)
+	if err != nil {
+		return nil, fmt.Errorf("cup: promemoria: %w", err)
+	}
+	if resp.Response == nil || resp.Response.File == "" {
+		return nil, fmt.Errorf("%w: empty file", ErrNoDocument)
+	}
+	pdf, err := base64.StdEncoding.DecodeString(resp.Response.File)
+	if err != nil {
+		return nil, fmt.Errorf("cup: decode promemoria: %w", err)
+	}
+	return pdf, nil
+}
+
+func (c *Client) mapAppointment(nre, bookingID string, a appuntamento) Appointment {
 	at, err := dates.Parse(a.DataAppuntamento, c.loc)
 	if err != nil {
 		at = time.Time{}
@@ -305,10 +344,11 @@ func (c *Client) mapAppointment(nre string, a appuntamento) Appointment {
 		at = c.withClock(at, a.OraAppuntamento)
 	}
 	return Appointment{
-		ID:     a.IDAppuntamento,
-		NRE:    nre,
-		Status: a.StatoAppuntamento,
-		At:     at,
+		ID:        a.IDAppuntamento,
+		BookingID: bookingID,
+		NRE:       nre,
+		Status:    a.StatoAppuntamento,
+		At:        at,
 		Unit: Unit{
 			Name:        a.Unita.NomeUnita,
 			Description: a.Unita.DescUnita,

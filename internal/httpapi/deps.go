@@ -28,4 +28,5 @@ type Agenda interface {
 
 type Documents interface {
 	PrescriptionPDF(ctx context.Context, documentRef string) ([]byte, error)
+	Promemoria(ctx context.Context, bookingID string) ([]byte, error)
 }

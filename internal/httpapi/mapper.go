@@ -68,13 +68,14 @@ type FailedBody struct {
 }
 
 type AppointmentBody struct {
-	ID     string               `json:"id"`
-	NRE    string               `json:"nre"`
-	Status string               `json:"status"`
-	At     *time.Time           `json:"at,omitempty"`
-	Unit   UnitBody             `json:"unit"`
-	CUP    *PrescriptionCUPBody `json:"cup,omitempty"`
-	FSE    *PrescriptionFSEBody `json:"fse,omitempty"`
+	ID        string               `json:"id"`
+	BookingID string               `json:"bookingId,omitempty"`
+	NRE       string               `json:"nre"`
+	Status    string               `json:"status"`
+	At        *time.Time           `json:"at,omitempty"`
+	Unit      UnitBody             `json:"unit"`
+	CUP       *PrescriptionCUPBody `json:"cup,omitempty"`
+	FSE       *PrescriptionFSEBody `json:"fse,omitempty"`
 }
 
 type UnitBody struct {
@@ -101,6 +102,7 @@ type PrescriptionFSEBody struct {
 	Status      int        `json:"status"`
 	Date        *time.Time `json:"date,omitempty"`
 	DocumentRef string     `json:"documentRef"`
+	ExpiresOn   *time.Time `json:"expiresOn,omitempty"`
 }
 
 type PrescriptionsBody struct {
@@ -132,10 +134,11 @@ func toAppointmentsBody(result agenda.Result) AppointmentsBody {
 	appointments := make([]AppointmentBody, 0, len(result.Entries))
 	for _, e := range result.Entries {
 		appointments = append(appointments, AppointmentBody{
-			ID:     e.Appointment.ID,
-			NRE:    e.NRE,
-			Status: e.Appointment.Status,
-			At:     timePtr(e.Appointment.At),
+			ID:        e.Appointment.ID,
+			BookingID: e.Appointment.BookingID,
+			NRE:       e.NRE,
+			Status:    e.Appointment.Status,
+			At:        timePtr(e.Appointment.At),
 			Unit: UnitBody{
 				Name:        e.Appointment.Unit.Name,
 				Description: e.Appointment.Unit.Description,
@@ -185,6 +188,7 @@ func toPrescriptionFSEBodyPtr(p *fse.Prescription) *PrescriptionFSEBody {
 		Status:      p.Status,
 		Date:        timePtr(p.Date),
 		DocumentRef: p.DocumentRef,
+		ExpiresOn:   timePtr(p.ExpiresAt),
 	}
 }
 

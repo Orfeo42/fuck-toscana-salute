@@ -373,3 +373,61 @@ func TestRegisterGetPrescriptionPDF(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, api.Get("/api/documents/prescription?ref=x").Code)
 	})
 }
+
+func TestRegisterGetBookingPDF(t *testing.T) {
+	t.Run("returns the pdf inline", func(t *testing.T) {
+		var gotID string
+		docs := &MockDocuments{PromemoriaFunc: func(_ context.Context, id string) ([]byte, error) {
+			gotID = id
+			return []byte("%PDF-1.4 fake"), nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs)
+
+		resp := api.Get("/api/documents/booking?id=ABC123456789")
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, "application/pdf", resp.Header().Get("Content-Type"))
+		assert.Equal(t, `inline; filename="promemoria.pdf"`, resp.Header().Get("Content-Disposition"))
+		assert.Equal(t, "%PDF-1.4 fake", resp.Body.String())
+		assert.Equal(t, "ABC123456789", gotID)
+	})
+
+	t.Run("invalid id is rejected by validation", func(t *testing.T) {
+		docs := &MockDocuments{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs)
+
+		resp := api.Get("/api/documents/booking?id=a-b")
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Empty(t, docs.PromemoriaCalls())
+	})
+
+	t.Run("missing id is rejected", func(t *testing.T) {
+		docs := &MockDocuments{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs)
+
+		assert.Equal(t, http.StatusUnprocessableEntity, api.Get("/api/documents/booking").Code)
+		assert.Empty(t, docs.PromemoriaCalls())
+	})
+
+	t.Run("not found when document is missing", func(t *testing.T) {
+		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) {
+			return nil, cup.ErrNoDocument
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs)
+
+		assert.Equal(t, http.StatusNotFound, api.Get("/api/documents/booking?id=ABC123456789").Code)
+	})
+
+	t.Run("gestione not ready is a conflict", func(t *testing.T) {
+		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) {
+			return nil, cup.ErrGestioneNotReady
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs)
+
+		assert.Equal(t, http.StatusConflict, api.Get("/api/documents/booking?id=ABC123456789").Code)
+	})
+}

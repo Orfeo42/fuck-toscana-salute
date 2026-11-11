@@ -33,6 +33,15 @@ const (
 	keyringUser       = "session"
 )
 
+type documents struct {
+	*fse.Client
+	bookings *cup.Client
+}
+
+func (d documents) Promemoria(ctx context.Context, bookingID string) ([]byte, error) {
+	return d.bookings.Promemoria(ctx, bookingID)
+}
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
@@ -71,9 +80,10 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	go flow.Supervise(ctx, store, superviseTick)
 	up := upstream.New(httpClient)
 	fseClient := fse.New(up, store)
-	ag := agenda.New(cup.New(up, store), fseClient, lookupConcurrency)
+	cupClient := cup.New(up, store)
+	ag := agenda.New(cupClient, fseClient, lookupConcurrency)
 	mux := http.NewServeMux()
-	api := httpapi.New(store, flow, ag, fseClient)
+	api := httpapi.New(store, flow, ag, documents{Client: fseClient, bookings: cupClient})
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}

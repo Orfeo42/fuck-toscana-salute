@@ -132,6 +132,9 @@ var _ Documents = &MockDocuments{}
 //			PrescriptionPDFFunc: func(ctx context.Context, documentRef string) ([]byte, error) {
 //				panic("mock out the PrescriptionPDF method")
 //			},
+//			PromemoriaFunc: func(ctx context.Context, bookingID string) ([]byte, error) {
+//				panic("mock out the Promemoria method")
+//			},
 //		}
 //
 //		// use mockedDocuments in code that requires Documents
@@ -142,6 +145,9 @@ type MockDocuments struct {
 	// PrescriptionPDFFunc mocks the PrescriptionPDF method.
 	PrescriptionPDFFunc func(ctx context.Context, documentRef string) ([]byte, error)
 
+	// PromemoriaFunc mocks the Promemoria method.
+	PromemoriaFunc func(ctx context.Context, bookingID string) ([]byte, error)
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// PrescriptionPDF holds details about calls to the PrescriptionPDF method.
@@ -151,8 +157,16 @@ type MockDocuments struct {
 			// DocumentRef is the documentRef argument value.
 			DocumentRef string
 		}
+		// Promemoria holds details about calls to the Promemoria method.
+		Promemoria []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// BookingID is the bookingID argument value.
+			BookingID string
+		}
 	}
 	lockPrescriptionPDF sync.RWMutex
+	lockPromemoria      sync.RWMutex
 }
 
 // PrescriptionPDF calls PrescriptionPDFFunc.
@@ -188,5 +202,41 @@ func (mock *MockDocuments) PrescriptionPDFCalls() []struct {
 	mock.lockPrescriptionPDF.RLock()
 	calls = mock.calls.PrescriptionPDF
 	mock.lockPrescriptionPDF.RUnlock()
+	return calls
+}
+
+// Promemoria calls PromemoriaFunc.
+func (mock *MockDocuments) Promemoria(ctx context.Context, bookingID string) ([]byte, error) {
+	if mock.PromemoriaFunc == nil {
+		panic("MockDocuments.PromemoriaFunc: method is nil but Documents.Promemoria was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		BookingID string
+	}{
+		Ctx:       ctx,
+		BookingID: bookingID,
+	}
+	mock.lockPromemoria.Lock()
+	mock.calls.Promemoria = append(mock.calls.Promemoria, callInfo)
+	mock.lockPromemoria.Unlock()
+	return mock.PromemoriaFunc(ctx, bookingID)
+}
+
+// PromemoriaCalls gets all the calls that were made to Promemoria.
+// Check the length with:
+//
+//	len(mockedDocuments.PromemoriaCalls())
+func (mock *MockDocuments) PromemoriaCalls() []struct {
+	Ctx       context.Context
+	BookingID string
+} {
+	var calls []struct {
+		Ctx       context.Context
+		BookingID string
+	}
+	mock.lockPromemoria.RLock()
+	calls = mock.calls.Promemoria
+	mock.lockPromemoria.RUnlock()
 	return calls
 }

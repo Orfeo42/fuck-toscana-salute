@@ -23,7 +23,7 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	if errors.Is(err, cup.ErrGestioneNotReady) {
 		return huma.Error409Conflict("complete the Gestione Prenotazioni login step")
 	}
-	if errors.Is(err, fse.ErrNoDocument) {
+	if errors.Is(err, fse.ErrNoDocument) || errors.Is(err, cup.ErrNoDocument) {
 		slog.WarnContext(ctx, "document not found", slog.String("op", op), slog.String("error", err.Error()))
 		return huma.Error404NotFound("document not found")
 	}

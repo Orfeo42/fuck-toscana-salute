@@ -8,6 +8,9 @@
             "format": "date-time",
             "type": "string"
           },
+          "bookingId": {
+            "type": "string"
+          },
           "cup": {
             "$ref": "#/components/schemas/PrescriptionCUPBody"
           },
@@ -215,6 +218,10 @@
           "documentRef": {
             "type": "string"
           },
+          "expiresOn": {
+            "format": "date-time",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -341,6 +348,60 @@
               }
             },
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/documents/booking": {
+      "get": {
+        "operationId": "get-booking-pdf",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "contentEncoding": "base64",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "default": {
             "content": {

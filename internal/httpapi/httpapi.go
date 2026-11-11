@@ -42,6 +42,10 @@ type prescriptionPDFOutput struct {
 	Body               []byte
 }
 
+type bookingPDFInput struct {
+	ID string `query:"id" required:"true" minLength:"1" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
+}
+
 func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
@@ -158,6 +162,23 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		return &prescriptionPDFOutput{
 			ContentType:        "application/pdf",
 			ContentDisposition: `inline; filename="ricetta.pdf"`,
+			Body:               pdf,
+		}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "get-booking-pdf",
+		Method:        http.MethodGet,
+		Path:          "/api/documents/booking",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *bookingPDFInput) (*prescriptionPDFOutput, error) {
+		pdf, err := docs.Promemoria(ctx, in.ID)
+		if err != nil {
+			return nil, toHTTPError(ctx, "get-booking-pdf", err)
+		}
+		return &prescriptionPDFOutput{
+			ContentType:        "application/pdf",
+			ContentDisposition: `inline; filename="promemoria.pdf"`,
 			Body:               pdf,
 		}, nil
 	})
