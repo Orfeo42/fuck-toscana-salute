@@ -176,7 +176,12 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
                 <VisitRow
                   key={row.nre}
                   row={row}
-                  state={effectiveState(row, bookingByNre, notInCup)}
+                  state={effectiveState(
+                    row,
+                    bookingByNre,
+                    notInCup,
+                    currentNow,
+                  )}
                   booking={bookingByNre.get(row.nre.toUpperCase())}
                   appointmentsLoading={appointments.loading}
                   appointmentsFailed={appointments.error !== undefined}

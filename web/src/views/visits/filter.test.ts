@@ -100,7 +100,7 @@ describe("effectiveState", () => {
         booking("0900A0000000002", "PRENOTATO", "2026-12-01T09:00:00Z"),
       ],
     ]);
-    expect(effectiveState(pending, bookings, new Set())).toEqual({
+    expect(effectiveState(pending, bookings, new Set(), now)).toEqual({
       kind: "booked",
       at: "2026-12-01T09:00:00Z",
       status: "PRENOTATO",
@@ -114,7 +114,7 @@ describe("effectiveState", () => {
     const bookings = new Map([
       ["0900A0000000006", booking("0900A0000000006", "PRENOTATO", undefined)],
     ]);
-    expect(effectiveState(row, bookings, new Set()).kind).toBe("booked");
+    expect(effectiveState(row, bookings, new Set(), now).kind).toBe("booked");
   });
 
   it("keeps the official state when the only booking is DISDETTO", () => {
@@ -124,7 +124,7 @@ describe("effectiveState", () => {
         booking("0900A0000000001", "DISDETTO", "2026-12-01T09:00:00Z"),
       ],
     ]);
-    expect(effectiveState(toBook, bookings, new Set())).toEqual({
+    expect(effectiveState(toBook, bookings, new Set(), now)).toEqual({
       kind: "official",
       status: 3,
       label: "Da prenotare",
@@ -134,7 +134,7 @@ describe("effectiveState", () => {
 
   it("is booked elsewhere when the NRE is not in the CUP", () => {
     expect(
-      effectiveState(cupOnly, new Map(), new Set(["0900A0000000006"])),
+      effectiveState(cupOnly, new Map(), new Set(["0900A0000000006"]), now),
     ).toEqual({
       kind: "booked_elsewhere",
       label: "Prenotata fuori dal CUP regionale",
@@ -143,14 +143,14 @@ describe("effectiveState", () => {
   });
 
   it("maps status 3 to tobook, also for a cup only row", () => {
-    expect(effectiveState(cupOnly, new Map(), new Set())).toMatchObject({
+    expect(effectiveState(cupOnly, new Map(), new Set(), now)).toMatchObject({
       status: 3,
       tone: "tobook",
     });
   });
 
   it("maps status 5 to pending", () => {
-    expect(effectiveState(pending, new Map(), new Set())).toMatchObject({
+    expect(effectiveState(pending, new Map(), new Set(), now)).toMatchObject({
       label: "Presa in carico",
       tone: "pending",
     });
@@ -158,7 +158,7 @@ describe("effectiveState", () => {
 
   it("maps status 30 to booked", () => {
     const row = fseRow("0900A0000000010", "visit", 30, "2026-11-01T09:00:00Z");
-    expect(effectiveState(row, new Map(), new Set())).toMatchObject({
+    expect(effectiveState(row, new Map(), new Set(), now)).toMatchObject({
       label: "Prenotata",
       tone: "booked",
     });
@@ -166,17 +166,17 @@ describe("effectiveState", () => {
 
   it("maps status 7 to pending", () => {
     const row = fseRow("0900A0000000011", "visit", 7, "2026-11-01T09:00:00Z");
-    expect(effectiveState(row, new Map(), new Set()).tone).toBe("pending");
+    expect(effectiveState(row, new Map(), new Set(), now).tone).toBe("pending");
   });
 
   it("maps statuses 8 and 9 to done", () => {
     const after = fseRow("0900A0000000012", "visit", 9, "2026-11-01T09:00:00Z");
-    expect(effectiveState(done, new Map(), new Set()).tone).toBe("done");
-    expect(effectiveState(after, new Map(), new Set()).tone).toBe("done");
+    expect(effectiveState(done, new Map(), new Set(), now).tone).toBe("done");
+    expect(effectiveState(after, new Map(), new Set(), now).tone).toBe("done");
   });
 
   it("maps status 4 to closed", () => {
-    expect(effectiveState(closed, new Map(), new Set())).toMatchObject({
+    expect(effectiveState(closed, new Map(), new Set(), now)).toMatchObject({
       label: "Annullata",
       tone: "closed",
     });
@@ -184,7 +184,98 @@ describe("effectiveState", () => {
 
   it("maps an unknown status to closed", () => {
     const row = fseRow("0900A0000000013", "visit", 99, "2026-11-01T09:00:00Z");
-    expect(effectiveState(row, new Map(), new Set()).tone).toBe("closed");
+    expect(effectiveState(row, new Map(), new Set(), now).tone).toBe("closed");
+  });
+});
+
+function expiringRow(nre: string, status: number, expiresOn: string): RowBody {
+  const row = fseRow(nre, "visit", status, "2026-11-01T09:00:00Z");
+  return row.fse === undefined ? row : { nre, fse: { ...row.fse, expiresOn } };
+}
+
+describe("effectiveState expiry", () => {
+  const yesterday = "2026-11-09T09:00:00Z";
+  const today = "2026-11-10T20:00:00Z";
+  const future = "2026-12-01T09:00:00Z";
+
+  it("is expired when expiresOn is yesterday", () => {
+    const row = expiringRow("0900A0000000050", 3, yesterday);
+    expect(effectiveState(row, new Map(), new Set(), now)).toEqual({
+      kind: "expired",
+      label: "Scaduta",
+      tone: "closed",
+      expiresOn: yesterday,
+    });
+  });
+
+  it("is not expired when expiresOn is today", () => {
+    const row = expiringRow("0900A0000000051", 3, today);
+    expect(effectiveState(row, new Map(), new Set(), now).kind).toBe(
+      "official",
+    );
+  });
+
+  it("is not expired when expiresOn is in the future", () => {
+    const row = expiringRow("0900A0000000052", 3, future);
+    expect(effectiveState(row, new Map(), new Set(), now).kind).toBe(
+      "official",
+    );
+  });
+
+  it("stays booked when an active booking exists", () => {
+    const row = expiringRow("0900A0000000053", 3, yesterday);
+    const bookings = new Map([
+      [
+        "0900A0000000053",
+        booking("0900A0000000053", "PRENOTATO", "2026-12-01T09:00:00Z"),
+      ],
+    ]);
+    expect(effectiveState(row, bookings, new Set(), now).kind).toBe("booked");
+  });
+
+  it("stays booked elsewhere for a notInCup row", () => {
+    const row = expiringRow("0900A0000000054", 3, yesterday);
+    expect(
+      effectiveState(row, new Map(), new Set(["0900A0000000054"]), now).kind,
+    ).toBe("booked_elsewhere");
+  });
+
+  it("stays official for a status 8 row", () => {
+    const row = expiringRow("0900A0000000055", 8, yesterday);
+    expect(effectiveState(row, new Map(), new Set(), now)).toMatchObject({
+      kind: "official",
+      tone: "done",
+    });
+  });
+});
+
+describe("expired rows in filters and counts", () => {
+  const expired = expiringRow("0900A0000000056", 3, "2026-11-09T09:00:00Z");
+  const rows = [toBook, expired];
+
+  it("Da prenotare excludes expired rows", () => {
+    expect(filterRows(rows, { ...base, status: "bookable" }, empty)).toEqual([
+      toBook,
+    ]);
+  });
+
+  it("Aperte excludes expired rows", () => {
+    expect(filterRows(rows, { ...base, status: "open" }, empty)).toEqual([
+      toBook,
+    ]);
+  });
+
+  it("Tutte includes expired rows", () => {
+    expect(filterRows(rows, base, empty)).toEqual(rows);
+  });
+
+  it("counts follow the filters", () => {
+    expect(countByStatus(rows, "", empty)).toEqual({
+      upcoming: 0,
+      bookable: 1,
+      open: 1,
+      all: 2,
+    });
   });
 });
 

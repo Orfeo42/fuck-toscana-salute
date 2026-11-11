@@ -8,6 +8,7 @@ const toBookStatus = 3;
 const cancelledBooking = "DISDETTO";
 const bookedLabel = "Prenotata";
 const bookedElsewhereLabel = "Prenotata fuori dal CUP regionale";
+const expiredLabel = "Scaduta";
 
 const officialTones: Readonly<Record<number, StatusTone>> = {
   3: "tobook",
@@ -54,7 +55,15 @@ export interface OfficialState {
   tone: StatusTone;
 }
 
-export type EffectiveState = BookedState | BookedElsewhereState | OfficialState;
+export interface ExpiredState {
+  kind: "expired";
+  label: string;
+  tone: StatusTone;
+  expiresOn: string;
+}
+
+export type EffectiveState =
+  BookedState | BookedElsewhereState | ExpiredState | OfficialState;
 
 export interface BookingContext {
   bookingByNre: ReadonlyMap<string, AppointmentBody>;
@@ -66,6 +75,7 @@ export function effectiveState(
   row: RowBody,
   bookingByNre: ReadonlyMap<string, AppointmentBody>,
   notInCup: ReadonlySet<string>,
+  now: Date,
 ): EffectiveState {
   const key = row.nre.toUpperCase();
   const booking = bookingByNre.get(key);
@@ -86,6 +96,19 @@ export function effectiveState(
     };
   }
   const status = row.fse?.status ?? toBookStatus;
+  const expiresOn = row.fse?.expiresOn;
+  if (
+    status === toBookStatus &&
+    expiresOn !== undefined &&
+    romeDay(new Date(expiresOn)) < romeDay(now)
+  ) {
+    return {
+      kind: "expired",
+      label: expiredLabel,
+      tone: "closed",
+      expiresOn,
+    };
+  }
   return {
     kind: "official",
     status,
@@ -139,7 +162,12 @@ export function rowTitle(row: RowBody): string {
 }
 
 function upcomingAt(row: RowBody, context: BookingContext): number | undefined {
-  const state = effectiveState(row, context.bookingByNre, context.notInCup);
+  const state = effectiveState(
+    row,
+    context.bookingByNre,
+    context.notInCup,
+    context.now,
+  );
   if (state.kind !== "booked" || state.at === undefined) {
     return undefined;
   }
@@ -151,7 +179,12 @@ function upcomingAt(row: RowBody, context: BookingContext): number | undefined {
 }
 
 function isFutureBooking(row: RowBody, context: BookingContext): boolean {
-  const state = effectiveState(row, context.bookingByNre, context.notInCup);
+  const state = effectiveState(
+    row,
+    context.bookingByNre,
+    context.notInCup,
+    context.now,
+  );
   return (
     state.kind === "booked" &&
     state.at !== undefined &&
@@ -159,7 +192,16 @@ function isFutureBooking(row: RowBody, context: BookingContext): boolean {
   );
 }
 
-function isOpen(row: RowBody): boolean {
+function isOpen(row: RowBody, context: BookingContext): boolean {
+  const state = effectiveState(
+    row,
+    context.bookingByNre,
+    context.notInCup,
+    context.now,
+  );
+  if (state.kind === "expired") {
+    return false;
+  }
   if (row.fse === undefined) {
     return true;
   }
@@ -175,11 +217,16 @@ function matchesStatus(
     return upcomingAt(row, context) !== undefined;
   }
   if (status === "bookable") {
-    const state = effectiveState(row, context.bookingByNre, context.notInCup);
+    const state = effectiveState(
+      row,
+      context.bookingByNre,
+      context.notInCup,
+      context.now,
+    );
     return state.kind === "official" && state.status === toBookStatus;
   }
   if (status === "open") {
-    return isFutureBooking(row, context) || isOpen(row);
+    return isFutureBooking(row, context) || isOpen(row, context);
   }
   return true;
 }
@@ -275,7 +322,12 @@ function sortValue(
   if (key === "nre") {
     return row.nre;
   }
-  const state = effectiveState(row, context.bookingByNre, context.notInCup);
+  const state = effectiveState(
+    row,
+    context.bookingByNre,
+    context.notInCup,
+    context.now,
+  );
   if (key === "stato") {
     return state.label;
   }

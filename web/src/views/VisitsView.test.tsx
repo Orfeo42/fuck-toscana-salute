@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../api/client", () => ({
   api: { GET: mocks.get },
   prescriptionPdfUrl: (ref: string) => `/api/documents/prescription?ref=${ref}`,
+  bookingPdfUrl: (id: string) => `/api/documents/booking?id=${id}`,
 }));
 
 const now = new Date("2026-11-10T09:00:00Z");
@@ -110,6 +111,38 @@ function appointment(
       province: "FI",
     },
   };
+}
+
+function fseVisit(
+  nre: string,
+  description: string,
+  expiresOn: string,
+): RowBody {
+  return {
+    nre,
+    fse: {
+      id: `f-${nre}`,
+      nre,
+      description,
+      kind: "visit",
+      status: 3,
+      date: "2026-11-01T09:00:00Z",
+      expiresOn,
+      documentRef: "",
+    },
+  };
+}
+
+function mockRows(
+  prescriptions: RowBody[],
+  appointments: AppointmentBody[],
+): void {
+  mocks.get.mockImplementation((path: string) => {
+    if (path === "/api/appointments") {
+      return Promise.resolve({ data: { appointments, failed: [] } });
+    }
+    return Promise.resolve({ data: { prescriptions } });
+  });
 }
 
 function stubScroll(scroll: () => void): void {
@@ -591,5 +624,88 @@ describe("VisitsView", () => {
     } finally {
       Reflect.deleteProperty(Element.prototype, "scrollIntoView");
     }
+  });
+  it("shows an expired prescription as Scaduta without Prenota sul CUP", async () => {
+    const user = userEvent.setup();
+    mockRows(
+      [fseVisit("0900A0000000061", "Visita scaduta", "2026-11-09T09:00:00Z")],
+      [],
+    );
+    renderView();
+    await user.click(await screen.findByRole("radio", { name: /Tutte/ }));
+    await screen.findByText("Visita scaduta");
+
+    const row = rowOf("Visita scaduta");
+    expect(within(row).getByText("Scaduta")).toBeInTheDocument();
+    expect(within(row).getByText(/^scaduta il /)).toBeInTheDocument();
+    expect(
+      within(row).queryByRole("link", { name: "Prenota sul CUP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows scade il for a valid status 3 prescription", async () => {
+    mockRows(
+      [fseVisit("0900A0000000062", "Visita valida", "2026-11-20T09:00:00Z")],
+      [],
+    );
+    renderView();
+
+    const row = await waitFor(() => rowOf("Visita valida"));
+    expect(within(row).getByText(/^scade il /)).toBeInTheDocument();
+    expect(within(row).getByText("Da prenotare")).toBeInTheDocument();
+    expect(
+      within(row).getByRole("link", { name: "Prenota sul CUP" }),
+    ).toBeInTheDocument();
+  });
+
+  it("links the promemoria PDF on a booked row with a booking id", async () => {
+    mockRows(
+      [toBook],
+      [
+        {
+          ...appointment("0900A0000000001", "2026-11-12T09:30:00Z"),
+          bookingId: "ABC123456789",
+        },
+      ],
+    );
+    renderView();
+
+    const row = await waitFor(() => {
+      const found = bodyRows().find(
+        (r) => within(r).queryByText("Prenotata") !== null,
+      );
+      if (found === undefined) {
+        throw new Error("not booked yet");
+      }
+      return found;
+    });
+    expect(
+      within(row).getByRole("link", {
+        name: "Apri promemoria prenotazione (PDF)",
+      }),
+    ).toHaveAttribute("href", "/api/documents/booking?id=ABC123456789");
+  });
+
+  it("has no promemoria link on a booked row without a booking id", async () => {
+    mockRows(
+      [toBook],
+      [appointment("0900A0000000001", "2026-11-12T09:30:00Z")],
+    );
+    renderView();
+
+    const row = await waitFor(() => {
+      const found = bodyRows().find(
+        (r) => within(r).queryByText("Prenotata") !== null,
+      );
+      if (found === undefined) {
+        throw new Error("not booked yet");
+      }
+      return found;
+    });
+    expect(
+      within(row).queryByRole("link", {
+        name: "Apri promemoria prenotazione (PDF)",
+      }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -19,3 +19,7 @@ export function prescriptionPdfUrl(ref: string): string {
   const query = new URLSearchParams({ ref });
   return `/api/documents/prescription?${query.toString()}`;
 }
+
+export function bookingPdfUrl(bookingId: string): string {
+  return `/api/documents/booking?id=${encodeURIComponent(bookingId)}`;
+}

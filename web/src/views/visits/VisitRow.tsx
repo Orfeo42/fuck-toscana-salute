@@ -12,6 +12,7 @@ import { BookAction } from "./BookAction";
 import { unitName, rowDate, rowTitle, type EffectiveState } from "./filter";
 import { googleCalendarUrl } from "./googleCalendar";
 import { mapUrl } from "./mapUrl";
+import { PromemoriaLink } from "./PromemoriaLink";
 import { relativeDay } from "./relativeDay";
 
 interface Props {
@@ -43,6 +44,18 @@ export function VisitRow({
     new Date(at).getTime() > now.getTime()
       ? googleCalendarUrl(booking)
       : undefined;
+  const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
+  const expiresOn = row.fse?.expiresOn;
+  let expiryNote: string | null = null;
+  if (expiresOn !== undefined && state.kind === "expired") {
+    expiryNote = `scaduta il ${formatDate(expiresOn)}`;
+  } else if (
+    expiresOn !== undefined &&
+    state.kind === "official" &&
+    state.status === 3
+  ) {
+    expiryNote = `scade il ${formatDate(expiresOn)}`;
+  }
   const place =
     unit === undefined
       ? ""
@@ -77,6 +90,9 @@ export function VisitRow({
       <td data-label="Prestazione">{rowTitle(row)}</td>
       <td data-label="Stato">
         <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+        {expiryNote === null ? null : (
+          <small className="vs-sub">{expiryNote}</small>
+        )}
       </td>
       <td
         data-label="Appuntamento"
@@ -104,6 +120,7 @@ export function VisitRow({
       </td>
       <td data-label="Azioni">
         <div className="col-actions">
+          <PromemoriaLink bookingId={bookingId} />
           {calendarUrl === undefined ? null : (
             <IconAction
               label="Aggiungi a Google Calendar"
