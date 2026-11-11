@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppointmentBody, RowBody, SessionBody } from "../api/client";
 import { HealthDataProvider } from "../data/HealthDataProvider";
+import { GoogleContext } from "../google/useGoogle";
 import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { VisitsView } from "./VisitsView";
@@ -186,9 +187,20 @@ function Harness(): JSX.Element {
         logout: vi.fn(),
       }}
     >
-      <HealthDataProvider>
-        <VisitsView now={now} />
-      </HealthDataProvider>
+      <GoogleContext.Provider
+        value={{
+          status: { configured: true, connected: true },
+          loading: false,
+          error: undefined,
+          refresh: vi.fn(),
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+        }}
+      >
+        <HealthDataProvider>
+          <VisitsView now={now} />
+        </HealthDataProvider>
+      </GoogleContext.Provider>
     </SessionContext.Provider>
   );
 }
@@ -280,7 +292,7 @@ describe("VisitsView", () => {
     expect(book).toHaveAttribute("target", "_blank");
   });
 
-  it("shows a booked row with appointment, map and calendar links", async () => {
+  it("shows a booked row with appointment, map link and calendar button", async () => {
     mockData([appointment("0900A0000000001", "2026-11-12T09:30:00Z")], []);
     renderView();
 
@@ -301,13 +313,22 @@ describe("VisitsView", () => {
     expect(map.getAttribute("href")).toContain("openstreetmap.org");
     expect(map).toHaveAttribute("target", "_blank");
     expect(map).toHaveAttribute("rel", "noopener noreferrer");
-    const calendar = within(row).getByRole("link", {
-      name: "Aggiungi a Google Calendar",
-    });
-    expect(calendar.getAttribute("href")).toContain("calendar.google.com");
-    expect(calendar).toHaveAttribute("rel", "noopener noreferrer");
+    expect(
+      within(row).getByRole("button", { name: "Aggiungi a Google Calendar" }),
+    ).toBeVisible();
     expect(
       within(row).queryByRole("link", { name: "Prenota sul CUP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no calendar button for past or unbooked rows", async () => {
+    mockData([appointment("0900A0000000005", "2026-11-05T09:30:00Z")], []);
+    renderView();
+
+    await screen.findByText("Visita esempio");
+    await screen.findByText("Controllo esempio");
+    expect(
+      screen.queryByRole("button", { name: "Aggiungi a Google Calendar" }),
     ).not.toBeInTheDocument();
   });
 

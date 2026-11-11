@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import type { PortalBody } from "../api/client";
+import { GoogleConnect } from "../google/GoogleConnect";
 import { formatDateTime } from "../lib/format";
 import { useSession } from "../session/useSession";
 
@@ -81,6 +82,7 @@ export function SessionBar(): JSX.Element {
           Esci
         </button>
       </div>
+      <GoogleConnect />
       <p className="session-help">
         Accedi apre una finestra: SPID, poi Gestione Prenotazioni (codice
         fiscale, tessera, captcha). La sessione resta attiva anche dopo un

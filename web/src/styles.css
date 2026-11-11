@@ -501,3 +501,45 @@ button:disabled {
     white-space: normal;
   }
 }
+
+.google-connect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.google-connect.muted {
+  color: var(--muted);
+}
+
+button.small {
+  min-height: 2rem;
+  padding: 0.1rem 0.7rem;
+}
+
+.calendar-dialog {
+  max-width: min(32rem, calc(100vw - 2rem));
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: inherit;
+  padding: 1rem;
+}
+
+.calendar-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.calendar-dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.calendar-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}

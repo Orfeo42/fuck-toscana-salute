@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionBody } from "../api/client";
+import { GoogleContext } from "../google/useGoogle";
 import { SessionProvider } from "../session/SessionProvider";
 import { SessionBar } from "./SessionBar";
 
@@ -52,9 +53,20 @@ function failedSession(reason: string): SessionBody {
 
 function renderBar(): void {
   render(
-    <SessionProvider>
-      <SessionBar />
-    </SessionProvider>,
+    <GoogleContext
+      value={{
+        status: { configured: true, connected: true },
+        loading: false,
+        error: undefined,
+        refresh: vi.fn(),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }}
+    >
+      <SessionProvider>
+        <SessionBar />
+      </SessionProvider>
+    </GoogleContext>,
   );
 }
 
@@ -149,6 +161,13 @@ describe("SessionBar", () => {
     await user.click(screen.getByRole("button", { name: "Esci" }));
 
     expect(mocks.post).toHaveBeenCalledWith("/api/logout");
+  });
+
+  it("renders the Google connect control in the bar", async () => {
+    mocks.get.mockResolvedValue({ data: activeSession });
+    renderBar();
+
+    expect(await screen.findByText("Google Calendar collegato")).toBeVisible();
   });
 
   it("shows an error when the server cannot be reached", async () => {

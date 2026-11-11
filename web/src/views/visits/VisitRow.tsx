@@ -1,5 +1,5 @@
 import { CalendarCheck, MapPin } from "lucide-react";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
@@ -10,7 +10,7 @@ import { formatDate, formatTime } from "../../lib/format";
 import { useFocusTarget } from "../../lib/useFocusTarget";
 import { BookAction } from "./BookAction";
 import { unitName, rowDate, rowTitle, type EffectiveState } from "./filter";
-import { googleCalendarUrl } from "./googleCalendar";
+import { CalendarDialog } from "./CalendarDialog";
 import { mapUrl } from "./mapUrl";
 import { PromemoriaLink } from "./PromemoriaLink";
 import { relativeDay } from "./relativeDay";
@@ -38,11 +38,12 @@ export function VisitRow({
   );
   const at = state.kind === "booked" ? state.at : undefined;
   const unit = state.kind === "booked" ? booking?.unit : undefined;
-  const calendarUrl =
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarBooking =
     booking !== undefined &&
     at !== undefined &&
     new Date(at).getTime() > now.getTime()
-      ? googleCalendarUrl(booking)
+      ? booking
       : undefined;
   const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
   const expiresOn = row.fse?.expiresOn;
@@ -121,14 +122,24 @@ export function VisitRow({
       <td data-label="Azioni">
         <div className="col-actions">
           <PromemoriaLink bookingId={bookingId} />
-          {calendarUrl === undefined ? null : (
+          {calendarBooking === undefined ? null : (
             <IconAction
               label="Aggiungi a Google Calendar"
               icon={CalendarCheck}
-              href={calendarUrl}
-              external
+              onClick={() => {
+                setCalendarOpen(true);
+              }}
             />
           )}
+          {calendarBooking !== undefined && calendarOpen ? (
+            <CalendarDialog
+              appointment={calendarBooking}
+              title={rowTitle(row)}
+              onClose={() => {
+                setCalendarOpen(false);
+              }}
+            />
+          ) : null}
           <PdfLink documentRef={row.fse?.documentRef} />
           {state.kind === "official" && state.status === 3 ? (
             <BookAction />
