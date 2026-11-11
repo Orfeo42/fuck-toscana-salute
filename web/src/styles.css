@@ -11,6 +11,24 @@
   --warn: #8a5a00;
   --bad: #a31f2d;
   --focus: #b45f06;
+  --tone-booked-bg: #d7f0de;
+  --tone-booked-fg: #0f5a2c;
+  --tone-booked-border: #5fae7a;
+  --tone-done-bg: #e3efe6;
+  --tone-done-fg: #2d5a3d;
+  --tone-done-border: #8fb79d;
+  --tone-tobook-bg: #dbeafb;
+  --tone-tobook-fg: #0b4a8f;
+  --tone-tobook-border: #6fa3dc;
+  --tone-pending-bg: #fdebc4;
+  --tone-pending-fg: #7a4a00;
+  --tone-pending-border: #d9a53a;
+  --tone-closed-bg: #e6e8ec;
+  --tone-closed-fg: #3f4753;
+  --tone-closed-border: #9aa3b0;
+  --tone-error-bg: #fbe0e3;
+  --tone-error-fg: #9a1b29;
+  --tone-error-border: #e08a94;
   font-family:
     system-ui,
     -apple-system,
@@ -36,11 +54,34 @@
     --warn: #f0be5c;
     --bad: #ff8f9b;
     --focus: #ffb454;
+    --tone-booked-bg: #12351f;
+    --tone-booked-fg: #8fe3b0;
+    --tone-booked-border: #2f7a4c;
+    --tone-done-bg: #1b2c22;
+    --tone-done-fg: #a9cdb7;
+    --tone-done-border: #3f5f4c;
+    --tone-tobook-bg: #12294a;
+    --tone-tobook-fg: #9cc8f7;
+    --tone-tobook-border: #2f5f9a;
+    --tone-pending-bg: #3d2a06;
+    --tone-pending-fg: #f5cd7a;
+    --tone-pending-border: #8a6418;
+    --tone-closed-bg: #2a2f38;
+    --tone-closed-fg: #c3cad5;
+    --tone-closed-border: #566070;
+    --tone-error-bg: #4a161c;
+    --tone-error-fg: #ffb0b9;
+    --tone-error-border: #9a3a46;
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
 }
 
 body {
@@ -55,9 +96,7 @@ body {
 }
 
 .app-header {
-  padding: 1rem 1rem 0;
-  max-width: 60rem;
-  margin: 0 auto;
+  padding: 16px 16px 0;
 }
 
 .app-header h1 {
@@ -66,9 +105,7 @@ body {
 }
 
 .app-main {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: 1rem;
+  padding: 16px;
   display: grid;
   gap: 1rem;
 }
@@ -194,8 +231,174 @@ button:disabled {
   font-weight: 600;
 }
 
+@media (min-width: 1024px) {
+  .app-header {
+    padding: 16px 24px 0;
+  }
+
+  .app-main {
+    padding: 24px;
+  }
+}
+
 @media (min-width: 40rem) {
   .session-portals {
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.status-booked {
+  background: var(--tone-booked-bg);
+  color: var(--tone-booked-fg);
+  border-color: var(--tone-booked-border);
+}
+
+.status-done {
+  background: var(--tone-done-bg);
+  color: var(--tone-done-fg);
+  border-color: var(--tone-done-border);
+}
+
+.status-tobook {
+  background: var(--tone-tobook-bg);
+  color: var(--tone-tobook-fg);
+  border-color: var(--tone-tobook-border);
+}
+
+.status-pending {
+  background: var(--tone-pending-bg);
+  color: var(--tone-pending-fg);
+  border-color: var(--tone-pending-border);
+}
+
+.status-closed {
+  background: var(--tone-closed-bg);
+  color: var(--tone-closed-fg);
+  border-color: var(--tone-closed-border);
+}
+
+.status-error {
+  background: var(--tone-error-bg);
+  color: var(--tone-error-fg);
+  border-color: var(--tone-error-border);
+}
+
+.table-wrap {
+  width: 100%;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th,
+.data-table td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--border) 18%, transparent);
+}
+
+.data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.data-table th button {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  display: inline-flex;
+  gap: 0.35em;
+  align-items: baseline;
+}
+
+.data-table .col-nowrap {
+  white-space: nowrap;
+}
+
+.data-table .col-actions {
+  display: inline-flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.data-table tr.is-focused,
+.data-table tr:focus-visible {
+  background: color-mix(in srgb, var(--focus) 22%, transparent);
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+@media (min-width: 761px) {
+  .table-wrap {
+    overflow-x: visible;
+  }
+}
+
+@media (max-width: 760px) {
+  .data-table,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+  }
+
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .data-table tbody tr {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface);
+  }
+
+  .data-table td {
+    padding: 4px 10px;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .data-table .col-nowrap {
+    white-space: normal;
   }
 }
