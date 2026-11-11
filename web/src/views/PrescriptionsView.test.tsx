@@ -4,6 +4,8 @@ import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RowBody, SessionBody } from "../api/client";
+import { callsTo } from "../test/calls";
+import { HealthDataProvider } from "../data/HealthDataProvider";
 import { SessionContext } from "../session/useSession";
 import { PrescriptionsView } from "./PrescriptionsView";
 
@@ -100,7 +102,9 @@ function Harness({ session }: { session: SessionBody }): JSX.Element {
         logout: vi.fn(),
       }}
     >
-      <PrescriptionsView />
+      <HealthDataProvider>
+        <PrescriptionsView />
+      </HealthDataProvider>
     </SessionContext.Provider>
   );
 }
@@ -329,12 +333,12 @@ describe("PrescriptionsView", () => {
     const user = userEvent.setup();
     renderView();
     await screen.findByText("Visita esempio");
-    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
 
     await user.click(screen.getByRole("button", { name: "Aggiorna" }));
 
     await waitFor(() => {
-      expect(mocks.get).toHaveBeenCalledTimes(2);
+      expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
     });
     expect(await screen.findByText("Visita esempio")).toBeInTheDocument();
   });
@@ -342,14 +346,14 @@ describe("PrescriptionsView", () => {
   it("refetches when a portal state changes", async () => {
     const { rerender } = renderView(sessionWith("active"));
     await screen.findByText("Visita esempio");
-    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
 
     rerender(<Harness session={sessionWith("active")} />);
-    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
 
     rerender(<Harness session={sessionWith("expired")} />);
     await waitFor(() => {
-      expect(mocks.get).toHaveBeenCalledTimes(2);
+      expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
     });
   });
 

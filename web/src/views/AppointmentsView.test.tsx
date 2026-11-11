@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppointmentBody, SessionBody } from "../api/client";
+import { callsTo } from "../test/calls";
+import { HealthDataProvider } from "../data/HealthDataProvider";
 import { SessionContext } from "../session/useSession";
 import { AppointmentsView } from "./AppointmentsView";
 
@@ -56,7 +58,9 @@ function renderView(): void {
         logout: vi.fn(),
       }}
     >
-      <AppointmentsView now={now} />
+      <HealthDataProvider>
+        <AppointmentsView now={now} />
+      </HealthDataProvider>
     </SessionContext>,
   );
 }
@@ -222,12 +226,12 @@ describe("AppointmentsView", () => {
     mocks.get.mockResolvedValue({ data: { appointments: [], failed: [] } });
     renderView();
     await screen.findByText("Nessun appuntamento in programma.");
-    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(callsTo(mocks.get, "/api/appointments")).toBe(1);
 
     await user.click(screen.getByRole("button", { name: "Aggiorna" }));
 
     await screen.findByText("Nessun appuntamento in programma.");
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(callsTo(mocks.get, "/api/appointments")).toBe(2);
   });
 
   it("shows the PDF link when documentRef is set", async () => {

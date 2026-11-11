@@ -1,20 +1,18 @@
 import { useState, type JSX } from "react";
 
 import type { AppointmentBody } from "../api/client";
+import { useHealthData } from "../data/useHealthData";
+import type { HealthError } from "../data/healthContext";
 import { failureLabel } from "../lib/status";
 import { AppointmentCard } from "./appointments/AppointmentCard";
 import { PastRow } from "./appointments/PastRow";
-import {
-  useAppointments,
-  type AppointmentsError,
-} from "./appointments/useAppointments";
 import "./appointments/appointments.css";
 
 interface Props {
   now?: Date;
 }
 
-const errorMessages: Readonly<Record<AppointmentsError, string>> = {
+const errorMessages: Readonly<Record<HealthError, string>> = {
   unauthorized: "Accedi per vedere gli appuntamenti.",
   needs_gestione:
     "Per vedere date e orari serve l'accesso a Gestione Prenotazioni: premi Accedi.",
@@ -29,7 +27,7 @@ function time(appointment: AppointmentBody): number {
 
 export function AppointmentsView({ now }: Props = {}): JSX.Element {
   const [current] = useState(() => now ?? new Date());
-  const { data, error, loading, reload } = useAppointments();
+  const { data, error, loading, reload } = useHealthData().appointments;
 
   const all = data?.appointments ?? [];
   const failed = data?.failed ?? [];

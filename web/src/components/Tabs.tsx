@@ -1,14 +1,15 @@
 import {
   useCallback,
   useRef,
-  useSyncExternalStore,
   type JSX,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 
+import { useRoute, type TabId } from "../lib/route";
+
 export interface TabItem {
-  id: string;
+  id: TabId;
   label: string;
   content: ReactNode;
 }
@@ -17,30 +18,14 @@ interface Props {
   tabs: readonly TabItem[];
 }
 
-const hashPrefix = "#/";
-
-function subscribe(onChange: () => void): () => void {
-  window.addEventListener("hashchange", onChange);
-  return () => {
-    window.removeEventListener("hashchange", onChange);
-  };
-}
-
-function currentHash(): string {
-  return window.location.hash;
-}
-
 export function Tabs({ tabs }: Props): JSX.Element {
-  const hash = useSyncExternalStore(subscribe, currentHash);
-  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const route = useRoute();
+  const buttons = useRef(new Map<TabId, HTMLButtonElement>());
 
-  const hashId = hash.startsWith(hashPrefix)
-    ? hash.slice(hashPrefix.length)
-    : "";
-  const active = tabs.find((tab) => tab.id === hashId) ?? tabs[0];
+  const active = tabs.find((tab) => tab.id === route.tab) ?? tabs[0];
 
-  const select = useCallback((id: string): void => {
-    window.location.hash = `${hashPrefix}${id}`;
+  const select = useCallback((id: TabId): void => {
+    window.location.hash = `#/${id}`;
     buttons.current.get(id)?.focus();
   }, []);
 

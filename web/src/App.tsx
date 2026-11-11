@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import { HealthDataProvider } from "./data/HealthDataProvider";
 import { SessionBar } from "./components/SessionBar";
 import { Tabs, type TabItem } from "./components/Tabs";
 import { SessionProvider } from "./session/SessionProvider";
@@ -18,13 +19,15 @@ const tabs: readonly TabItem[] = [
 export function App(): JSX.Element {
   return (
     <SessionProvider>
-      <header className="app-header">
-        <h1>Toscana Salute, ma usabile</h1>
-      </header>
-      <main className="app-main">
-        <SessionBar />
-        <Tabs tabs={tabs} />
-      </main>
+      <HealthDataProvider>
+        <header className="app-header">
+          <h1>Toscana Salute, ma usabile</h1>
+        </header>
+        <main className="app-main">
+          <SessionBar />
+          <Tabs tabs={tabs} />
+        </main>
+      </HealthDataProvider>
     </SessionProvider>
   );
 }

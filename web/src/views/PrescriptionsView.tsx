@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import { useHealthData } from "../data/useHealthData";
 import { PrescriptionCard } from "./prescriptions/PrescriptionCard";
 import {
   countByStatus,
@@ -10,7 +11,6 @@ import {
   type StatusFilter,
 } from "./prescriptions/filter";
 import "./prescriptions/prescriptions.css";
-import { usePrescriptions } from "./prescriptions/usePrescriptions";
 
 const statusOptions: readonly { value: StatusFilter; label: string }[] = [
   { value: "bookable", label: "Da prenotare" },
@@ -29,7 +29,8 @@ function isKindFilter(value: string): value is KindFilter {
 }
 
 export function PrescriptionsView(): JSX.Element {
-  const { data, error, loading, reload } = usePrescriptions();
+  const { data: body, error, loading, reload } = useHealthData().prescriptions;
+  const data = body?.prescriptions ?? [];
   const [status, setStatus] = useState<StatusFilter>("open");
   const [kind, setKind] = useState<KindFilter>("all");
   const [search, setSearch] = useState("");
