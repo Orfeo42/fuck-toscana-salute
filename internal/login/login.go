@@ -50,6 +50,8 @@ const (
 	silentTimeout   = 45 * time.Second
 )
 
+var interactiveRestoredArgs = []string{"--disable-extensions", "--password-store=basic"}
+
 type storageSnapshot struct {
 	Access, Refresh, CF string
 }
@@ -147,10 +149,14 @@ func (l *Launcher) open(headless bool) (*browser, error) {
 	if err := os.MkdirAll(l.profileDir, 0o700); err != nil {
 		return nil, errors.Join(fmt.Errorf("login: create profile dir: %w", err), pw.Stop())
 	}
-	bctx, err := pw.Chromium.LaunchPersistentContext(l.profileDir, playwright.BrowserTypeLaunchPersistentContextOptions{
+	opts := playwright.BrowserTypeLaunchPersistentContextOptions{
 		Channel:  playwright.String(l.channel),
 		Headless: playwright.Bool(headless),
-	})
+	}
+	if !headless {
+		opts.IgnoreDefaultArgs = interactiveRestoredArgs
+	}
+	bctx, err := pw.Chromium.LaunchPersistentContext(l.profileDir, opts)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("login: launch browser: %w", err), pw.Stop())
 	}
