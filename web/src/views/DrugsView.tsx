@@ -7,6 +7,7 @@ import {
   Table,
   Text,
   TextInput,
+  Title,
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
@@ -117,7 +118,9 @@ export function DrugsView(): JSX.Element {
 
   return (
     <section aria-labelledby="drugs-title" aria-busy={loading}>
-      <h2 id="drugs-title">Farmaci</h2>
+      <Title order={2} id="drugs-title">
+        Farmaci
+      </Title>
       <Group align="flex-end" wrap="wrap" mb="md">
         <SegmentedControl
           aria-label="Mostra"

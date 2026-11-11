@@ -1,5 +1,5 @@
-import { Alert, Badge, Button, Group, Text } from "@mantine/core";
-import { CalendarPlus } from "lucide-react";
+import { Menu, Text } from "@mantine/core";
+import { CalendarCheck, CalendarPlus } from "lucide-react";
 import type { JSX } from "react";
 
 import { notConfiguredHint, useGoogle } from "./useGoogle";
@@ -16,44 +16,48 @@ export function GoogleConnect(): JSX.Element | null {
 
   if (status === undefined) {
     return error === undefined ? null : (
-      <Alert color="red" role="alert">
+      <Text size="sm" c="red" role="alert" px="sm">
         {error}
-      </Alert>
+      </Text>
     );
   }
   if (!status.configured) {
     return (
-      <Text size="sm" c="dimmed" title={notConfiguredHint}>
+      <Text size="xs" c="dimmed" px="sm" title={notConfiguredHint}>
         Google Calendar non configurato
       </Text>
     );
   }
   if (!status.connected) {
     return (
-      <Group gap="xs">
-        <Button
-          variant="default"
+      <>
+        <Menu.Item
           leftSection={<CalendarPlus size={16} />}
           onClick={handleConnect}
         >
           Collega Google Calendar
-        </Button>
+        </Menu.Item>
         {error === undefined ? null : (
-          <Text size="sm" c="red" role="alert">
+          <Text size="xs" c="red" role="alert" px="sm">
             {error}
           </Text>
         )}
-      </Group>
+      </>
     );
   }
   return (
-    <Group gap="xs">
-      <Badge color="teal" variant="light">
-        Google Calendar collegato
-      </Badge>
-      <Button variant="subtle" size="compact-sm" onClick={handleDisconnect}>
-        Scollega
-      </Button>
-    </Group>
+    <>
+      <Text size="xs" c="teal" px="sm">
+        Collegato
+      </Text>
+      <Menu.Item
+        leftSection={
+          <CalendarCheck size={16} color="var(--mantine-color-teal-filled)" />
+        }
+        onClick={handleDisconnect}
+      >
+        Scollega Google Calendar
+      </Menu.Item>
+    </>
   );
 }

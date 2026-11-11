@@ -1,33 +1,76 @@
-import { Container, Stack, Title } from "@mantine/core";
+import { AppShell, Burger, Group, Stack, Text } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { HeartPulse } from "lucide-react";
 import type { JSX } from "react";
 
+import { AppNav } from "./components/AppNav";
+import { SessionMenu } from "./components/SessionMenu";
+import { SessionNotice } from "./components/SessionNotice";
 import { HealthDataProvider } from "./data/HealthDataProvider";
-import { SessionBar } from "./components/SessionBar";
-import { Tabs, type TabItem } from "./components/Tabs";
 import { GoogleProvider } from "./google/GoogleProvider";
+import { useRoute } from "./lib/route";
 import { SessionProvider } from "./session/SessionProvider";
 import { DrugsView } from "./views/DrugsView";
 import { VisitsView } from "./views/VisitsView";
 
-const tabs: readonly TabItem[] = [
-  { id: "visite", label: "Visite ed esami", content: <VisitsView /> },
-  { id: "farmaci", label: "Farmaci", content: <DrugsView /> },
-];
+const headerConfig = { height: 56 };
 
-const containerPadding = { base: 16, md: 24 };
+function Content(): JSX.Element {
+  const route = useRoute();
+  return route.tab === "farmaci" ? <DrugsView /> : <VisitsView />;
+}
 
 export function App(): JSX.Element {
+  const [opened, { toggle, close }] = useDisclosure();
+
   return (
     <SessionProvider>
       <GoogleProvider>
         <HealthDataProvider>
-          <Container fluid px={containerPadding}>
-            <Stack gap="md" py="md">
-              <Title order={1}>Toscana Salute, ma usabile</Title>
-              <SessionBar />
-              <Tabs tabs={tabs} />
-            </Stack>
-          </Container>
+          <AppShell
+            header={headerConfig}
+            navbar={{
+              width: 240,
+              breakpoint: "sm",
+              collapsed: { mobile: !opened },
+            }}
+            padding="md"
+          >
+            <AppShell.Header>
+              <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+                <Group gap="sm">
+                  <Burger
+                    opened={opened}
+                    onClick={toggle}
+                    hiddenFrom="sm"
+                    size="sm"
+                    aria-label={opened ? "Chiudi menu" : "Apri menu"}
+                  />
+                  <HeartPulse
+                    size={22}
+                    color="var(--mantine-primary-color-filled)"
+                    aria-hidden="true"
+                  />
+                  <Text fw={700} size="lg">
+                    Toscana Salute
+                  </Text>
+                  <Text c="dimmed" size="sm" visibleFrom="sm">
+                    ma usabile
+                  </Text>
+                </Group>
+                <SessionMenu />
+              </Group>
+            </AppShell.Header>
+            <AppShell.Navbar p="sm">
+              <AppNav onNavigate={close} />
+            </AppShell.Navbar>
+            <AppShell.Main>
+              <Stack gap="md">
+                <SessionNotice />
+                <Content />
+              </Stack>
+            </AppShell.Main>
+          </AppShell>
         </HealthDataProvider>
       </GoogleProvider>
     </SessionProvider>

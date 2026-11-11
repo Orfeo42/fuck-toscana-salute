@@ -1,3 +1,4 @@
+import { Menu } from "@mantine/core";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -28,7 +29,14 @@ vi.mock("../api/client", () => ({
 function renderConnect(): void {
   render(
     <GoogleProvider>
-      <GoogleConnect />
+      <Menu opened>
+        <Menu.Target>
+          <button type="button">t</button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <GoogleConnect />
+        </Menu.Dropdown>
+      </Menu>
     </GoogleProvider>,
   );
 }
@@ -72,7 +80,7 @@ describe("GoogleConnect", () => {
     renderConnect();
 
     expect(
-      await screen.findByRole("button", { name: "Collega Google Calendar" }),
+      await screen.findByRole("menuitem", { name: "Collega Google Calendar" }),
     ).toBeVisible();
   });
 
@@ -80,8 +88,10 @@ describe("GoogleConnect", () => {
     mockStatus({ configured: true, connected: true });
     renderConnect();
 
-    expect(await screen.findByText("Google Calendar collegato")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Scollega" })).toBeVisible();
+    expect(await screen.findByText("Collegato")).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Scollega Google Calendar" }),
+    ).toBeVisible();
   });
 
   it("shows an alert when the status cannot be read", async () => {
@@ -99,7 +109,7 @@ describe("GoogleConnect", () => {
     renderConnect();
 
     await user.click(
-      await screen.findByRole("button", { name: "Collega Google Calendar" }),
+      await screen.findByRole("menuitem", { name: "Collega Google Calendar" }),
     );
 
     expect(mocks.post).toHaveBeenCalledWith("/api/google/connect");
@@ -120,7 +130,7 @@ describe("GoogleConnect", () => {
     renderConnect();
 
     await user.click(
-      await screen.findByRole("button", { name: "Collega Google Calendar" }),
+      await screen.findByRole("menuitem", { name: "Collega Google Calendar" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -132,21 +142,21 @@ describe("GoogleConnect", () => {
   it("refreshes the status on window focus", async () => {
     mockStatus({ configured: true, connected: false });
     renderConnect();
-    await screen.findByRole("button", { name: "Collega Google Calendar" });
+    await screen.findByRole("menuitem", { name: "Collega Google Calendar" });
     mockStatus({ configured: true, connected: true });
 
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
 
-    expect(await screen.findByText("Google Calendar collegato")).toBeVisible();
+    expect(await screen.findByText("Collegato")).toBeVisible();
   });
 
   it("polls every 3 seconds after connect until connected", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockStatus({ configured: true, connected: false });
     renderConnect();
-    const connect = await screen.findByRole("button", {
+    const connect = await screen.findByRole("menuitem", {
       name: "Collega Google Calendar",
     });
     fireEvent.click(connect);
@@ -160,7 +170,7 @@ describe("GoogleConnect", () => {
       await vi.advanceTimersByTimeAsync(3100);
     });
 
-    expect(await screen.findByText("Google Calendar collegato")).toBeVisible();
+    expect(await screen.findByText("Collegato")).toBeVisible();
     const afterConnected = mocks.get.mock.calls.length;
     expect(afterConnected).toBeGreaterThan(before);
 
@@ -174,18 +184,20 @@ describe("GoogleConnect", () => {
     const user = userEvent.setup();
     mockStatus({ configured: true, connected: true });
     renderConnect();
-    await screen.findByText("Google Calendar collegato");
+    await screen.findByText("Collegato");
     const before = mocks.get.mock.calls.length;
     mockStatus({ configured: true, connected: false });
 
-    await user.click(screen.getByRole("button", { name: "Scollega" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Scollega Google Calendar" }),
+    );
 
     expect(mocks.del).toHaveBeenCalledWith("/api/google");
     await waitFor(() => {
       expect(mocks.get.mock.calls.length).toBeGreaterThan(before);
     });
     expect(
-      await screen.findByRole("button", { name: "Collega Google Calendar" }),
+      await screen.findByRole("menuitem", { name: "Collega Google Calendar" }),
     ).toBeVisible();
   });
 });

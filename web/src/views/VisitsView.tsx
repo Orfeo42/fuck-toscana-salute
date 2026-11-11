@@ -9,6 +9,7 @@ import {
   Table,
   Text,
   TextInput,
+  Title,
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
@@ -107,7 +108,9 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
 
   return (
     <section aria-labelledby="visits-title" aria-busy={prescriptions.loading}>
-      <h2 id="visits-title">Visite ed esami</h2>
+      <Title order={2} id="visits-title">
+        Visite ed esami
+      </Title>
       <Group align="flex-end" wrap="wrap" mb="md">
         <Stack gap={4}>
           <Text id="vs-status-label" size="sm">

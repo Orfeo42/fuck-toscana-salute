@@ -1,3 +1,4 @@
+import { Menu } from "@mantine/core";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +27,14 @@ function renderConnect(
         disconnect: options.disconnect ?? vi.fn(),
       }}
     >
-      <GoogleConnect />
+      <Menu opened>
+        <Menu.Target>
+          <button type="button">t</button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <GoogleConnect />
+        </Menu.Dropdown>
+      </Menu>
     </GoogleContext>,
   );
 }
@@ -35,7 +43,7 @@ describe("GoogleConnect", () => {
   it("renders nothing while the status is unknown", () => {
     renderConnect(undefined);
 
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -57,7 +65,7 @@ describe("GoogleConnect", () => {
     renderConnect({ configured: true, connected: false }, { connect });
 
     await user.click(
-      screen.getByRole("button", { name: "Collega Google Calendar" }),
+      screen.getByRole("menuitem", { name: "Collega Google Calendar" }),
     );
 
     expect(connect).toHaveBeenCalled();
@@ -74,8 +82,10 @@ describe("GoogleConnect", () => {
     const disconnect = vi.fn().mockResolvedValue(undefined);
     renderConnect({ configured: true, connected: true }, { disconnect });
 
-    expect(screen.getByText("Google Calendar collegato")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Scollega" }));
+    expect(screen.getByText("Collegato")).toBeVisible();
+    await user.click(
+      screen.getByRole("menuitem", { name: "Scollega Google Calendar" }),
+    );
 
     expect(disconnect).toHaveBeenCalled();
   });
