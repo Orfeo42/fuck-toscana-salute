@@ -7,8 +7,9 @@ import { romeDay } from "./relativeDay";
 const toBookStatus = 3;
 const cancelledBooking = "DISDETTO";
 const bookedLabel = "Prenotata";
+const unverifiedLabel = "Da verificare";
 const fseBookedNote =
-  "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento";
+  "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile";
 const fseBookedStatus = 30;
 const expiredLabel = "Scaduta";
 
@@ -51,6 +52,7 @@ export interface OfficialState {
   label: string;
   tone: StatusTone;
   note: string | undefined;
+  canBook: boolean;
 }
 
 export interface ExpiredState {
@@ -86,11 +88,16 @@ export function effectiveState(
       tone: "booked",
     };
   }
-  let status = row.fse?.status ?? toBookStatus;
-  let fseSaysBooked = false;
+  const status = row.fse?.status ?? toBookStatus;
   if (status === fseBookedStatus && unbooked.has(key)) {
-    status = toBookStatus;
-    fseSaysBooked = true;
+    return {
+      kind: "official",
+      status,
+      label: unverifiedLabel,
+      tone: "pending",
+      note: fseBookedNote,
+      canBook: true,
+    };
   }
   const expiresOn = row.fse?.expiresOn;
   if (
@@ -111,7 +118,8 @@ export function effectiveState(
     status,
     label: prescriptionStatusLabel(status),
     tone: officialTones[status] ?? "closed",
-    note: fseSaysBooked ? fseBookedNote : undefined,
+    note: undefined,
+    canBook: status === toBookStatus,
   };
 }
 

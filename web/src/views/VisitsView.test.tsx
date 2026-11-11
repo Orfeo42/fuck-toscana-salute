@@ -360,17 +360,17 @@ describe("VisitsView", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows to-book, the note and Prenota sul CUP for an unbooked FSE 30 row", async () => {
+  it("shows to verify, the note and Prenota sul CUP for an unbooked FSE 30 row", async () => {
     mockData([], ["0900A0000000005"]);
     renderView();
 
     const note = await screen.findByText(
-      "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento",
+      "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile",
     );
     const row = note.closest("tr");
     expect(row).not.toBeNull();
     expect(
-      within(row as HTMLElement).getByText("Da prenotare"),
+      within(row as HTMLElement).getByText("Da verificare"),
     ).toBeInTheDocument();
     expect(
       within(row as HTMLElement).getByRole("link", { name: "Prenota sul CUP" }),

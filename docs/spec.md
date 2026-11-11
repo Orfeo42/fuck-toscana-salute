@@ -99,7 +99,7 @@ FSE "Diario → Appuntamenti" is a user-maintained diary, not CUP bookings.
 
 The gestione appointment lookup answers HTTP 500 with JSON `{"message":"Non esistono richieste per il paziente"}` when the NRE has no bookings. That body is ~11 KB with a Java `stackTrace` before `message`, so the marker must be matched on the parsed `message` of the full body, never on a truncated prefix (a 4 KB prefix looked like a non-JSON text error). Any other HTTP 500 is an upstream fault, not a missing booking.
 
-A prescription with FSE `stato` 30 and a confirmed empty CUP appointment lookup is bookable: FSE 30 alone does not mean booked.
+A prescription with FSE `stato` 30 and a confirmed empty CUP appointment lookup is ambiguous: some are still bookable, others are refused by the CUP booking flow as "già completamente gestita tramite prenotazioni o accettazioni" (handled outside the online CUP). No read-only endpoint distinguishes them, so the UI shows "Da verificare" and offers the CUP link.
 
 FSE `nre/dettaglio` `dataScadenza` is sometimes the placeholder year 9999 (e.g. `9999-12-31T00:00:00.000`). The app then estimates the expiry as prescription date + 180 days (observed on 6/6 prescriptions with a real expiry) and flags it as estimated. A 2024 placeholder-expiry prescription is refused by the CUP as "Ricetta non erogabile".
 

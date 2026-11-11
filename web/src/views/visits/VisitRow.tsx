@@ -163,9 +163,7 @@ export function VisitRow({
             <PdfLink documentRef={row.fse?.documentRef} />
           </Box>
           <Box w={slotSize} h={slotSize}>
-            {state.kind === "official" && state.status === 3 ? (
-              <BookAction />
-            ) : null}
+            {state.kind === "official" && state.canBook ? <BookAction /> : null}
           </Box>
         </Group>
       </Table.Td>

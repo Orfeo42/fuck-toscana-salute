@@ -131,19 +131,21 @@ describe("effectiveState", () => {
       label: "Da prenotare",
       tone: "tobook",
       note: undefined,
+      canBook: true,
     });
   });
 
-  it("turns FSE status 30 into to-book when the CUP has no appointment", () => {
+  it("marks FSE status 30 as to verify when the CUP has no appointment", () => {
     const row = fseRow("0900A0000000010", "visit", 30, "2026-11-01T09:00:00Z");
     expect(
       effectiveState(row, new Map(), new Set(["0900A0000000010"]), now),
     ).toEqual({
       kind: "official",
-      status: 3,
-      label: "Da prenotare",
-      tone: "tobook",
-      note: "FSE la segna come prenotata, ma nel CUP non risulta alcun appuntamento",
+      status: 30,
+      label: "Da verificare",
+      tone: "pending",
+      note: "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile",
+      canBook: true,
     });
   });
 
@@ -157,6 +159,7 @@ describe("effectiveState", () => {
       label: "Prenotata",
       tone: "booked",
       note: undefined,
+      canBook: false,
     });
   });
 
@@ -239,11 +242,11 @@ describe("effectiveState expiry", () => {
     });
   });
 
-  it("expires an FSE status 30 row that is unbooked in the CUP", () => {
+  it("does not expire an FSE status 30 row that is unbooked in the CUP", () => {
     const row = expiringRow("0900A0000000058", 30, yesterday);
     expect(
       effectiveState(row, new Map(), new Set(["0900A0000000058"]), now).kind,
-    ).toBe("expired");
+    ).toBe("official");
   });
 
   it("is not expired when expiresOn is today", () => {
@@ -333,9 +336,9 @@ describe("unbooked FSE status 30 rows in counts", () => {
   const row = fseRow("0900A0000000060", "visit", 30, "2026-11-01T09:00:00Z");
   const context = contextOf([], ["0900A0000000060"]);
 
-  it("counts as bookable and open", () => {
+  it("counts as open but not bookable", () => {
     expect(countByStatus([row], "", false, context)).toMatchObject({
-      bookable: 1,
+      bookable: 0,
       open: 1,
     });
   });
