@@ -9,8 +9,17 @@ services:
       - "127.0.0.1:${FTS_HOST_PORT:-8800}:8787"
     volumes:
       - fts-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FTS_DATABASE_HOST: db
+      FTS_DATABASE_NAME: fts
+      FTS_DATABASE_USER: fts
+      FTS_DATABASE_PASSWORD_FILE: /run/secrets/fts_db_password
     secrets:
       - fts_key
+      - fts_db_password
     read_only: true
     shm_size: "1gb"
     tmpfs:
@@ -21,9 +30,39 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  db:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fts
+      POSTGRES_DB: fts
+      POSTGRES_PASSWORD_FILE: /run/secrets/fts_db_password
+    volumes:
+      - fts-pg:/var/lib/postgresql
+    secrets:
+      - fts_db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fts -d fts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   fts-data:
+  fts-pg:
 
 secrets:
   fts_key:
     file: ${FTS_KEY_FILE:-${HOME}/.config/fuck-toscana-salute/secret.key}
+  fts_db_password:
+    file: ${FTS_DB_PASSWORD_FILE:-${HOME}/.config/fuck-toscana-salute/db-password}

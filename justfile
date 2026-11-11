@@ -44,7 +44,21 @@ container-key:
     (umask 077 && openssl rand -base64 32 > "${key_file}")
     echo "key created: ${key_file}"
 
-up: container-key
+db_password_file := env_var_or_default("FTS_DB_PASSWORD_FILE", env_var("HOME") / ".config/fuck-toscana-salute/db-password")
+
+db-password:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    password_file="{{ db_password_file }}"
+    if [[ -f "${password_file}" ]]; then
+        echo "db password present: ${password_file}"
+        exit 0
+    fi
+    mkdir -p "$(dirname "${password_file}")"
+    (umask 077 && openssl rand -hex 32 > "${password_file}")
+    echo "db password created: ${password_file}"
+
+up: container-key db-password
     docker compose up -d --build
 
 down:
