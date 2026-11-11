@@ -360,7 +360,7 @@ func TestRegisterListAppointments(t *testing.T) {
 					CUP: &cup.Prescription{NRE: "n1", Kind: "visit", Status: 2, Items: []string{"x"}},
 					Appointment: cup.Appointment{
 						ID: "a1", NRE: "n1", Status: "booked", At: at,
-						Unit: cup.Unit{Name: "Unit", Description: "Desc", Address: "Via Test 1", City: "Firenze", Province: "FI"},
+						Unit: cup.Unit{Name: "Unit", Description: "Desc", Place: "Ospedale Esempio", Address: "Via Test 1", PostalCode: "50100", City: "Firenze", Province: "FI"},
 					},
 				},
 				{
@@ -378,7 +378,7 @@ func TestRegisterListAppointments(t *testing.T) {
 		assert.JSONEq(t, `{
 			"appointments": [
 				{"id":"a1","nre":"n1","status":"booked","at":"2026-03-04T09:30:00Z",
-				 "unit":{"name":"Unit","description":"Desc","address":"Via Test 1","city":"Firenze","province":"FI"},
+				 "unit":{"name":"Unit","description":"Desc","place":"Ospedale Esempio","address":"Via Test 1","postalCode":"50100","city":"Firenze","province":"FI"},
 				 "cup":{"nre":"n1","kind":"visit","status":2,"items":["x"]}},
 				{"id":"a2","nre":"n2","status":"",
 				 "unit":{"name":"","description":"","address":"","city":"","province":""},

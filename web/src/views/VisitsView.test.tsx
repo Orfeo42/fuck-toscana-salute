@@ -124,6 +124,7 @@ function appointment(
       name: "Unita esempio",
       description: "",
       address: "Via Esempio 1",
+      postalCode: "50100",
       city: "Firenze",
       province: "FI",
     },
@@ -345,7 +346,7 @@ describe("VisitsView", () => {
       }),
     ).toHaveAttribute(
       "href",
-      "https://www.google.com/maps/search/?api=1&query=Via%20Esempio%201%2C%20Firenze",
+      "https://www.google.com/maps/search/?api=1&query=Via%20Esempio%201%2C%2050100%20Firenze%20FI",
     );
     expect(within(row).queryByText("Unita esempio")).not.toBeInTheDocument();
     expect(
@@ -398,6 +399,7 @@ describe("VisitsView", () => {
             name: "Unita esempio",
             description: "",
             address: "Via A&B 1/c",
+            postalCode: "50100",
             city: "Firenze",
             province: "FI",
           },
@@ -418,7 +420,9 @@ describe("VisitsView", () => {
     expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
     expect(within(dialog).getByText("tra 2 giorni")).toBeVisible();
     expect(within(dialog).getByText("Unita esempio")).toBeVisible();
-    expect(within(dialog).getByText("Via A&B 1/c, Firenze, FI")).toBeVisible();
+    expect(
+      within(dialog).getByText("Via A&B 1/c, 50100 Firenze FI"),
+    ).toBeVisible();
     expect(
       within(dialog).getByRole("button", {
         name: "Copia NRE 0900A0000000001",
@@ -429,7 +433,7 @@ describe("VisitsView", () => {
     });
     expect(directions).toHaveAttribute(
       "href",
-      "https://www.google.com/maps/dir/?api=1&destination=Via%20A%26B%201%2Fc%2C%20Firenze",
+      "https://www.google.com/maps/dir/?api=1&destination=Via%20A%26B%201%2Fc%2C%2050100%20Firenze%20FI",
     );
     expect(directions).toHaveAttribute("target", "_blank");
     expect(directions).toHaveAttribute("rel", "noopener noreferrer");
@@ -437,7 +441,7 @@ describe("VisitsView", () => {
       within(dialog).getByRole("link", { name: "Apri in Google Maps" }),
     ).toHaveAttribute(
       "href",
-      "https://www.google.com/maps/search/?api=1&query=Via%20A%26B%201%2Fc%2C%20Firenze",
+      "https://www.google.com/maps/search/?api=1&query=Via%20A%26B%201%2Fc%2C%2050100%20Firenze%20FI",
     );
   });
 

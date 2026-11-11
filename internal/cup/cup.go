@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -65,7 +66,9 @@ type Prescription struct {
 type Unit struct {
 	Name        string
 	Description string
+	Place       string
 	Address     string
+	PostalCode  string
 	City        string
 	Province    string
 }
@@ -100,6 +103,8 @@ const (
 	noBookingMarker  = "Non esistono richieste"
 	dateLayout       = "2006-01-02"
 )
+
+var sedeCodePrefix = regexp.MustCompile(`^\[\d+\]-`)
 
 //go:generate moq -out tokensource_mock.go . TokenSource:MockTokenSource
 type TokenSource interface {
@@ -178,13 +183,25 @@ type appuntamento struct {
 	StatoAppuntamento string `json:"statoAppuntamento"`
 	DataAppuntamento  string `json:"dataAppuntamento"`
 	OraAppuntamento   string `json:"oraAppuntamento"`
-	Unita             struct {
-		DescUnita       string `json:"descUnita"`
-		NomeUnita       string `json:"nomeUnita"`
-		IndirizzoUnita  string `json:"indirizzoUnita"`
-		NomeComuneUnita string `json:"nomeComuneUnita"`
-		ProvinciaUnita  string `json:"provinciaUnita"`
-	} `json:"unita"`
+	Unita             unita  `json:"unita"`
+}
+
+type unita struct {
+	DescUnita       string `json:"descUnita"`
+	NomeUnita       string `json:"nomeUnita"`
+	IndirizzoUnita  string `json:"indirizzoUnita"`
+	CapUnita        string `json:"capUnita"`
+	NomeComuneUnita string `json:"nomeComuneUnita"`
+	ProvinciaUnita  string `json:"provinciaUnita"`
+	Sede            sede   `json:"sede"`
+}
+
+type sede struct {
+	DescSede       string `json:"descSede"`
+	IndirizzoSede  string `json:"indirizzoSede"`
+	CapSede        string `json:"capSede"`
+	NomeComuneSede string `json:"nomeComuneSede"`
+	ProvinciaSede  string `json:"provinciaSede"`
 }
 
 type promemoriaResponse struct {
@@ -349,14 +366,28 @@ func (c *Client) mapAppointment(nre, bookingID string, a appuntamento) Appointme
 		NRE:       nre,
 		Status:    a.StatoAppuntamento,
 		At:        at,
-		Unit: Unit{
-			Name:        a.Unita.NomeUnita,
-			Description: a.Unita.DescUnita,
-			Address:     a.Unita.IndirizzoUnita,
-			City:        a.Unita.NomeComuneUnita,
-			Province:    a.Unita.ProvinciaUnita,
-		},
+		Unit:      mapUnit(a.Unita),
 	}
+}
+
+func mapUnit(u unita) Unit {
+	unit := Unit{
+		Name:        u.NomeUnita,
+		Description: u.DescUnita,
+		Place:       strings.TrimSpace(sedeCodePrefix.ReplaceAllString(u.Sede.DescSede, "")),
+		Address:     u.IndirizzoUnita,
+		PostalCode:  u.CapUnita,
+		City:        u.NomeComuneUnita,
+		Province:    u.ProvinciaUnita,
+	}
+	if u.Sede.IndirizzoSede == "" {
+		return unit
+	}
+	unit.Address = u.Sede.IndirizzoSede
+	unit.PostalCode = u.Sede.CapSede
+	unit.City = u.Sede.NomeComuneSede
+	unit.Province = u.Sede.ProvinciaSede
+	return unit
 }
 
 func (c *Client) withClock(day time.Time, clock string) time.Time {

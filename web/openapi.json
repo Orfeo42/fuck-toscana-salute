@@ -481,6 +481,12 @@
           "name": {
             "type": "string"
           },
+          "place": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
           "province": {
             "type": "string"
           }

@@ -9,7 +9,7 @@ import { DetailField, DetailSection } from "../../components/DetailSection";
 import { StatusBadge } from "../../components/StatusBadge";
 import { formatDate, formatLongDateTime } from "../../lib/format";
 import { rowDate, rowTitle, unitName, type EffectiveState } from "./filter";
-import { mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
+import { fullAddress, mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
 import { relativeDay } from "./relativeDay";
 import { statusDetails } from "./statusDetails";
 import { ActionsCell } from "./VisitCells";
@@ -32,12 +32,8 @@ export function VisitDetailModal({
   const fullScreen = useMediaQuery("(max-width: 48em)");
   const details = statusDetails(row, state);
   const bookedUnit = state.kind === "booked" ? booking?.unit : undefined;
-  const place =
-    bookedUnit === undefined
-      ? ""
-      : [bookedUnit.address, bookedUnit.city, bookedUnit.province]
-          .filter((part) => part !== "")
-          .join(", ");
+  const place = bookedUnit?.place ?? "";
+  const address = bookedUnit === undefined ? "" : fullAddress(bookedUnit);
   const at = state.kind === "booked" ? state.at : undefined;
 
   return (
@@ -83,13 +79,14 @@ export function VisitDetailModal({
                   </Text>
                 ) : null}
                 {place === "" ? null : <Text size="sm">{place}</Text>}
+                {address === "" ? null : <Text size="sm">{address}</Text>}
               </>
             </DetailField>
             {bookedUnit.address === "" ? null : (
               <Group gap="sm">
                 <Button
                   component="a"
-                  href={mapsDirectionsUrl(bookedUnit.address, bookedUnit.city)}
+                  href={mapsDirectionsUrl(bookedUnit)}
                   target="_blank"
                   rel="noopener noreferrer"
                   leftSection={<Navigation size={16} aria-hidden="true" />}
@@ -99,7 +96,7 @@ export function VisitDetailModal({
                 <Button
                   component="a"
                   variant="light"
-                  href={mapsSearchUrl(bookedUnit.address, bookedUnit.city)}
+                  href={mapsSearchUrl(bookedUnit)}
                   target="_blank"
                   rel="noopener noreferrer"
                   leftSection={<MapPinned size={16} aria-hidden="true" />}

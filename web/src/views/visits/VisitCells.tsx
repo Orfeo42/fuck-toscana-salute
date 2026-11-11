@@ -134,7 +134,7 @@ export function PlaceCell({ state, booking }: PlaceProps): JSX.Element | null {
           variant="subtle"
           size="lg"
           aria-label={`Apri in Google Maps: ${name}`}
-          href={mapsSearchUrl(unit.address, unit.city)}
+          href={mapsSearchUrl(unit)}
           target="_blank"
           rel="noopener noreferrer"
         >

@@ -180,6 +180,45 @@ func TestAppointments(t *testing.T) {
 		assert.Equal(t, Unit{Name: "Name", Description: "Desc", Address: "Via Roma 1", City: "Firenze", Province: "FI"}, got[0].Unit)
 	})
 
+	t.Run("sede present uses sede address and strips the code prefix", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"response":{"listaPrescrizioni":{"prescrizione":[{"listaAppuntamenti":{"appuntamento":[{"idAppuntamento":"1","unita":{"descUnita":"Desc","nomeUnita":"Name","indirizzoUnita":"Via Unita","capUnita":"50122","nomeComuneUnita":"Pisa","provinciaUnita":"PI","sede":{"descSede":"[999]-Ospedale Esempio","indirizzoSede":"Via Roma 1","capSede":"50100","nomeComuneSede":"Firenze","provinciaSede":"FI"}}}]}}]}}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Appointments(context.Background(), testNRE)
+
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, Unit{Name: "Name", Description: "Desc", Place: "Ospedale Esempio", Address: "Via Roma 1", PostalCode: "50100", City: "Firenze", Province: "FI"}, got[0].Unit)
+	})
+
+	t.Run("sede without address falls back to unit fields", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"response":{"listaPrescrizioni":{"prescrizione":[{"listaAppuntamenti":{"appuntamento":[{"idAppuntamento":"1","unita":{"descUnita":"Desc","nomeUnita":"Name","indirizzoUnita":"Via Unita 2","capUnita":"50122","nomeComuneUnita":"Pisa","provinciaUnita":"PI","sede":{"descSede":"[999]-Ospedale Esempio","capSede":"50100","nomeComuneSede":"Firenze","provinciaSede":"FI"}}}]}}]}}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Appointments(context.Background(), testNRE)
+
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, Unit{Name: "Name", Description: "Desc", Place: "Ospedale Esempio", Address: "Via Unita 2", PostalCode: "50122", City: "Pisa", Province: "PI"}, got[0].Unit)
+	})
+
+	t.Run("place without code prefix is untouched", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte(`{"response":{"listaPrescrizioni":{"prescrizione":[{"listaAppuntamenti":{"appuntamento":[{"idAppuntamento":"1","unita":{"sede":{"descSede":"Ospedale Esempio","indirizzoSede":"Via Roma 1"}}}]}}]}}}`))
+			require.NoError(t, err)
+		}, identity)
+
+		got, err := c.Appointments(context.Background(), testNRE)
+
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "Ospedale Esempio", got[0].Unit.Place)
+	})
+
 	t.Run("500 with no booking marker is empty", func(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "java.lang.Exception: Non esistono richieste per il paziente", http.StatusInternalServerError)

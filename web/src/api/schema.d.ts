@@ -409,6 +409,8 @@ export interface components {
             city: string;
             description: string;
             name: string;
+            place?: string;
+            postalCode?: string;
             province: string;
         };
     };

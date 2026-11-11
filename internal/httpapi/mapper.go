@@ -83,7 +83,9 @@ type AppointmentBody struct {
 type UnitBody struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Place       string `json:"place,omitempty"`
 	Address     string `json:"address"`
+	PostalCode  string `json:"postalCode,omitempty"`
 	City        string `json:"city"`
 	Province    string `json:"province"`
 }
@@ -143,7 +145,9 @@ func toAppointmentsBody(result agenda.Result) AppointmentsBody {
 			Unit: UnitBody{
 				Name:        e.Appointment.Unit.Name,
 				Description: e.Appointment.Unit.Description,
+				Place:       e.Appointment.Unit.Place,
 				Address:     e.Appointment.Unit.Address,
+				PostalCode:  e.Appointment.Unit.PostalCode,
 				City:        e.Appointment.Unit.City,
 				Province:    e.Appointment.Unit.Province,
 			},
