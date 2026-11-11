@@ -20,6 +20,7 @@ describe("CopyButton", () => {
     expect(button).toHaveTextContent("0900A0000000001");
     expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
     expect(button.querySelector("svg")).toHaveClass("lucide-copy");
+    expect(document.body.querySelector(".toast")).toBeNull();
   });
 
   it("copies the value and confirms", async () => {
@@ -37,7 +38,8 @@ describe("CopyButton", () => {
     expect(writeText).toHaveBeenCalledWith("0900A0000000001");
     expect(screen.getByRole("status")).toHaveTextContent("Copiato");
     expect(button.querySelector("svg")).toHaveClass("lucide-check");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copiato");
+    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
+    expect(document.body.querySelector(".toast")).toHaveTextContent("Copiato");
   });
 
   it("reverts to the idle state after 2 seconds", async () => {
@@ -63,6 +65,7 @@ describe("CopyButton", () => {
     expect(button.querySelector("svg")).toHaveClass("lucide-copy");
     expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(document.body.querySelector(".toast")).toBeNull();
   });
 
   it("reports a failed copy", async () => {
@@ -79,7 +82,8 @@ describe("CopyButton", () => {
     const button = screen.getByRole("button", { name: /Copia NRE/ });
     expect(screen.getByRole("status")).toHaveTextContent("Copia non riuscita");
     expect(button.querySelector("svg")).toHaveClass("lucide-x");
-    expect(button.querySelector(".icon-tip")).toHaveTextContent(
+    expect(button.querySelector(".icon-tip")).toHaveTextContent("Copia NRE");
+    expect(document.body.querySelector(".toast-failed")).toHaveTextContent(
       "Copia non riuscita",
     );
   });

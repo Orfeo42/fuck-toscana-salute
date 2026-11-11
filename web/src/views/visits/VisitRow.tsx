@@ -121,16 +121,20 @@ export function VisitRow({
       </td>
       <td data-label="Azioni">
         <div className="col-actions">
-          <PromemoriaLink bookingId={bookingId} />
-          {calendarBooking === undefined ? null : (
-            <IconAction
-              label="Aggiungi a Google Calendar"
-              icon={CalendarCheck}
-              onClick={() => {
-                setCalendarOpen(true);
-              }}
-            />
-          )}
+          <span className="action-slot">
+            <PromemoriaLink bookingId={bookingId} />
+          </span>
+          <span className="action-slot">
+            {calendarBooking === undefined ? null : (
+              <IconAction
+                label="Aggiungi a Google Calendar"
+                icon={CalendarCheck}
+                onClick={() => {
+                  setCalendarOpen(true);
+                }}
+              />
+            )}
+          </span>
           {calendarBooking !== undefined && calendarOpen ? (
             <CalendarDialog
               appointment={calendarBooking}
@@ -140,10 +144,14 @@ export function VisitRow({
               }}
             />
           ) : null}
-          <PdfLink documentRef={row.fse?.documentRef} />
-          {state.kind === "official" && state.status === 3 ? (
-            <BookAction />
-          ) : null}
+          <span className="action-slot">
+            <PdfLink documentRef={row.fse?.documentRef} />
+          </span>
+          <span className="action-slot">
+            {state.kind === "official" && state.status === 3 ? (
+              <BookAction />
+            ) : null}
+          </span>
         </div>
       </td>
     </tr>

@@ -1,5 +1,6 @@
 import { Check, Copy, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -64,12 +65,20 @@ export function CopyButton({ value, label }: Props): JSX.Element {
         <span className="nre-text">{value}</span>
         <Icon aria-hidden="true" size={14} />
         <span className="icon-tip" aria-hidden="true">
-          {state === "idle" ? label : messages[state]}
+          {label}
         </span>
       </button>
-      <span role="status" className="copy-status">
+      <span role="status" className="sr-only">
         {messages[state]}
       </span>
+      {state === "idle"
+        ? null
+        : createPortal(
+            <div className={`toast toast-${state}`} aria-hidden="true">
+              {messages[state]}
+            </div>,
+            document.body,
+          )}
     </span>
   );
 }

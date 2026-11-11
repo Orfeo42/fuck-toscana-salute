@@ -58,8 +58,12 @@ function DrugRow({ row }: RowProps): JSX.Element {
       <td data-label="NRE" className="col-nowrap">
         <CopyButton value={row.nre} label="Copia NRE" />
       </td>
-      <td data-label="Azioni" className="col-actions">
-        <PdfLink documentRef={row.fse.documentRef} />
+      <td data-label="Azioni">
+        <div className="col-actions">
+          <span className="action-slot">
+            <PdfLink documentRef={row.fse.documentRef} />
+          </span>
+        </div>
       </td>
     </tr>
   );
