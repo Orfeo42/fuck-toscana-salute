@@ -16,6 +16,19 @@ export type PrescriptionFSEBody = components["schemas"]["PrescriptionFSEBody"];
 export type GoogleStatusBody = components["schemas"]["GoogleStatusBody"];
 export type CalendarEventBody = components["schemas"]["CalendarEventBody"];
 export type UnitBody = components["schemas"]["UnitBody"];
+export type VerdictBody = components["schemas"]["VerdictBody"];
+export type AppointmentsUpdatedBody =
+  components["schemas"]["AppointmentsUpdatedBody"];
+export type ReportsBody = components["schemas"]["ReportsBody"];
+export type ReportBody = components["schemas"]["ReportBody"];
+export type ReportFailureBody = components["schemas"]["ReportFailureBody"];
+export type ReportDocumentBody = components["schemas"]["ReportDocumentBody"];
+export type ReportRefRequest = components["schemas"]["ReportRefRequest"];
+export type ReportPDFRequest = components["schemas"]["ReportPDFRequest"];
+export type GoogleSettingsBody = components["schemas"]["GoogleSettingsBody"];
+export type GoogleSettingsRequest =
+  components["schemas"]["GoogleSettingsRequest"];
+export type RefreshRequest = components["schemas"]["RefreshRequest"];
 
 export function prescriptionPdfUrl(ref: string): string {
   const query = new URLSearchParams({ ref });
