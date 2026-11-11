@@ -14,8 +14,8 @@ const portalOrigins = new Map<string, PortalId>([
 ]);
 
 export const portalUrls: Readonly<Record<PortalId, string>> = {
-  cup: "https://prenota.sanita.toscana.it/",
-  fse: "https://fse.sanita.toscana.it/",
+  cup: "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?response_type=code&client_id=r_toscan__portale_cup2_0&redirect_uri=https://prenota.sanita.toscana.it&scope=default",
+  fse: "https://auth.regione.toscana.it/auth/realms/rt/protocol/openid-connect/auth?response_type=code&client_id=r_toscan__fse_web&redirect_uri=https://fse.sanita.toscana.it/&scope=profile+sdm-rs/cittadino+sisorchestrator-rs/cittadino+vaccini-rs/cittadino",
 };
 
 const missingTokensAlert =
