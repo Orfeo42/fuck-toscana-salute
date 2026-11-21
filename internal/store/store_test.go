@@ -68,7 +68,7 @@ func run(m *testing.M) int {
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
-	_, err := testDB.ExecContext(context.Background(), "DROP TABLE IF EXISTS responses, secrets")
+	_, err := testDB.ExecContext(context.Background(), "DROP TABLE IF EXISTS responses, secrets, local_reports, report_links, visit_overrides")
 	require.NoError(t, err)
 	s, err := Open(context.Background(), testDSN, testKey(1))
 	require.NoError(t, err)

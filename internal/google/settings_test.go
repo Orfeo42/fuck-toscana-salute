@@ -4,11 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+)
+
+const (
+	fakeAPIKey = "AIza" + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	fakeAppID  = "123456789"
 )
 
 func TestSettingsValidate(t *testing.T) {
@@ -62,6 +68,51 @@ func TestSettingsValidate(t *testing.T) {
 		s := testSettings()
 		s.DriveFolderID = "1AbC_dEf-GhIjK"
 		require.NoError(t, s.Validate())
+	})
+}
+
+func TestSettingsValidatePicker(t *testing.T) {
+	t.Run("api key and app id are optional", func(t *testing.T) {
+		s := testSettings()
+		s.APIKey = ""
+		s.AppID = ""
+		require.NoError(t, s.Validate())
+	})
+
+	t.Run("valid api key passes", func(t *testing.T) {
+		s := testSettings()
+		s.APIKey = fakeAPIKey
+		require.NoError(t, s.Validate())
+	})
+
+	t.Run("api key with wrong prefix is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.APIKey = "BBBB" + strings.Repeat("x", 35)
+		require.ErrorIs(t, s.Validate(), ErrAPIKeyInvalid)
+	})
+
+	t.Run("api key with wrong length is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.APIKey = fakeAPIKey + "x"
+		require.ErrorIs(t, s.Validate(), ErrAPIKeyInvalid)
+	})
+
+	t.Run("valid app id passes", func(t *testing.T) {
+		s := testSettings()
+		s.AppID = fakeAppID
+		require.NoError(t, s.Validate())
+	})
+
+	t.Run("non numeric app id is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.AppID = "project-abc"
+		require.ErrorIs(t, s.Validate(), ErrAppIDInvalid)
+	})
+
+	t.Run("too short app id is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.AppID = "12345"
+		require.ErrorIs(t, s.Validate(), ErrAppIDInvalid)
 	})
 }
 

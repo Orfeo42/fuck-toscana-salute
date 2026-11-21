@@ -192,7 +192,7 @@ func TestServe(t *testing.T) {
 		stopServe(t, cancel, done)
 	})
 
-	t.Run("serves reports endpoint behind login", func(t *testing.T) {
+	t.Run("serves local reports with an fse failure when logged out", func(t *testing.T) {
 		setEnv(t)
 		cfg, err := config.Load()
 		require.NoError(t, err)
@@ -200,9 +200,12 @@ func TestServe(t *testing.T) {
 
 		resp, err := client.Get(base + "/api/reports")
 		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Contains(t, string(body), `"kind":"fse"`)
 		stopServe(t, cancel, done)
 	})
 

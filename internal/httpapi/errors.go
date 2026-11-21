@@ -12,6 +12,7 @@ import (
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
@@ -43,6 +44,33 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	}
 	if errors.Is(err, google.ErrNotConnected) {
 		return huma.Error401Unauthorized("google_not_connected")
+	}
+	if errors.Is(err, localrecords.ErrNotFound) {
+		return huma.Error404NotFound("not found")
+	}
+	if errors.Is(err, localrecords.ErrUnsupportedType) || errors.Is(err, google.ErrDriveFileType) {
+		return huma.Error422UnprocessableEntity("Tipo di file non supportato: usa PDF, JPEG o PNG")
+	}
+	if errors.Is(err, localrecords.ErrEmptyFile) {
+		return huma.Error422UnprocessableEntity("Il file è vuoto")
+	}
+	if errors.Is(err, localrecords.ErrInvalidStatus) {
+		return huma.Error422UnprocessableEntity("Stato non valido")
+	}
+	if errors.Is(err, localrecords.ErrInvalidReportKind) {
+		return huma.Error422UnprocessableEntity("Questo tipo di referto non può essere collegato")
+	}
+	if errors.Is(err, google.ErrAPIKeyInvalid) {
+		return huma.Error422UnprocessableEntity("Chiave API Google non valida")
+	}
+	if errors.Is(err, google.ErrAppIDInvalid) {
+		return huma.Error422UnprocessableEntity("L'ID app deve essere il numero del progetto Google")
+	}
+	if errors.Is(err, localrecords.ErrTooLarge) || errors.Is(err, google.ErrDriveFileTooLarge) {
+		return huma.Error413RequestEntityTooLarge("Il file supera la dimensione massima di 20 MB")
+	}
+	if errors.Is(err, google.ErrPickerNotConfigured) {
+		return huma.Error409Conflict("google_picker_not_configured")
 	}
 	var googleErr *googleapi.Error
 	var retrieveErr *oauth2.RetrieveError

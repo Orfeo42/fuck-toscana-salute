@@ -7,6 +7,7 @@ import (
 	"context"
 	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/reports"
 	"sync"
 	"time"
 )
@@ -259,7 +260,7 @@ var _ Reports = &MockReports{}
 //			DownloadFunc: func(ctx context.Context, ref referti.Ref, position string) ([]byte, error) {
 //				panic("mock out the Download method")
 //			},
-//			ListFunc: func(ctx context.Context) (referti.Listing, error) {
+//			ListFunc: func(ctx context.Context) (reports.Listing, error) {
 //				panic("mock out the List method")
 //			},
 //		}
@@ -276,7 +277,7 @@ type MockReports struct {
 	DownloadFunc func(ctx context.Context, ref referti.Ref, position string) ([]byte, error)
 
 	// ListFunc mocks the List method.
-	ListFunc func(ctx context.Context) (referti.Listing, error)
+	ListFunc func(ctx context.Context) (reports.Listing, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -384,7 +385,7 @@ func (mock *MockReports) DownloadCalls() []struct {
 }
 
 // List calls ListFunc.
-func (mock *MockReports) List(ctx context.Context) (referti.Listing, error) {
+func (mock *MockReports) List(ctx context.Context) (reports.Listing, error) {
 	if mock.ListFunc == nil {
 		panic("MockReports.ListFunc: method is nil but Reports.List was just called")
 	}

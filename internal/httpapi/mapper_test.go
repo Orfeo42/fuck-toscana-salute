@@ -10,7 +10,9 @@ import (
 	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/loginflow"
+	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 )
@@ -145,5 +147,88 @@ func TestToAppointmentsBodyVerdicts(t *testing.T) {
 
 		assert.NotNil(t, got.Verdicts)
 		assert.Empty(t, got.Verdicts)
+	})
+}
+
+func TestMergeLocal(t *testing.T) {
+	t.Run("override replaces the fse status and counts a difference", func(t *testing.T) {
+		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 5}, Reports: []ReportRefBody{}}}
+
+		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900a0000000001", Status: 8}})
+
+		assert.Equal(t, mergeStats{Overridden: 1, Differing: 1}, stats)
+		assert.True(t, rows[0].Overridden)
+		assert.Equal(t, 8, rows[0].FSE.Status)
+	})
+
+	t.Run("override replaces the cup status when there is no fse", func(t *testing.T) {
+		rows := []RowBody{{NRE: "0900A0000000001", CUP: &PrescriptionCUPBody{Status: 3}, Reports: []ReportRefBody{}}}
+
+		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900A0000000001", Status: 7}})
+
+		assert.Equal(t, mergeStats{Overridden: 1, Differing: 1}, stats)
+		assert.Equal(t, 7, rows[0].CUP.Status)
+	})
+
+	t.Run("override equal to the remote status is not differing", func(t *testing.T) {
+		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 8}, Reports: []ReportRefBody{}}}
+
+		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900A0000000001", Status: 8}})
+
+		assert.Equal(t, mergeStats{Overridden: 1}, stats)
+	})
+
+	t.Run("rows without override stay untouched", func(t *testing.T) {
+		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 5}, Reports: []ReportRefBody{}}}
+
+		stats := mergeLocal(rows, nil, nil)
+
+		assert.Equal(t, mergeStats{}, stats)
+		assert.False(t, rows[0].Overridden)
+		assert.Equal(t, 5, rows[0].FSE.Status)
+		assert.Empty(t, rows[0].Reports)
+	})
+
+	t.Run("links are attached sorted by ref key", func(t *testing.T) {
+		rows := []RowBody{{NRE: "0900A0000000001", Reports: []ReportRefBody{}}, {NRE: "0900A0000000002", Reports: []ReportRefBody{}}}
+		links := []localrecords.Link{
+			{NRE: "0900a0000000001", Ref: referti.Ref{Kind: referti.KindRadiology, DetailID: "D2"}},
+			{NRE: "0900A0000000001", Ref: referti.Ref{Kind: referti.KindLab, AbstractID: "A1", DetailID: "D1", RepCode: "R1"}},
+		}
+
+		mergeLocal(rows, links, nil)
+
+		assert.Equal(t, []ReportRefBody{
+			{Kind: "lab", AbstractID: "A1", DetailID: "D1", RepCode: "R1"},
+			{Kind: "ris", DetailID: "D2"},
+		}, rows[0].Reports)
+		assert.Empty(t, rows[1].Reports)
+		assert.NotNil(t, rows[1].Reports)
+	})
+}
+
+func TestToLocalReportBody(t *testing.T) {
+	created := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+
+	t.Run("maps the report with an nre", func(t *testing.T) {
+		got := toLocalReportBody(localrecords.Report{ID: "abc", Meta: localrecords.Meta{Title: "Visita", Provider: "ASL"}, CreatedAt: created}, "0900A0000000001")
+
+		assert.Equal(t, ReportBody{
+			Kind:       "local",
+			KindLabel:  referti.KindLocal.Label(),
+			AbstractID: "abc",
+			UpdatedAt:  &created,
+			Provider:   "ASL",
+			Origin:     "local",
+			Title:      "Visita",
+			NREs:       []string{"0900A0000000001"},
+		}, got)
+	})
+
+	t.Run("no nre gives an empty list and no zero date", func(t *testing.T) {
+		got := toLocalReportBody(localrecords.Report{ID: "abc", CreatedAt: created}, "")
+
+		assert.Equal(t, []string{}, got.NREs)
+		assert.Nil(t, got.Date)
 	})
 }

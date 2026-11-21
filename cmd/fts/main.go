@@ -22,9 +22,11 @@ import (
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/httpapi"
 	"fuck-toscana-salute/internal/keycloak"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/reports"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/store"
 	"fuck-toscana-salute/internal/upstream"
@@ -52,12 +54,12 @@ func (d documents) Promemoria(ctx context.Context, bookingID string) ([]byte, er
 	return d.bookings.Promemoria(ctx, bookingID)
 }
 
-type reports struct {
+type remoteReports struct {
 	*referti.Client
 	cached *cache.Reports
 }
 
-func (r reports) List(ctx context.Context) (referti.Listing, error) {
+func (r remoteReports) List(ctx context.Context) (referti.Listing, error) {
 	return r.cached.List(ctx)
 }
 
@@ -134,6 +136,8 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	refertiClient := referti.New(up, sessions)
 	ag := agenda.New(cache.NewCUP(cupClient, st, cache.DefaultPolicy()), cache.NewFSE(fseClient, st, cache.DefaultPolicy()), lookupConcurrency)
 	googleClient := google.New(st, vault.NewTokenVaultWithBackend(st, secretService, googleUser), httpClient)
+	local := localrecords.New(st)
+	remote := remoteReports{Client: refertiClient, cached: cache.NewReports(refertiClient, st, cache.DefaultPolicy())}
 	mux := http.NewServeMux()
 	api := httpapi.New(
 		sessions,
@@ -141,7 +145,8 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 		ag,
 		documents{Client: fseClient, bookings: cupClient},
 		googleClient,
-		reports{Client: refertiClient, cached: cache.NewReports(refertiClient, st, cache.DefaultPolicy())},
+		reports.New(remote, local),
+		local,
 		freshness{st: st},
 		cfg.LoginMode,
 		cfg.ViewerAddr != "",

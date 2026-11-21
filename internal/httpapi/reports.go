@@ -32,6 +32,9 @@ type ReportBody struct {
 	Provider   string     `json:"provider"`
 	Unread     bool       `json:"unread"`
 	Hidden     bool       `json:"hidden"`
+	Origin     string     `json:"origin" enum:"remote,local"`
+	Title      string     `json:"title,omitempty"`
+	NREs       []string   `json:"nres"`
 }
 
 type ReportFailureBody struct {
@@ -106,6 +109,9 @@ func registerReports(api huma.API, reports Reports, fresh Freshness) {
 				Provider:   r.Provider,
 				Unread:     r.Unread,
 				Hidden:     r.Hidden,
+				Origin:     string(r.Origin),
+				Title:      r.Title,
+				NREs:       append(make([]string, 0, len(r.NREs)), r.NREs...),
 			})
 		}
 		for _, f := range listing.Failures {
@@ -151,9 +157,16 @@ func registerReports(api huma.API, reports Reports, fresh Freshness) {
 		if err != nil {
 			return nil, toHTTPError(ctx, "get-report-pdf", err)
 		}
+		contentType, extension := "application/pdf", "pdf"
+		switch detected := http.DetectContentType(pdf); detected {
+		case "image/jpeg":
+			contentType, extension = detected, "jpg"
+		case "image/png":
+			contentType, extension = detected, "png"
+		}
 		return &prescriptionPDFOutput{
-			ContentType:        "application/pdf",
-			ContentDisposition: `inline; filename="referto.pdf"`,
+			ContentType:        contentType,
+			ContentDisposition: `inline; filename="referto.` + extension + `"`,
 			Body:               pdf,
 		}, nil
 	})

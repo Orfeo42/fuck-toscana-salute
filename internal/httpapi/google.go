@@ -56,6 +56,8 @@ type GoogleSettingsBody struct {
 	ClientID      string `json:"clientId"`
 	CalendarID    string `json:"calendarId"`
 	DriveFolderID string `json:"driveFolderId"`
+	APIKey        string `json:"apiKey"`
+	AppID         string `json:"appId"`
 	HasSecret     bool   `json:"hasSecret"`
 	RedirectURI   string `json:"redirectUri"`
 }
@@ -69,6 +71,8 @@ type GoogleSettingsRequest struct {
 	ClientSecret  string `json:"clientSecret,omitempty" maxLength:"200"`
 	CalendarID    string `json:"calendarId,omitempty" maxLength:"200"`
 	DriveFolderID string `json:"driveFolderId,omitempty" maxLength:"100"`
+	APIKey        string `json:"apiKey,omitempty" maxLength:"100"`
+	AppID         string `json:"appId,omitempty" maxLength:"30"`
 }
 
 type createCalendarEventInput struct {
@@ -136,6 +140,8 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 			ClientID:      settings.ClientID,
 			CalendarID:    settings.CalendarID,
 			DriveFolderID: settings.DriveFolderID,
+			APIKey:        settings.APIKey,
+			AppID:         settings.AppID,
 			HasSecret:     settings.HasSecret,
 			RedirectURI:   in.redirectURL,
 		}}, nil
@@ -153,6 +159,8 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 			ClientSecret:  in.Body.ClientSecret,
 			CalendarID:    in.Body.CalendarID,
 			DriveFolderID: in.Body.DriveFolderID,
+			APIKey:        in.Body.APIKey,
+			AppID:         in.Body.AppID,
 		})
 		if err != nil {
 			return nil, toHTTPError(ctx, "save-google-settings", err)

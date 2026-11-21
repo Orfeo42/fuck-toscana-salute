@@ -30,13 +30,19 @@ const (
 	defaultCalendar = "primary"
 )
 
-var driveFolderPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{10,}$`)
+var (
+	driveFolderPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{10,}$`)
+	apiKeyPattern      = regexp.MustCompile(`^AIza[0-9A-Za-z_-]{35}$`)
+	appIDPattern       = regexp.MustCompile(`^[0-9]{6,20}$`)
+)
 
 type Settings struct {
 	ClientID      string `json:"clientId"`
 	ClientSecret  string `json:"clientSecret"`
 	CalendarID    string `json:"calendarId"`
 	DriveFolderID string `json:"driveFolderId"`
+	APIKey        string `json:"apiKey"`
+	AppID         string `json:"appId"`
 	HasSecret     bool   `json:"-"`
 }
 
@@ -52,6 +58,12 @@ func (s Settings) Validate() error {
 	}
 	if s.DriveFolderID != "" && !driveFolderPattern.MatchString(s.DriveFolderID) {
 		return ErrDriveFolderInvalid
+	}
+	if s.APIKey != "" && !apiKeyPattern.MatchString(s.APIKey) {
+		return ErrAPIKeyInvalid
+	}
+	if s.AppID != "" && !appIDPattern.MatchString(s.AppID) {
+		return ErrAppIDInvalid
 	}
 	return nil
 }

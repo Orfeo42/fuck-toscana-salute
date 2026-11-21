@@ -22,9 +22,11 @@ import (
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/reports"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
 )
@@ -33,12 +35,19 @@ func emptyFreshness() *MockFreshness {
 	return &MockFreshness{FetchedAtFunc: func(context.Context, string) (map[string]time.Time, error) { return nil, nil }}
 }
 
+func emptyLocal() *MockLocalRecords {
+	return &MockLocalRecords{
+		OverridesFunc: func(context.Context) ([]localrecords.Override, error) { return nil, nil },
+		LinksFunc:     func(context.Context) ([]localrecords.Link, error) { return nil, nil },
+	}
+}
+
 func TestNew(t *testing.T) {
 	t.Run("serves the session endpoint", func(t *testing.T) {
 		store := &MockSessionStore{StatusFunc: func() session.Status { return session.Status{} }}
 		flow := &MockLoginFlow{StatesFunc: func() map[session.Portal]loginflow.State { return nil }}
 		rec := httptest.NewRecorder()
-		New(store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/session", nil))
+		New(store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/session", nil))
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 }
@@ -61,7 +70,7 @@ func TestRegisterGetSession(t *testing.T) {
 			}
 		}}
 		_, api := humatest.New(t)
-		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/session")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -82,7 +91,7 @@ func TestRegisterGetSessionViewer(t *testing.T) {
 		store := &MockSessionStore{StatusFunc: func() session.Status { return session.Status{} }}
 		flow := &MockLoginFlow{StatesFunc: func() map[session.Portal]loginflow.State { return nil }}
 		_, api := humatest.New(t)
-		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", true)
+		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", true)
 
 		resp := api.Get("/api/session")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -98,7 +107,7 @@ func TestRegisterStartLogin(t *testing.T) {
 			return nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/login/fse")
 		assert.Equal(t, http.StatusAccepted, resp.Code)
@@ -111,7 +120,7 @@ func TestRegisterStartLogin(t *testing.T) {
 			return loginflow.ErrLoginInProgress
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/login/cup")
 		assert.Equal(t, http.StatusConflict, resp.Code)
@@ -122,7 +131,7 @@ func TestRegisterStartLogin(t *testing.T) {
 			return errors.New("boom")
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/login/cup")
 		assert.Equal(t, http.StatusInternalServerError, resp.Code)
@@ -131,7 +140,7 @@ func TestRegisterStartLogin(t *testing.T) {
 	t.Run("unknown portal is rejected", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/login/xyz")
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
@@ -143,7 +152,7 @@ func TestRegisterStartLoginAll(t *testing.T) {
 	t.Run("accepts and starts the combined flow", func(t *testing.T) {
 		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/login")
 		assert.Equal(t, http.StatusAccepted, resp.Code)
@@ -153,7 +162,7 @@ func TestRegisterStartLoginAll(t *testing.T) {
 	t.Run("conflict when a login is in progress", func(t *testing.T) {
 		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return loginflow.ErrLoginInProgress }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusConflict, api.Post("/api/login").Code)
 	})
@@ -161,7 +170,7 @@ func TestRegisterStartLoginAll(t *testing.T) {
 	t.Run("internal error on other failures", func(t *testing.T) {
 		flow := &MockLoginFlow{StartAllFunc: func(context.Context) error { return errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusInternalServerError, api.Post("/api/login").Code)
 	})
@@ -190,7 +199,7 @@ func TestRegisterImportLogin(t *testing.T) {
 			return nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "rssmra80a01h501u", "tessera": "80380000000000000000"})
@@ -210,7 +219,7 @@ func TestRegisterImportLogin(t *testing.T) {
 			return nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -227,7 +236,7 @@ func TestRegisterImportLogin(t *testing.T) {
 			return nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := importToken(t, "r_toscan__fse_web", time.Now().Add(time.Hour))
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "fse", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U", "tessera": "80380000000000000000"})
@@ -240,7 +249,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("missing origin is forbidden", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -252,7 +261,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("foreign origin is forbidden", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, "Origin: https://evil.example", map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -264,7 +273,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("mismatching token is unprocessable", func(t *testing.T) {
 		flow := &MockLoginFlow{ImportFunc: func(context.Context, login.Result) error { return login.ErrTokenMismatch }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -276,7 +285,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("expired token is unprocessable", func(t *testing.T) {
 		flow := &MockLoginFlow{ImportFunc: func(context.Context, login.Result) error { return login.ErrTokenExpired }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -288,7 +297,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("malformed token is unprocessable and never reaches the flow", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": "not-a-jwt", "refresh": "not-a-jwt", "cf": "RSSMRA80A01H501U"})
 
@@ -299,7 +308,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("internal error on other failures", func(t *testing.T) {
 		flow := &MockLoginFlow{ImportFunc: func(context.Context, login.Result) error { return errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 		tok := validCUP(t)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": tok, "refresh": tok, "cf": "RSSMRA80A01H501U"})
@@ -310,7 +319,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("unknown portal is rejected by the schema", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "xyz", "access": "a", "refresh": "b", "cf": "c"})
 
@@ -321,7 +330,7 @@ func TestRegisterImportLogin(t *testing.T) {
 	t.Run("empty access is rejected by the schema", func(t *testing.T) {
 		flow := &MockLoginFlow{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, &MockSessionStore{}, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 
 		resp := api.Post("/api/login/import", host, origin, map[string]string{"portal": "cup", "access": "", "refresh": "b", "cf": "c"})
 
@@ -335,7 +344,7 @@ func TestRegisterGetSessionLoginMode(t *testing.T) {
 		store := &MockSessionStore{StatusFunc: func() session.Status { return session.Status{} }}
 		flow := &MockLoginFlow{StatesFunc: func() map[session.Portal]loginflow.State { return nil }}
 		_, api := humatest.New(t)
-		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "bookmarklet", false)
+		register(api, store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "bookmarklet", false)
 
 		resp := api.Get("/api/session")
 
@@ -348,7 +357,7 @@ func TestRegisterLogout(t *testing.T) {
 	t.Run("clears the store and returns 204", func(t *testing.T) {
 		store := &MockSessionStore{ClearFunc: func() {}}
 		_, api := humatest.New(t)
-		register(api, store, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, store, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/logout")
 		assert.Equal(t, http.StatusNoContent, resp.Code)
@@ -377,7 +386,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			}}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/appointments")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -409,7 +418,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			}}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/appointments")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -441,7 +450,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			}}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		require.Equal(t, http.StatusOK, api.Get("/api/appointments").Code)
 		logged := buf.String()
@@ -457,7 +466,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			return agenda.Result{}, session.ErrNotLoggedIn
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusUnauthorized, api.Get("/api/appointments").Code)
 	})
@@ -467,7 +476,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			return agenda.Result{}, cup.ErrGestioneNotReady
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusConflict, api.Get("/api/appointments").Code)
 	})
@@ -477,7 +486,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			return agenda.Result{}, &upstream.StatusError{Status: 503}
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusBadGateway, api.Get("/api/appointments").Code)
 	})
@@ -487,7 +496,7 @@ func TestRegisterListAppointments(t *testing.T) {
 			return agenda.Result{}, errors.New("boom")
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusInternalServerError, api.Get("/api/appointments").Code)
 	})
@@ -508,24 +517,83 @@ func TestRegisterListPrescriptions(t *testing.T) {
 			}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyLocal(), emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/prescriptions")
 		require.Equal(t, http.StatusOK, resp.Code)
 		assert.JSONEq(t, `{
 			"prescriptions": [
-				{"nre":"n1","cup":{"nre":"n1","prescribedOn":"2026-02-03T00:00:00Z","kind":"visit","status":1,"items":["a","b"]}},
-				{"nre":"","fse":{"id":"f1","nre":"","description":"Desc","kind":"pharma","status":3,"date":"2026-02-03T00:00:00Z","documentRef":"ref-1"}},
-				{"nre":"n3","cup":{"nre":"n3","kind":"","status":0,"items":[]},"fse":{"id":"f3","nre":"n3","description":"","kind":"","status":0,"documentRef":""}}
+				{"nre":"n1","cup":{"nre":"n1","prescribedOn":"2026-02-03T00:00:00Z","kind":"visit","status":1,"items":["a","b"]},"overridden":false,"reports":[]},
+				{"nre":"","fse":{"id":"f1","nre":"","description":"Desc","kind":"pharma","status":3,"date":"2026-02-03T00:00:00Z","documentRef":"ref-1"},"overridden":false,"reports":[]},
+				{"nre":"n3","cup":{"nre":"n3","kind":"","status":0,"items":[]},"fse":{"id":"f3","nre":"n3","description":"","kind":"","status":0,"documentRef":""},"overridden":false,"reports":[]}
 			],
 			"updated": null
 		}`, resp.Body.String())
 	})
 
+	t.Run("merges overrides and links", func(t *testing.T) {
+		ag := &MockAgenda{PrescriptionsFunc: func(context.Context) ([]agenda.Row, error) {
+			return []agenda.Row{
+				{NRE: "0900A0000000001", FSE: &fse.Prescription{ID: "f1", NRE: "0900A0000000001", Status: 5}},
+				{NRE: "0900A0000000002", CUP: &cup.Prescription{NRE: "0900A0000000002", Status: 3}},
+				{NRE: "0900A0000000003", CUP: &cup.Prescription{NRE: "0900A0000000003", Status: 3}},
+			}, nil
+		}}
+		local := &MockLocalRecords{
+			OverridesFunc: func(context.Context) ([]localrecords.Override, error) {
+				return []localrecords.Override{{NRE: "0900a0000000001", Status: 8}, {NRE: "0900A0000000002", Status: 3}}, nil
+			},
+			LinksFunc: func(context.Context) ([]localrecords.Link, error) {
+				return []localrecords.Link{
+					{NRE: "0900A0000000003", Ref: referti.Ref{Kind: referti.KindRadiology, DetailID: "D2"}},
+					{NRE: "0900A0000000003", Ref: referti.Ref{Kind: referti.KindLab, AbstractID: "A1"}},
+				}, nil
+			},
+		}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, local, emptyFreshness(), "window", false)
+
+		resp := api.Get("/api/prescriptions")
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{
+			"prescriptions": [
+				{"nre":"0900A0000000001","fse":{"id":"f1","nre":"0900A0000000001","description":"","kind":"","status":8,"documentRef":""},"overridden":true,"reports":[]},
+				{"nre":"0900A0000000002","cup":{"nre":"0900A0000000002","kind":"","status":3,"items":[]},"overridden":true,"reports":[]},
+				{"nre":"0900A0000000003","cup":{"nre":"0900A0000000003","kind":"","status":3,"items":[]},"overridden":false,"reports":[
+					{"kind":"lab","abstractId":"A1","detailId":"","repCode":""},
+					{"kind":"ris","abstractId":"","detailId":"D2","repCode":""}
+				]}
+			],
+			"updated": null
+		}`, resp.Body.String())
+	})
+
+	t.Run("overrides failure is 500", func(t *testing.T) {
+		ag := &MockAgenda{PrescriptionsFunc: func(context.Context) ([]agenda.Row, error) { return nil, nil }}
+		local := &MockLocalRecords{OverridesFunc: func(context.Context) ([]localrecords.Override, error) { return nil, errors.New("boom") }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, local, emptyFreshness(), "window", false)
+
+		assert.Equal(t, http.StatusInternalServerError, api.Get("/api/prescriptions").Code)
+	})
+
+	t.Run("links failure is 500", func(t *testing.T) {
+		ag := &MockAgenda{PrescriptionsFunc: func(context.Context) ([]agenda.Row, error) { return nil, nil }}
+		local := &MockLocalRecords{
+			OverridesFunc: func(context.Context) ([]localrecords.Override, error) { return nil, nil },
+			LinksFunc:     func(context.Context) ([]localrecords.Link, error) { return nil, errors.New("boom") },
+		}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, local, emptyFreshness(), "window", false)
+
+		assert.Equal(t, http.StatusInternalServerError, api.Get("/api/prescriptions").Code)
+	})
+
 	t.Run("empty list is an empty array", func(t *testing.T) {
 		ag := &MockAgenda{PrescriptionsFunc: func(context.Context) ([]agenda.Row, error) { return nil, nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyLocal(), emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/prescriptions")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -537,7 +605,7 @@ func TestRegisterListPrescriptions(t *testing.T) {
 			return nil, session.ErrSessionExpired
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyLocal(), emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusUnauthorized, api.Get("/api/prescriptions").Code)
 	})
@@ -551,7 +619,7 @@ func TestRegisterGetPrescriptionPDF(t *testing.T) {
 			return []byte("%PDF-1.4 fake"), nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/documents/prescription?ref=ref-123")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -564,7 +632,7 @@ func TestRegisterGetPrescriptionPDF(t *testing.T) {
 	t.Run("missing ref is rejected", func(t *testing.T) {
 		docs := &MockDocuments{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/documents/prescription")
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
@@ -576,7 +644,7 @@ func TestRegisterGetPrescriptionPDF(t *testing.T) {
 			return nil, fse.ErrNoDocument
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusNotFound, api.Get("/api/documents/prescription?ref=x").Code)
 	})
@@ -590,7 +658,7 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 			return []byte("%PDF-1.4 fake"), nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/documents/booking?id=ABC123456789")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -603,7 +671,7 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 	t.Run("invalid id is rejected by validation", func(t *testing.T) {
 		docs := &MockDocuments{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/documents/booking?id=a-b")
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
@@ -613,7 +681,7 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 	t.Run("missing id is rejected", func(t *testing.T) {
 		docs := &MockDocuments{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusUnprocessableEntity, api.Get("/api/documents/booking").Code)
 		assert.Empty(t, docs.PromemoriaCalls())
@@ -624,7 +692,7 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 			return nil, cup.ErrNoDocument
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusNotFound, api.Get("/api/documents/booking?id=ABC123456789").Code)
 	})
@@ -634,7 +702,7 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 			return nil, cup.ErrGestioneNotReady
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusConflict, api.Get("/api/documents/booking?id=ABC123456789").Code)
 	})
@@ -646,7 +714,7 @@ func TestRegisterGoogleStatus(t *testing.T) {
 			return google.Status{Configured: true, Connected: true}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/google")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -656,7 +724,7 @@ func TestRegisterGoogleStatus(t *testing.T) {
 	t.Run("store failure is 500", func(t *testing.T) {
 		g := &MockGoogle{StatusFunc: func(context.Context) (google.Status, error) { return google.Status{}, errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusInternalServerError, api.Get("/api/google").Code)
 	})
@@ -668,7 +736,7 @@ func TestRegisterGoogleConnect(t *testing.T) {
 			return "https://accounts.example.test/auth?state=s", nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/google/connect")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -678,7 +746,7 @@ func TestRegisterGoogleConnect(t *testing.T) {
 	t.Run("not configured is 409", func(t *testing.T) {
 		g := &MockGoogle{AuthURLFunc: func(context.Context, string) (string, error) { return "", google.ErrNotConfigured }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/google/connect")
 		assert.Equal(t, http.StatusConflict, resp.Code)
@@ -690,7 +758,7 @@ func TestRegisterGoogleDisconnect(t *testing.T) {
 	t.Run("disconnects with 204", func(t *testing.T) {
 		g := &MockGoogle{DisconnectFunc: func(context.Context) error { return nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Delete("/api/google")
 		assert.Equal(t, http.StatusNoContent, resp.Code)
@@ -700,7 +768,7 @@ func TestRegisterGoogleDisconnect(t *testing.T) {
 	t.Run("failure is 500", func(t *testing.T) {
 		g := &MockGoogle{DisconnectFunc: func(context.Context) error { return errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusInternalServerError, api.Delete("/api/google").Code)
 	})
@@ -716,7 +784,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) { return []byte("%PDF-fake"), nil }}
 		g := &MockGoogle{AddEventFunc: okEvent}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1",
@@ -745,7 +813,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	t.Run("duration is taken from the request", func(t *testing.T) {
 		g := &MockGoogle{AddEventFunc: okEvent}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "durationMinutes": 90, "attachPromemoria": false,
@@ -758,7 +826,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 		docs := &MockDocuments{}
 		g := &MockGoogle{AddEventFunc: okEvent}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "bookingId": fakeBooking, "attachPromemoria": false,
@@ -772,7 +840,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 		docs := &MockDocuments{}
 		g := &MockGoogle{AddEventFunc: okEvent}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00",
@@ -785,7 +853,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) { return nil, session.ErrNotLoggedIn }}
 		g := &MockGoogle{AddEventFunc: okEvent}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "bookingId": fakeBooking,
@@ -799,7 +867,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 			return google.EventResult{}, google.ErrNotConfigured
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "attachPromemoria": false,
@@ -813,7 +881,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 			return google.EventResult{}, google.ErrNotConnected
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "attachPromemoria": false,
@@ -825,7 +893,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	t.Run("bad appointment id is 422", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "bad id!", "title": "Visita", "start": "2026-03-10T09:30:00+01:00",
@@ -837,7 +905,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	t.Run("out of range duration is 422", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "durationMinutes": 4,
@@ -849,7 +917,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	t.Run("bad booking id is 422", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{
 			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "bookingId": "../x",
@@ -860,7 +928,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	t.Run("missing title is 422", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/calendar/events", map[string]any{"appointmentId": "APP1", "start": "2026-03-10T09:30:00+01:00"})
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
@@ -893,7 +961,7 @@ func TestRegisterListAppointmentsVerdictsAndUpdated(t *testing.T) {
 			return map[string]time.Time{"0900A0000000002": t1}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, fresh, "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, fresh, "window", false)
 
 		resp := api.Get("/api/appointments")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -919,7 +987,7 @@ func TestRegisterListAppointmentsVerdictsAndUpdated(t *testing.T) {
 			return nil, errors.New("boom")
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, fresh, "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, fresh, "window", false)
 
 		resp := api.Get("/api/appointments")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -938,7 +1006,7 @@ func TestRegisterListPrescriptionsUpdated(t *testing.T) {
 			return map[string]time.Time{"": at}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, fresh, "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyLocal(), fresh, "window", false)
 
 		resp := api.Get("/api/prescriptions")
 		require.Equal(t, http.StatusOK, resp.Code)
@@ -953,9 +1021,9 @@ func TestRegisterRefresh(t *testing.T) {
 	)
 	t.Run("all refreshes appointments and reports", func(t *testing.T) {
 		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) { return agenda.Result{}, nil }}
-		reports := &MockReports{ListFunc: func(context.Context) (referti.Listing, error) { return referti.Listing{}, nil }}
+		reports := &MockReports{ListFunc: func(context.Context) (reports.Listing, error) { return reports.Listing{}, nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"all": true})
 
@@ -968,7 +1036,7 @@ func TestRegisterRefresh(t *testing.T) {
 		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) { return agenda.Result{}, nil }}
 		reports := &MockReports{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"nres": []string{"0900A0000000001"}})
 
@@ -980,7 +1048,7 @@ func TestRegisterRefresh(t *testing.T) {
 	t.Run("neither all nor nres is 422", func(t *testing.T) {
 		ag := &MockAgenda{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{})
 
@@ -991,7 +1059,7 @@ func TestRegisterRefresh(t *testing.T) {
 	t.Run("malformed nre is 422", func(t *testing.T) {
 		ag := &MockAgenda{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"nres": []string{"../x"}})
 
@@ -1006,7 +1074,7 @@ func TestRegisterRefresh(t *testing.T) {
 		}
 		ag := &MockAgenda{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"nres": nres})
 
@@ -1016,7 +1084,7 @@ func TestRegisterRefresh(t *testing.T) {
 	t.Run("foreign origin is forbidden", func(t *testing.T) {
 		ag := &MockAgenda{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, "Origin: http://evil.test", map[string]any{"all": true})
 
@@ -1027,7 +1095,7 @@ func TestRegisterRefresh(t *testing.T) {
 	t.Run("agenda not logged in is 401", func(t *testing.T) {
 		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) { return agenda.Result{}, session.ErrNotLoggedIn }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"all": true})
 
@@ -1036,9 +1104,9 @@ func TestRegisterRefresh(t *testing.T) {
 
 	t.Run("reports login errors are skipped", func(t *testing.T) {
 		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) { return agenda.Result{}, nil }}
-		reports := &MockReports{ListFunc: func(context.Context) (referti.Listing, error) { return referti.Listing{}, session.ErrSessionExpired }}
+		reports := &MockReports{ListFunc: func(context.Context) (reports.Listing, error) { return reports.Listing{}, session.ErrSessionExpired }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"all": true})
 
@@ -1047,9 +1115,9 @@ func TestRegisterRefresh(t *testing.T) {
 
 	t.Run("reports other errors are propagated", func(t *testing.T) {
 		ag := &MockAgenda{AppointmentsFunc: func(context.Context) (agenda.Result, error) { return agenda.Result{}, nil }}
-		reports := &MockReports{ListFunc: func(context.Context) (referti.Listing, error) { return referti.Listing{}, errors.New("boom") }}
+		reports := &MockReports{ListFunc: func(context.Context) (reports.Listing, error) { return reports.Listing{}, errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, ag, &MockDocuments{}, &MockGoogle{}, reports, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/refresh", host, origin, map[string]any{"all": true})
 
@@ -1060,21 +1128,21 @@ func TestRegisterRefresh(t *testing.T) {
 func TestRegisterGoogleSettings(t *testing.T) {
 	t.Run("returns settings and a redirect built from the request", func(t *testing.T) {
 		g := &MockGoogle{SettingsFunc: func(context.Context) (google.Settings, error) {
-			return google.Settings{ClientID: "id.apps.googleusercontent.com", CalendarID: "primary", DriveFolderID: "folder-1234567", HasSecret: true}, nil
+			return google.Settings{ClientID: "id.apps.googleusercontent.com", CalendarID: "primary", DriveFolderID: "folder-1234567", APIKey: "key-abc", AppID: "123456789", HasSecret: true}, nil
 		}}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/google/settings", "Host: fts.example.test", "X-Forwarded-Proto: https")
 
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","hasSecret":true,"redirectUri":"https://fts.example.test/api/google/callback"}`, resp.Body.String())
+		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","apiKey":"key-abc","appId":"123456789","hasSecret":true,"redirectUri":"https://fts.example.test/api/google/callback"}`, resp.Body.String())
 	})
 
 	t.Run("scheme defaults to http", func(t *testing.T) {
 		g := &MockGoogle{SettingsFunc: func(context.Context) (google.Settings, error) { return google.Settings{}, nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/google/settings", "Host: localhost")
 
@@ -1085,7 +1153,7 @@ func TestRegisterGoogleSettings(t *testing.T) {
 	t.Run("store failure is 500", func(t *testing.T) {
 		g := &MockGoogle{SettingsFunc: func(context.Context) (google.Settings, error) { return google.Settings{}, errors.New("boom") }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		assert.Equal(t, http.StatusInternalServerError, api.Get("/api/google/settings").Code)
 	})
@@ -1100,19 +1168,19 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 	t.Run("passes the settings to google and returns 204", func(t *testing.T) {
 		g := &MockGoogle{SaveSettingsFunc: func(context.Context, google.Settings) error { return nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
-		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": "id.apps.googleusercontent.com", "clientSecret": "s", "calendarId": "cal", "driveFolderId": "folder-1234567"})
+		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": "id.apps.googleusercontent.com", "clientSecret": "s", "calendarId": "cal", "driveFolderId": "folder-1234567", "apiKey": "key-abc", "appId": "123456789"})
 
 		require.Equal(t, http.StatusNoContent, resp.Code)
 		require.Len(t, g.SaveSettingsCalls(), 1)
-		assert.Equal(t, google.Settings{ClientID: "id.apps.googleusercontent.com", ClientSecret: "s", CalendarID: "cal", DriveFolderID: "folder-1234567"}, g.SaveSettingsCalls()[0].S)
+		assert.Equal(t, google.Settings{ClientID: "id.apps.googleusercontent.com", ClientSecret: "s", CalendarID: "cal", DriveFolderID: "folder-1234567", APIKey: "key-abc", AppID: "123456789"}, g.SaveSettingsCalls()[0].S)
 	})
 
 	t.Run("validation error is 422 with the message", func(t *testing.T) {
 		g := &MockGoogle{SaveSettingsFunc: func(context.Context, google.Settings) error { return google.ErrClientIDInvalid }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": "x"})
 
@@ -1123,7 +1191,7 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 	t.Run("too long client id is rejected by the schema", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": strings.Repeat("a", 201)})
 
@@ -1134,7 +1202,7 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 	t.Run("foreign origin is forbidden", func(t *testing.T) {
 		g := &MockGoogle{}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Put("/api/google/settings", host, "Origin: http://evil.test", map[string]string{"clientId": "id.apps.googleusercontent.com"})
 
@@ -1147,7 +1215,7 @@ func TestRegisterGoogleConnectRedirect(t *testing.T) {
 	t.Run("redirect is built from host and forwarded proto", func(t *testing.T) {
 		g := &MockGoogle{AuthURLFunc: func(context.Context, string) (string, error) { return "https://accounts.example.test/auth", nil }}
 		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, emptyFreshness(), "window", false)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Post("/api/google/connect", "Host: fts.example.test", "X-Forwarded-Proto: https")
 

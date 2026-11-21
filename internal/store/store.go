@@ -145,6 +145,9 @@ func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, createSecretsTable); err != nil {
 		return fmt.Errorf("store: create secrets table: %w", err)
 	}
+	if err := s.createLocalTables(ctx); err != nil {
+		return err
+	}
 	var r row
 	err := s.db.GetContext(ctx, &r, anyRowQuery)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

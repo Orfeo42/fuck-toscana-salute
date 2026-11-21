@@ -28,6 +28,12 @@ var _ Google = &MockGoogle{}
 //			DisconnectFunc: func(ctx context.Context) error {
 //				panic("mock out the Disconnect method")
 //			},
+//			DownloadFileFunc: func(ctx context.Context, fileID string) (google.DriveFile, error) {
+//				panic("mock out the DownloadFile method")
+//			},
+//			PickerConfigFunc: func(ctx context.Context) (google.PickerConfig, error) {
+//				panic("mock out the PickerConfig method")
+//			},
 //			SaveSettingsFunc: func(ctx context.Context, s google.Settings) error {
 //				panic("mock out the SaveSettings method")
 //			},
@@ -52,6 +58,12 @@ type MockGoogle struct {
 
 	// DisconnectFunc mocks the Disconnect method.
 	DisconnectFunc func(ctx context.Context) error
+
+	// DownloadFileFunc mocks the DownloadFile method.
+	DownloadFileFunc func(ctx context.Context, fileID string) (google.DriveFile, error)
+
+	// PickerConfigFunc mocks the PickerConfig method.
+	PickerConfigFunc func(ctx context.Context) (google.PickerConfig, error)
 
 	// SaveSettingsFunc mocks the SaveSettings method.
 	SaveSettingsFunc func(ctx context.Context, s google.Settings) error
@@ -85,6 +97,18 @@ type MockGoogle struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
+		// DownloadFile holds details about calls to the DownloadFile method.
+		DownloadFile []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// FileID is the fileID argument value.
+			FileID string
+		}
+		// PickerConfig holds details about calls to the PickerConfig method.
+		PickerConfig []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 		// SaveSettings holds details about calls to the SaveSettings method.
 		SaveSettings []struct {
 			// Ctx is the ctx argument value.
@@ -106,6 +130,8 @@ type MockGoogle struct {
 	lockAddEvent     sync.RWMutex
 	lockAuthURL      sync.RWMutex
 	lockDisconnect   sync.RWMutex
+	lockDownloadFile sync.RWMutex
+	lockPickerConfig sync.RWMutex
 	lockSaveSettings sync.RWMutex
 	lockSettings     sync.RWMutex
 	lockStatus       sync.RWMutex
@@ -216,6 +242,74 @@ func (mock *MockGoogle) DisconnectCalls() []struct {
 	mock.lockDisconnect.RLock()
 	calls = mock.calls.Disconnect
 	mock.lockDisconnect.RUnlock()
+	return calls
+}
+
+// DownloadFile calls DownloadFileFunc.
+func (mock *MockGoogle) DownloadFile(ctx context.Context, fileID string) (google.DriveFile, error) {
+	if mock.DownloadFileFunc == nil {
+		panic("MockGoogle.DownloadFileFunc: method is nil but Google.DownloadFile was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		FileID string
+	}{
+		Ctx:    ctx,
+		FileID: fileID,
+	}
+	mock.lockDownloadFile.Lock()
+	mock.calls.DownloadFile = append(mock.calls.DownloadFile, callInfo)
+	mock.lockDownloadFile.Unlock()
+	return mock.DownloadFileFunc(ctx, fileID)
+}
+
+// DownloadFileCalls gets all the calls that were made to DownloadFile.
+// Check the length with:
+//
+//	len(mockedGoogle.DownloadFileCalls())
+func (mock *MockGoogle) DownloadFileCalls() []struct {
+	Ctx    context.Context
+	FileID string
+} {
+	var calls []struct {
+		Ctx    context.Context
+		FileID string
+	}
+	mock.lockDownloadFile.RLock()
+	calls = mock.calls.DownloadFile
+	mock.lockDownloadFile.RUnlock()
+	return calls
+}
+
+// PickerConfig calls PickerConfigFunc.
+func (mock *MockGoogle) PickerConfig(ctx context.Context) (google.PickerConfig, error) {
+	if mock.PickerConfigFunc == nil {
+		panic("MockGoogle.PickerConfigFunc: method is nil but Google.PickerConfig was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockPickerConfig.Lock()
+	mock.calls.PickerConfig = append(mock.calls.PickerConfig, callInfo)
+	mock.lockPickerConfig.Unlock()
+	return mock.PickerConfigFunc(ctx)
+}
+
+// PickerConfigCalls gets all the calls that were made to PickerConfig.
+// Check the length with:
+//
+//	len(mockedGoogle.PickerConfigCalls())
+func (mock *MockGoogle) PickerConfigCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockPickerConfig.RLock()
+	calls = mock.calls.PickerConfig
+	mock.lockPickerConfig.RUnlock()
 	return calls
 }
 

@@ -78,10 +78,10 @@ func (r *RefreshRequest) Resolve(_ huma.Context, prefix *huma.PathBuffer) []erro
 	return []error{&huma.ErrorDetail{Message: "all or nres is required", Location: prefix.With("all"), Value: r.All}}
 }
 
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, fresh Freshness, loginMode string, viewer bool) http.Handler {
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, loginMode string, viewer bool) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow, ag, docs, g, reports, fresh, loginMode, viewer)
+	register(api, store, flow, ag, docs, g, reports, local, fresh, loginMode, viewer)
 	return mux
 }
 
@@ -99,9 +99,10 @@ func sameOrigin(api huma.API) huma.Middlewares {
 	}}
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, fresh Freshness, loginMode string, viewer bool) {
+func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, loginMode string, viewer bool) {
 	registerGoogle(api, g, docs)
 	registerReports(api, reports, fresh)
+	registerLocal(api, local, g)
 
 	huma.Register(api, huma.Operation{
 		OperationID:   "get-session",
@@ -235,7 +236,17 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		if err != nil {
 			return nil, toHTTPError(ctx, "list-prescriptions", err)
 		}
+		overrides, err := local.Overrides(ctx)
+		if err != nil {
+			return nil, toHTTPError(ctx, "list-prescriptions", err)
+		}
+		links, err := local.Links(ctx)
+		if err != nil {
+			return nil, toHTTPError(ctx, "list-prescriptions", err)
+		}
 		body := toPrescriptionsBody(rows)
+		stats := mergeLocal(body.Prescriptions, links, overrides)
+		slog.InfoContext(ctx, "visit status overrides applied", slog.Int("overridden", stats.Overridden), slog.Int("differing", stats.Differing))
 		body.Updated = listUpdated(ctx, fresh, cache.SourceFSEPrescriptions)
 		return &prescriptionsOutput{Body: body}, nil
 	})

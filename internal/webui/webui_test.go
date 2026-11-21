@@ -63,7 +63,7 @@ func TestHandlerFS(t *testing.T) {
 		handler(builtFS()).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 		assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
-		assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
+		assert.Equal(t, "strict-origin-when-cross-origin", rec.Header().Get("Referrer-Policy"))
 		assert.Equal(t, csp, rec.Header().Get("Content-Security-Policy"))
 	})
 
@@ -73,7 +73,7 @@ func TestHandlerFS(t *testing.T) {
 		handler(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 		assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
-		assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
+		assert.Equal(t, "strict-origin-when-cross-origin", rec.Header().Get("Referrer-Policy"))
 		assert.Equal(t, csp, rec.Header().Get("Content-Security-Policy"))
 	})
 }

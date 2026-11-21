@@ -12,7 +12,7 @@ var assets embed.FS
 
 const (
 	notBuiltMessage = `web UI not built: run "just build"`
-	csp             = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'self'"
+	csp             = "default-src 'self'; img-src 'self' data:; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; frame-src 'self' https://docs.google.com; object-src 'self'"
 )
 
 func Handler() http.Handler {
@@ -28,7 +28,7 @@ func handler(fsys fs.FS) http.Handler {
 	files := http.FileServerFS(fsys)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Content-Security-Policy", csp)
 		if fsys == nil {
 			http.Error(w, notBuiltMessage, http.StatusServiceUnavailable)

@@ -18,6 +18,7 @@ import (
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
@@ -140,6 +141,63 @@ func TestToHTTPError(t *testing.T) {
 	t.Run("oauth2 retrieve error is 502", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusBadRequest}, ErrorCode: "boom"})
 		assert.Equal(t, http.StatusBadGateway, statusOf(t, err))
+	})
+
+	t.Run("local record not found is 404", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", localrecords.ErrNotFound))
+		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
+	})
+
+	t.Run("unsupported file type is 422 with an italian message", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", localrecords.ErrUnsupportedType)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+		assert.Contains(t, err.Error(), "Tipo di file non supportato")
+	})
+
+	t.Run("drive file type is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrDriveFileType)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("empty file is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", localrecords.ErrEmptyFile)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("invalid status is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", localrecords.ErrInvalidStatus)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("invalid report kind is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", localrecords.ErrInvalidReportKind)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("api key invalid is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrAPIKeyInvalid)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("app id invalid is 422", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrAppIDInvalid)
+		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("too large is 413", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", localrecords.ErrTooLarge)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, statusOf(t, err))
+	})
+
+	t.Run("drive file too large is 413", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrDriveFileTooLarge)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, statusOf(t, err))
+	})
+
+	t.Run("picker not configured is 409", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrPickerNotConfigured)
+		assert.Equal(t, http.StatusConflict, statusOf(t, err))
+		assert.Contains(t, err.Error(), "google_picker_not_configured")
 	})
 
 	t.Run("anything else is 500", func(t *testing.T) {

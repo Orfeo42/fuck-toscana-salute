@@ -6,9 +6,11 @@ import (
 
 	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/google"
+	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/reports"
 	"fuck-toscana-salute/internal/session"
 )
 
@@ -37,7 +39,7 @@ type Documents interface {
 }
 
 type Reports interface {
-	List(ctx context.Context) (referti.Listing, error)
+	List(ctx context.Context) (reports.Listing, error)
 	Documents(ctx context.Context, ref referti.Ref) ([]referti.Document, error)
 	Download(ctx context.Context, ref referti.Ref, position string) ([]byte, error)
 }
@@ -54,4 +56,19 @@ type Google interface {
 	SaveSettings(ctx context.Context, s google.Settings) error
 	Disconnect(ctx context.Context) error
 	AddEvent(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error)
+	PickerConfig(ctx context.Context) (google.PickerConfig, error)
+	DownloadFile(ctx context.Context, fileID string) (google.DriveFile, error)
+}
+
+//go:generate moq -out local_mock.go . LocalRecords:MockLocalRecords
+type LocalRecords interface {
+	Create(ctx context.Context, nr localrecords.NewReport) (localrecords.Report, error)
+	Update(ctx context.Context, id string, meta localrecords.Meta) error
+	Delete(ctx context.Context, id string) error
+	Link(ctx context.Context, nre string, ref referti.Ref) error
+	Unlink(ctx context.Context, nre string, ref referti.Ref) error
+	Links(ctx context.Context) ([]localrecords.Link, error)
+	SetStatus(ctx context.Context, nre string, status int) error
+	ResetStatus(ctx context.Context, nre string) error
+	Overrides(ctx context.Context) ([]localrecords.Override, error)
 }
