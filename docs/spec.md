@@ -71,8 +71,8 @@ Full redacted request/response shapes: `docs/api-skeleton.json` (structure only,
 | --- | --- | --- |
 | Unbooked prescriptions | `POST {cupList}/nre` body `{dataInizio:"yyyy-MM-dd", dataFine:"yyyy-MM-dd", page, size:10, cf}` | `infoRicetta[]{nre, dataPrescrizione, tipoRicetta, stato, jsonPrescrizione}`; `jsonPrescrizione` is a JSON string with `listaDettagli[]{descrizioneProdPrest,...}`. Paginate while `estrazione === 0`. Portal uses `dataInizio=2012-01-01`. |
 | Prescription detail | `POST {cupList}/getPrescrizioneElettronicaSecured` body `{cf, nre}` | `response.{paziente, listaPrescrizioni.prescrizione[], esito}`. Appointment fields here stay null; do not use for dates. |
-| Appointment lookup (dates) | `GET {cupBe}/prescrizione?numbersTeam=<tessera>&accessType=<type>&accessCode=<code uppercase>` headers `cf`, `Authorization` | Verified 200 for a booking made in the portal. `response.listaPrescrizioni.prescrizione[].listaAppuntamenti.appuntamento[]{idAppuntamento, statoAppuntamento ("PRENOTATO", "DISDETTO"...), dataAppuntamento, oraAppuntamento, unita{descUnita, nomeUnita, indirizzoUnita, nomeComuneUnita, provinciaUnita, erogatore{...}, sede{...}}}`. NRE with no CUP booking → HTTP 500 + Java exception ("Non esistono richieste per il paziente" in the UI). accessType values: PIN / numero prenotazione CUP / numero ricetta — exact codes TBD. |
-| Promemoria PDF | `GET {cupBe}/promemoria?idPrescrizione=<id>` | untested |
+| Appointment lookup (dates) | `GET {cupBe}/prescrizione?numbersTeam=<tessera>&accessType=<type>&accessCode=<code uppercase>` headers `cf`, `Authorization` | Verified 200 for a booking made in the portal. `response.listaPrescrizioni.prescrizione[].listaAppuntamenti.appuntamento[]{idAppuntamento, statoAppuntamento ("PRENOTATO", "DISDETTO"...), dataAppuntamento, oraAppuntamento, unita{descUnita, nomeUnita, indirizzoUnita, nomeComuneUnita, provinciaUnita, erogatore{...}, sede{...}}}`. NRE with no CUP booking → HTTP 500 + Java exception ("Non esistono richieste per il paziente" in the UI). `accessType`: `1` PIN, `2` numero prenotazione CUP, `3` numero ricetta (NRE). Codes from the portal code; `3` verified live. |
+| Promemoria PDF | `GET {cupBe}/promemoria?idPrescrizione=<id>` | Verified. `idPrescrizione` comes with the appointment lookup. |
 | Other docs | `{cupBe}/allegati`, `/documentiDisponibili?idPrescrizione=`, `/moduloPagamento?idPrescrizione=`, `/ricevutaDisdetta` | untested |
 | Write ops (do not call without approval) | `getListaDisponibilitaPost`, `setRiserva`, `setPrenota`, `setRilascia`, `setSpostaAppuntamento`, `verificaDisdetta`, `DELETE /disdetta?idPrestazione=&idAppuntamento=` | untested |
 | Self check-in list | `POST {selfAcc}api/SelfAccettazione/ListaAppuntamenti` headers `X_CAST_ID_APPLICATIVO: self-accettazione-api-r_toscan__portale_cup2_0`, `Destinazione: <IdAzienda>` body `{Paziente:{Identificativo:<cf>}, DaData, AData}` (`YYYY-MM-DDTHH:mm:ss`) | `Esito 0` ok / `1` error. Returned "no appointment" everywhere so far; only near-term, self-check-in-eligible appointments. IdAzienda: 090904 AOUM, 090903 AOUC, 090201 ASL TC, 090203 ASL TSE, 090902 AOUS (active); 090202 ASL TNO, 090901 AOUP inactive (HTTP 400). |
@@ -142,15 +142,13 @@ Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zero
 
 - CUP: `/prescrizione` from the backend with the page token → 200 with appointment date. Refresh grant from the backend → 200 (`expires_in 300`, `refresh_expires_in 1800`); refreshed token also works on `/prescrizione`; a second chained refresh → 200. Captcha was solved once in the browser before these calls.
 - FSE: `fse-ricette-visite/listanew` from the backend → 200; refresh grant → 200; refreshed token → 200.
-- `accessType=3` = Numero Ricetta. PIN / Numero prenotazione CUP codes still unknown (likely 1 / 2).
+- `accessType=3` = Numero Ricetta, verified live. `1` = PIN and `2` = Numero prenotazione CUP, read from the portal code.
 - Conclusion: backend HTTP client + in-memory tokens + refresh loop works for both portals. The login window is needed only for SPID and the Gestione prenotazioni captcha/tessera step; it can close afterwards.
 
 ## Open questions
 
 - Session max lifetime (Keycloak SSO max) — how long the refresh chain keeps working.
 - Whether `/prescrizione` from the backend still works in a new session where the captcha step was skipped (not tested on purpose: the app always lets the user do the captcha step).
-- `accessType` codes for PIN and Numero prenotazione CUP.
-- How to enumerate appointments: per-NRE lookup over all prescriptions (FSE + CUP lists), and handling the HTTP 500 = "no booking".
 - ZeroCode auth and endpoints with a real session.
 
 ## Stack
