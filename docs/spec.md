@@ -118,13 +118,30 @@ The CUP booking flow's `GET {cupBe}/getPrescrizioneElettronica?cf&nre&numbersTea
 
 Read-only: the backend lists the reports of the seven FSE kinds, lists the documents of a report and downloads a PDF. It never calls the endpoints that mark a report as read or hide it ("oscura"), so `unread` and `hidden` are only mirrored from `statoConsultazione` / `statoVisibilita`. Identifiers of health documents travel in POST bodies, never in URLs.
 
-- `GET /api/reports` → `{reports[]{kind, kindLabel, abstractId, detailId, repCode, date, updatedAt, provider, unread, hidden}, failures[]{kind, kindLabel, message}, updated}`; a kind that fails is reported in `failures` and does not hide the others.
+- `GET /api/reports` → `{reports[]{kind, kindLabel, abstractId, detailId, repCode, date, updatedAt, provider, unread, hidden, origin, title?, nres[]}, failures[]{kind, kindLabel, message}, updated}`; a kind that fails is reported in `failures` and does not hide the others. Remote (FSE) and local (uploaded) referti come in the same list; `origin` is `remote` or `local`, `nres` are the visite the referto is linked to. When the whole FSE list is unavailable (not logged in, upstream down) the local referti are still returned with a `failures` entry of kind `fse`.
 - `POST /api/reports/documents` body `{kind, abstractId, detailId, repCode}` → `{documents[]{position, label, acceptedAt?, provider?}}`.
-- `POST /api/reports/pdf` body `{kind, abstractId, detailId, repCode, position}` → `application/pdf`.
+- `POST /api/reports/pdf` body `{kind, abstractId, detailId, repCode, position}` → the file with its real `Content-Type` (`application/pdf`, `image/jpeg` or `image/png`).
+
+The merge lives in `internal/reports` (composite over the cached FSE client and `internal/localrecords`).
+
+### Local referti, links and status overrides
+
+Uploaded referti are referti like the remote ones: a local referto has `kind: "local"`, its opaque id in `abstractId`, one document at position `1`, and is read through the same three endpoints above. Accepted types are PDF, JPEG and PNG, detected from the file bytes, max 20 MB.
+
+- `POST /api/reports/local` (multipart: `file`, `title?`, `date?` `YYYY-MM-DD`, `provider?`, `nre?`) → 201 `ReportBody`. With `nre`, the referto is linked to that visita and the visita's local status is set to `8` Erogata, in one transaction.
+- `POST /api/reports/local/drive` body `{fileId, title?, date?, provider?, nre?}`: same, with the file downloaded from Google Drive (picked in the Google Picker, see Google settings).
+- `PUT /api/reports/local` body `{id, title, date?, provider?}` edits the metadata; `DELETE /api/reports/local` body `{id}` deletes the referto and its links.
+- `PUT /api/links` / `DELETE /api/links` body `{nre, report{kind, abstractId, detailId, repCode}}` links or unlinks a visita and a referto (remote or local). Idempotent.
+- `PUT /api/visits/status` body `{nre, status}` sets a local status; `DELETE /api/visits/status` body `{nre}` removes it. Allowed values are the FSE prescription codes `3, 30, 5, 6, 7, 8, 9, 4`; the derived states (Scaduta, Gestita altrove, Da verificare) cannot be set by hand.
+- `GET /api/prescriptions` rows carry `overridden` and `reports[]` (linked report refs). When a local status exists the backend puts it in place of the remote one (`fse.status`, or `cup.status` for a row without FSE data) and sets `overridden: true`; the UI shows one status with a "manual" icon and skips the booking/expiry/verdict derivation for that row. The remote status is never overwritten: it stays in the `responses` cache, the local one in `visit_overrides`, and the backend logs how many overridden rows differ from the remote status.
+
+Storage (encrypted like the rest, see "Data storage"): `local_reports` (opaque id, encrypted metadata and file), `report_links` (HMAC of the NRE + HMAC of the report key, encrypted payload), `visit_overrides` (HMAC of the NRE, encrypted `{nre, status}`). Document text extraction is a future column.
 
 ### Google settings
 
-The OAuth client is configured from the UI, not from a file: `GET /api/google/settings` → `{clientId, calendarId, driveFolderId, hasSecret, redirectUri}` (the secret is never returned); `PUT /api/google/settings` body `{clientId, clientSecret?, calendarId?, driveFolderId?}` (an empty secret keeps the stored one; changing the client id drops the stored token) is stored encrypted in the `secrets` table. The redirect URI is built from the request (`X-Forwarded-Proto` or `http`, plus `Host`) with path `/api/google/callback` and must be registered in the Google client.
+The OAuth client is configured from the UI, not from a file: `GET /api/google/settings` → `{clientId, calendarId, driveFolderId, apiKey, appId, hasSecret, redirectUri}` (the secret is never returned); `PUT /api/google/settings` body `{clientId, clientSecret?, calendarId?, driveFolderId?, apiKey?, appId?}` (an empty secret keeps the stored one; changing the client id drops the stored token) is stored encrypted in the `secrets` table. The redirect URI is built from the request (`X-Forwarded-Proto` or `http`, plus `Host`) with path `/api/google/callback` and must be registered in the Google client.
+
+Drive import uses the Google Picker with the existing `drive.file` scope: `POST /api/google/picker` → `{accessToken, apiKey, appId}` (a short-lived access token from the stored refresh token; 409 when the API key or App ID is missing). The page opens the Picker (script from `apis.google.com`, iframe from `docs.google.com`, allowed in the CSP), the user picks a file, and the backend downloads it with `files.get?alt=media`. `appId` must be the Cloud project number of the OAuth client's project, otherwise `drive.file` does not grant access to the picked file. The page sends `Referrer-Policy: strict-origin-when-cross-origin` so a website-restricted API key sees the app origin.
 
 ### ZeroCode (blood draws)
 
