@@ -1,10 +1,17 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import {
+  screen,
+  waitFor,
+  within,
+  type RenderResult,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReportBody, ReportsBody } from "../api/client";
 import { callsTo } from "../test/calls";
-import { render } from "../test/render";
+import { render as plainRender } from "../test/render";
+import { WithHealth } from "../test/WithHealth";
 import { ReportsView } from "./ReportsView";
 
 vi.mock("../lib/pdf", () => ({
@@ -24,6 +31,30 @@ vi.mock("../api/client", () => ({
   api: { GET: mocks.get, POST: mocks.post },
 }));
 
+vi.mock("./reports/UploadReportDialog", () => ({
+  UploadReportDialog: ({
+    opened,
+    onUploaded,
+  }: {
+    opened: boolean;
+    onUploaded: (report: ReportBody) => void;
+  }) =>
+    opened ? (
+      <button
+        type="button"
+        onClick={() => {
+          onUploaded(lab);
+        }}
+      >
+        Simula caricamento
+      </button>
+    ) : null,
+}));
+
+function render(ui: ReactNode): RenderResult {
+  return plainRender(<WithHealth rows={[]}>{ui}</WithHealth>);
+}
+
 vi.mock("../data/refresh", () => ({ refreshPortals: mocks.refresh }));
 
 const now = new Date("2026-11-10T12:00:00Z");
@@ -38,6 +69,8 @@ const lab: ReportBody = {
   provider: "Ospedale Esempio",
   unread: true,
   hidden: false,
+  origin: "remote",
+  nres: null,
 };
 
 const radio: ReportBody = {
@@ -50,6 +83,8 @@ const radio: ReportBody = {
   provider: "Clinica Prova",
   unread: false,
   hidden: true,
+  origin: "remote",
+  nres: null,
 };
 
 const older: ReportBody = {
@@ -62,6 +97,23 @@ const older: ReportBody = {
   provider: "Centro Campione",
   unread: false,
   hidden: false,
+  origin: "remote",
+  nres: null,
+};
+
+const uploaded: ReportBody = {
+  kind: "local",
+  kindLabel: "Caricato",
+  abstractId: "L1",
+  detailId: "",
+  repCode: "",
+  date: "2026-11-05T09:00:00Z",
+  provider: "Studio Prova",
+  title: "Ecografia addome",
+  unread: false,
+  hidden: false,
+  origin: "local",
+  nres: ["0123A", "0456B"],
 };
 
 function body(overrides: Partial<ReportsBody> = {}): ReportsBody {
@@ -180,6 +232,95 @@ describe("ReportsView", () => {
         "Alcune sezioni non sono state caricate: RSA, RAP",
       ),
     ).toBeVisible();
+  });
+
+  it("marks uploaded reports with an icon and shows their title", async () => {
+    mockList(body({ reports: [lab, uploaded] }));
+    render(<ReportsView now={now} />);
+
+    await screen.findByText("Ecografia addome");
+
+    const row = bodyRow(0);
+    expect(
+      within(row).getByRole("img", { name: "Caricato da te" }),
+    ).toBeVisible();
+    expect(within(row).queryByText("Caricato")).toBeNull();
+    expect(
+      within(bodyRow(1)).queryByRole("img", { name: "Caricato da te" }),
+    ).toBeNull();
+  });
+
+  it("shows how many visits a report is linked to", async () => {
+    mockList(body({ reports: [lab, uploaded] }));
+    render(<ReportsView now={now} />);
+    await screen.findByText("Ecografia addome");
+
+    expect(
+      within(bodyRow(0)).getByRole("img", { name: "Collegato a 2 visite" }),
+    ).toBeVisible();
+    expect(
+      within(bodyRow(1)).queryByRole("img", { name: /Collegato/ }),
+    ).toBeNull();
+  });
+
+  it("uses the singular for a single linked visit", async () => {
+    mockList(body({ reports: [{ ...uploaded, nres: ["0123A"] }] }));
+    render(<ReportsView now={now} />);
+
+    expect(
+      await screen.findByRole("img", { name: "Collegato a 1 visita" }),
+    ).toBeVisible();
+  });
+
+  it("finds an uploaded report by its title", async () => {
+    mockList(body({ reports: [lab, uploaded] }));
+    render(<ReportsView now={now} />);
+    await screen.findByText("Ecografia addome");
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Cerca" }),
+      "addome",
+    );
+
+    expect(bodyRows()).toHaveLength(1);
+  });
+
+  it("hints to log in to the FSE and keeps the local reports", async () => {
+    mockList(
+      body({
+        reports: [uploaded],
+        failures: [
+          { kind: "fse", kindLabel: "Fascicolo Sanitario", message: "login" },
+        ],
+      }),
+    );
+    render(<ReportsView now={now} />);
+
+    expect(
+      await screen.findByText(
+        "Accedi al Fascicolo Sanitario per vedere anche i referti del portale regionale.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("Ecografia addome")).toBeVisible();
+    expect(screen.queryByText(/Alcune sezioni/)).toBeNull();
+  });
+
+  it("opens the upload dialog and reloads the list after an upload", async () => {
+    mockList(body());
+    render(<ReportsView now={now} />);
+    await screen.findByText("Clinica Prova");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Carica referto" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Simula caricamento" }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.get).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText("Clinica Prova")).toBeVisible();
   });
 
   it("shows the empty state", async () => {

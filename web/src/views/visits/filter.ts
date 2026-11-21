@@ -69,6 +69,7 @@ export interface BookedState {
   status: string;
   label: string;
   tone: StatusTone;
+  manual: boolean;
 }
 
 export interface OfficialState {
@@ -79,6 +80,7 @@ export interface OfficialState {
   note: string | undefined;
   verifiedAt: string | undefined;
   canBook: boolean;
+  manual: boolean;
 }
 
 export interface ExpiredState {
@@ -89,6 +91,7 @@ export interface ExpiredState {
   estimated: boolean;
   note: string | undefined;
   verifiedAt: string | undefined;
+  manual: boolean;
 }
 
 export type EffectiveState = BookedState | ExpiredState | OfficialState;
@@ -107,6 +110,19 @@ export function effectiveState(
   now: Date,
   verdictByNre: ReadonlyMap<string, Verdict> = noVerdicts,
 ): EffectiveState {
+  if (row.overridden) {
+    const manualStatus = row.fse?.status ?? row.cup?.status ?? toBookStatus;
+    return {
+      kind: "official",
+      status: manualStatus,
+      label: prescriptionStatusLabel(manualStatus),
+      tone: officialTones[manualStatus] ?? "closed",
+      note: undefined,
+      verifiedAt: undefined,
+      canBook: manualStatus === toBookStatus,
+      manual: true,
+    };
+  }
   const key = row.nre.toUpperCase();
   const booking = bookingByNre.get(key);
   if (booking !== undefined && booking.status !== cancelledBooking) {
@@ -116,6 +132,7 @@ export function effectiveState(
       status: booking.status,
       label: bookedLabel,
       tone: "booked",
+      manual: false,
     };
   }
   const status = row.fse?.status ?? toBookStatus;
@@ -133,6 +150,7 @@ export function effectiveState(
       estimated: row.fse?.expiryEstimated === true,
       note: undefined,
       verifiedAt: undefined,
+      manual: false,
     };
   }
   const notBooked =
@@ -148,6 +166,7 @@ export function effectiveState(
       note: undefined,
       verifiedAt: verdict.verifiedAt,
       canBook: true,
+      manual: false,
     };
   }
   if (verdict?.reason === "handled") {
@@ -159,6 +178,7 @@ export function effectiveState(
       note: verdict.message,
       verifiedAt: verdict.verifiedAt,
       canBook: false,
+      manual: false,
     };
   }
   if (verdict?.reason === "expired") {
@@ -170,6 +190,7 @@ export function effectiveState(
       estimated: row.fse?.expiryEstimated === true,
       note: verdict.message,
       verifiedAt: verdict.verifiedAt,
+      manual: false,
     };
   }
   if (status === fseBookedStatus && unbooked.has(key)) {
@@ -181,6 +202,7 @@ export function effectiveState(
       note: verdict?.message ?? fseBookedNote,
       verifiedAt: verdict?.verifiedAt,
       canBook: true,
+      manual: false,
     };
   }
   return {
@@ -191,6 +213,7 @@ export function effectiveState(
     note: undefined,
     verifiedAt: undefined,
     canBook: status === toBookStatus,
+    manual: false,
   };
 }
 
@@ -216,6 +239,8 @@ export function buildRows(
     seen.add(key);
     rows.push({
       nre: appointment.nre,
+      overridden: false,
+      reports: [],
       ...(appointment.cup === undefined ? {} : { cup: appointment.cup }),
       ...(appointment.fse === undefined ? {} : { fse: appointment.fse }),
     });

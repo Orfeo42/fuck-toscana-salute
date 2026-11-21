@@ -3,7 +3,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { MapPinned, Navigation, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
-import type { AppointmentBody, RowBody } from "../../api/client";
+import type { AppointmentBody, ReportBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
 import { DetailField, DetailSection } from "../../components/DetailSection";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -17,6 +17,8 @@ import { fullAddress, mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
 import { relativeDay } from "./relativeDay";
 import { statusDetails } from "./statusDetails";
 import { ActionsCell } from "./VisitCells";
+import { VisitReportsSection } from "./VisitReportsSection";
+import { VisitStatusSection } from "./VisitStatusSection";
 
 interface Props {
   row: RowBody;
@@ -25,6 +27,8 @@ interface Props {
   now: Date;
   appointmentCheckedAt: string | undefined;
   refreshing: boolean;
+  reports: readonly ReportBody[];
+  onChanged: () => void;
   onRefresh: () => void;
   onClose: () => void;
 }
@@ -36,6 +40,8 @@ export function VisitDetailModal({
   now,
   appointmentCheckedAt,
   refreshing,
+  reports,
+  onChanged,
   onRefresh,
   onClose,
 }: Props): JSX.Element {
@@ -66,7 +72,9 @@ export function VisitDetailModal({
       <Stack gap="lg">
         <DetailSection title="Stato">
           <Group gap="sm" align="flex-start" wrap="nowrap">
-            <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+            <StatusBadge tone={state.tone} manual={state.manual}>
+              {state.label}
+            </StatusBadge>
             <Stack gap={4}>
               {details.map((detail) => (
                 <Text key={detail} size="sm">
@@ -75,6 +83,17 @@ export function VisitDetailModal({
               ))}
             </Stack>
           </Group>
+          <VisitStatusSection row={row} onChanged={onChanged} />
+        </DetailSection>
+        <DetailSection title="Referti">
+          <VisitReportsSection
+            row={row}
+            state={state}
+            booking={booking}
+            now={now}
+            reports={reports}
+            onChanged={onChanged}
+          />
         </DetailSection>
         {bookedUnit === undefined ? null : (
           <DetailSection title="Appuntamento">

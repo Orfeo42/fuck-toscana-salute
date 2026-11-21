@@ -60,7 +60,7 @@ export function useReports(): ReportsState {
   const current = result?.requestId === requestId ? result : undefined;
 
   return {
-    data: current?.data,
+    data: current === undefined ? result?.data : current.data,
     error: current?.error,
     loading: current === undefined,
     reload,

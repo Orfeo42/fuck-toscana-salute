@@ -10,12 +10,23 @@ import {
   type ReportDocumentBody,
 } from "../../api/client";
 import { DetailField, DetailSection } from "../../components/DetailSection";
+import { ImageViewerModal } from "../../components/ImageViewerModal";
 import { PdfViewerModal } from "../../components/PdfViewerModal";
+import { blobToDataUrl } from "../../lib/blob";
 import { formatDate, formatDateTime } from "../../lib/format";
+import { LocalReportEditor } from "./LocalReportEditor";
+import { VisitLinks } from "./VisitLinks";
 
 interface Props {
   report: ReportBody;
   onClose: () => void;
+  onChanged?: () => void;
+}
+
+interface Viewer {
+  kind: "pdf" | "image";
+  url: string;
+  title: string;
 }
 
 interface DocumentsResult {
@@ -31,11 +42,15 @@ function failureMessage(status: number, fallback: string): string {
   return status === 401 ? unauthorizedMessage : fallback;
 }
 
-export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
+export function ReportDetailModal({
+  report,
+  onClose,
+  onChanged,
+}: Props): JSX.Element {
   const fullScreen = useMediaQuery("(max-width: 48em)");
   const [result, setResult] = useState<DocumentsResult | undefined>(undefined);
-  const [pdfUrl, setPdfUrl] = useState<string | undefined>(undefined);
-  const [pdfTitle, setPdfTitle] = useState("");
+  const [viewer, setViewer] = useState<Viewer | undefined>(undefined);
+  const [nres, setNres] = useState<readonly string[]>(report.nres ?? []);
   const [opening, setOpening] = useState<string | undefined>(undefined);
   const [pdfError, setPdfError] = useState<string | undefined>(undefined);
   const { kind, abstractId, detailId, repCode } = report;
@@ -72,6 +87,8 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
     };
   }, [kind, abstractId, detailId, repCode]);
 
+  const pdfUrl = viewer?.kind === "pdf" ? viewer.url : undefined;
+
   useEffect(() => {
     if (pdfUrl === undefined) {
       return undefined;
@@ -80,6 +97,12 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
       URL.revokeObjectURL(pdfUrl);
     };
   }, [pdfUrl]);
+
+  const local = report.origin === "local";
+  const reportRef = { kind, abstractId, detailId, repCode };
+  const notifyChanged = (): void => {
+    onChanged?.();
+  };
 
   const openPdf = async (document: ReportDocumentBody): Promise<void> => {
     setOpening(document.position);
@@ -99,8 +122,12 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
         setPdfError(failureMessage(response.status, pdfMessage));
         return;
       }
-      setPdfTitle(document.label === "" ? report.kindLabel : document.label);
-      setPdfUrl(URL.createObjectURL(data));
+      const title = document.label === "" ? report.kindLabel : document.label;
+      if (data.type.startsWith("image/")) {
+        setViewer({ kind: "image", url: await blobToDataUrl(data), title });
+        return;
+      }
+      setViewer({ kind: "pdf", url: URL.createObjectURL(data), title });
     } catch {
       setPdfError(pdfMessage);
     } finally {
@@ -112,7 +139,7 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
     <Modal
       opened
       onClose={onClose}
-      title={`${report.kindLabel} · ${formatDate(report.date)}`}
+      title={`${local ? (report.title ?? report.kindLabel) : report.kindLabel} · ${formatDate(report.date)}`}
       fullScreen={fullScreen}
       centered
     >
@@ -161,7 +188,7 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
                   void openPdf(document);
                 }}
               >
-                Apri PDF
+                {local ? "Apri" : "Apri PDF"}
               </Button>
             </Group>
           ))}
@@ -171,17 +198,52 @@ export function ReportDetailModal({ report, onClose }: Props): JSX.Element {
             </Text>
           )}
         </DetailSection>
+        <DetailSection title="Visite collegate">
+          <VisitLinks
+            reportRef={reportRef}
+            nres={nres}
+            onLinked={(nre) => {
+              setNres([...nres, nre]);
+              notifyChanged();
+            }}
+            onUnlinked={(nre) => {
+              setNres(nres.filter((item) => item !== nre));
+              notifyChanged();
+            }}
+          />
+        </DetailSection>
+        {local ? (
+          <DetailSection title="Modifica">
+            <LocalReportEditor
+              report={report}
+              onChanged={() => {
+                notifyChanged();
+                onClose();
+              }}
+            />
+          </DetailSection>
+        ) : null}
       </Stack>
-      {pdfUrl === undefined ? null : (
+      {viewer?.kind === "pdf" ? (
         <PdfViewerModal
-          url={pdfUrl}
-          title={pdfTitle}
+          url={viewer.url}
+          title={viewer.title}
           opened
           onClose={() => {
-            setPdfUrl(undefined);
+            setViewer(undefined);
           }}
         />
-      )}
+      ) : null}
+      {viewer?.kind === "image" ? (
+        <ImageViewerModal
+          url={viewer.url}
+          title={viewer.title}
+          opened
+          onClose={() => {
+            setViewer(undefined);
+          }}
+        />
+      ) : null}
     </Modal>
   );
 }

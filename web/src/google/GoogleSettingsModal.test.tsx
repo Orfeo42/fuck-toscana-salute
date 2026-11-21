@@ -20,6 +20,8 @@ const savedSettings: GoogleSettingsBody = {
   clientId: "123-abc.apps.googleusercontent.com",
   calendarId: "primary",
   driveFolderId: "",
+  apiKey: "key-1",
+  appId: "123456",
   hasSecret: true,
   redirectUri: "http://localhost:8080/api/google/callback",
 };
@@ -28,6 +30,8 @@ const emptySettings: GoogleSettingsBody = {
   clientId: "",
   calendarId: "",
   driveFolderId: "",
+  apiKey: "",
+  appId: "",
   hasSecret: false,
   redirectUri: "http://localhost:8080/api/google/callback",
 };
@@ -74,6 +78,10 @@ describe("GoogleSettingsModal", () => {
     );
     expect(screen.getByLabelText("Calendario")).toHaveValue("primary");
     expect(screen.getByLabelText("Cartella Drive")).toHaveValue("");
+    expect(screen.getByLabelText("API key (Picker)")).toHaveValue("key-1");
+    expect(screen.getByLabelText("App ID (numero progetto)")).toHaveValue(
+      "123456",
+    );
   });
 
   it("defaults the calendar to primary", async () => {
@@ -128,9 +136,11 @@ describe("GoogleSettingsModal", () => {
     expect(mocks.put).toHaveBeenCalled();
   });
 
-  it("omits the empty secret and drive folder from the body", async () => {
+  it("omits the empty secret, drive folder, api key and app id from the body", async () => {
     const user = userEvent.setup();
-    mocks.get.mockResolvedValue({ data: savedSettings });
+    mocks.get.mockResolvedValue({
+      data: { ...savedSettings, apiKey: "", appId: "" },
+    });
     renderModal();
 
     await user.click(await screen.findByRole("button", { name: "Salva" }));
@@ -154,6 +164,8 @@ describe("GoogleSettingsModal", () => {
     );
     await user.type(screen.getByLabelText("Client secret"), "s3cret");
     await user.type(screen.getByLabelText("Cartella Drive"), "folder-1");
+    await user.type(screen.getByLabelText("API key (Picker)"), "key-2");
+    await user.type(screen.getByLabelText("App ID (numero progetto)"), "987");
     await user.click(screen.getByRole("button", { name: "Salva" }));
 
     expect(mocks.put).toHaveBeenCalledWith("/api/google/settings", {
@@ -162,6 +174,8 @@ describe("GoogleSettingsModal", () => {
         clientSecret: "s3cret",
         calendarId: "primary",
         driveFolderId: "folder-1",
+        apiKey: "key-2",
+        appId: "987",
       },
     });
   });

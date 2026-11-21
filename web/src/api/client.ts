@@ -29,6 +29,16 @@ export type GoogleSettingsBody = components["schemas"]["GoogleSettingsBody"];
 export type GoogleSettingsRequest =
   components["schemas"]["GoogleSettingsRequest"];
 export type RefreshRequest = components["schemas"]["RefreshRequest"];
+export type ReportRefBody = components["schemas"]["ReportRefBody"];
+export type LinkRequest = components["schemas"]["LinkRequest"];
+export type VisitStatusRequest = components["schemas"]["VisitStatusRequest"];
+export type VisitNRERequest = components["schemas"]["VisitNRERequest"];
+export type ImportDriveRequest = components["schemas"]["ImportDriveRequest"];
+export type UpdateLocalReportRequest =
+  components["schemas"]["UpdateLocalReportRequest"];
+export type LocalReportIDRequest =
+  components["schemas"]["LocalReportIDRequest"];
+export type PickerBody = components["schemas"]["PickerBody"];
 
 export function prescriptionPdfUrl(ref: string): string {
   const query = new URLSearchParams({ ref });

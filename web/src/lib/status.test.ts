@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appointmentStatusLabel,
   isClosedPrescription,
+  prescriptionStatuses,
   prescriptionStatusLabel,
 } from "./status";
 
@@ -29,5 +30,11 @@ describe("isClosedPrescription", () => {
 describe("appointmentStatusLabel", () => {
   it("capitalizes the upstream value", () => {
     expect(appointmentStatusLabel("PRENOTATO")).toBe("Prenotato");
+  });
+});
+
+describe("prescriptionStatuses", () => {
+  it("lists the eight selectable statuses", () => {
+    expect(prescriptionStatuses).toEqual([3, 30, 5, 6, 7, 8, 9, 4]);
   });
 });

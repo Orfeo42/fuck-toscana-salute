@@ -80,7 +80,9 @@ export function StatusCell({ row, state }: StatusProps): JSX.Element {
   const details = statusDetails(row, state);
   return (
     <Group gap={4} wrap="nowrap">
-      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+      <StatusBadge tone={state.tone} manual={state.manual}>
+        {state.label}
+      </StatusBadge>
       {details.length === 0 ? null : <StatusInfo details={details} />}
     </Group>
   );

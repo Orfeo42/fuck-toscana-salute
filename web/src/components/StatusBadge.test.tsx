@@ -26,4 +26,18 @@ describe("StatusBadge", () => {
     expect(screen.getByText("Chiuso")).toBeVisible();
     expect(screen.getByText("Errore")).toBeVisible();
   });
+
+  it("shows the manual marker only when manual", () => {
+    render(
+      <>
+        <StatusBadge tone="done" manual>
+          Erogata
+        </StatusBadge>
+        <StatusBadge tone="booked">Prenotata</StatusBadge>
+      </>,
+    );
+    expect(
+      screen.getAllByRole("img", { name: "Stato impostato a mano" }),
+    ).toHaveLength(1);
+  });
 });

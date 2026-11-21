@@ -1,0 +1,111 @@
+import { Group, Select, Stack, Text } from "@mantine/core";
+import { Unlink } from "lucide-react";
+import { useState } from "react";
+import type { JSX } from "react";
+
+import { api, type ReportRefBody } from "../../api/client";
+import { IconAction } from "../../components/IconAction";
+import { useHealthData } from "../../data/useHealthData";
+import { buildRows, rowTitle } from "../visits/filter";
+
+interface Props {
+  reportRef: ReportRefBody;
+  nres: readonly string[];
+  onLinked: (nre: string) => void;
+  onUnlinked: (nre: string) => void;
+}
+
+const linkFailed = "Operazione non riuscita";
+
+export function VisitLinks({
+  reportRef,
+  nres,
+  onLinked,
+  onUnlinked,
+}: Props): JSX.Element {
+  const { prescriptions, appointments } = useHealthData();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  const rows = buildRows(
+    prescriptions.data?.prescriptions ?? [],
+    appointments.data?.appointments ?? [],
+  );
+  const linkedKeys = nres.map((nre) => nre.toUpperCase());
+  const linked = nres.map((nre) => ({
+    nre,
+    row: rows.find((row) => row.nre.toUpperCase() === nre.toUpperCase()),
+  }));
+  const options = rows
+    .filter((row) => !linkedKeys.includes(row.nre.toUpperCase()))
+    .map((row) => ({
+      value: row.nre,
+      label: `${rowTitle(row)} · ${row.nre}`,
+    }));
+
+  const change = async (nre: string, link: boolean): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const body = { nre, report: reportRef };
+      const { response } = link
+        ? await api.PUT("/api/links", { body })
+        : await api.DELETE("/api/links", { body });
+      if (!response.ok) {
+        setError(linkFailed);
+        return;
+      }
+      if (link) {
+        onLinked(nre);
+        return;
+      }
+      onUnlinked(nre);
+    } catch {
+      setError(linkFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack gap="xs">
+      {linked.length === 0 ? <Text>Nessuna visita collegata.</Text> : null}
+      {linked.map(({ nre, row }) => (
+        <Group key={nre} justify="space-between" wrap="nowrap">
+          <Stack gap={0}>
+            <Text>{row === undefined ? nre : rowTitle(row)}</Text>
+            <Text size="xs" c="dimmed">
+              {nre}
+            </Text>
+          </Stack>
+          <IconAction
+            label={`Scollega ${nre}`}
+            icon={Unlink}
+            onClick={() => {
+              void change(nre, false);
+            }}
+          />
+        </Group>
+      ))}
+      <Select
+        label="Collega a visita"
+        placeholder="Cerca una visita"
+        searchable
+        nothingFoundMessage="Nessuna visita trovata"
+        data={options}
+        value={null}
+        disabled={busy}
+        onChange={(nre) => {
+          if (nre !== null) {
+            void change(nre, true);
+          }
+        }}
+      />
+      {error === undefined ? null : (
+        <Text size="sm" c="red" role="alert">
+          {error}
+        </Text>
+      )}
+    </Stack>
+  );
+}

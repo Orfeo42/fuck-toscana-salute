@@ -12,6 +12,7 @@ import {
 
 import type {
   AppointmentBody,
+  ReportBody,
   AppointmentsUpdatedBody,
   RowBody,
   SessionBody,
@@ -32,6 +33,12 @@ vi.mock("../lib/pdf", () => ({
   }),
 }));
 
+vi.mock("./reports/ReportDetailModal", () => ({
+  ReportDetailModal: ({ report }: { report: ReportBody }): JSX.Element => (
+    <p>{`dettaglio ${report.abstractId}`}</p>
+  ),
+}));
+
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   refreshPortals: vi.fn(),
@@ -50,6 +57,8 @@ const now = new Date("2026-11-10T09:00:00Z");
 const noUpdates = { lists: null, appointments: {}, verdicts: {} };
 
 const toBook: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000001",
   cup: {
     nre: "0900A0000000001",
@@ -70,6 +79,8 @@ const toBook: RowBody = {
 };
 
 const drug: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000002",
   fse: {
     id: "f2",
@@ -83,6 +94,8 @@ const drug: RowBody = {
 };
 
 const done: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000003",
   fse: {
     id: "f3",
@@ -96,6 +109,8 @@ const done: RowBody = {
 };
 
 const cupOnly: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000004",
   cup: {
     nre: "0900A0000000004",
@@ -107,6 +122,8 @@ const cupOnly: RowBody = {
 };
 
 const bookedRow: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000005",
   fse: {
     id: "f5",
@@ -148,6 +165,8 @@ function fseVisit(
   expiresOn: string,
 ): RowBody {
   return {
+    overridden: false,
+    reports: [],
     nre,
     fse: {
       id: `f-${nre}`,
@@ -764,6 +783,8 @@ describe("VisitsView", () => {
 
   it("renders (stimata) for an estimated expiry", async () => {
     const estimated: RowBody = {
+      overridden: false,
+      reports: [],
       nre: "0900A0000000070",
       fse: {
         id: "f70",
@@ -1145,6 +1166,8 @@ describe("VisitsView", () => {
   it("shows an expired FSE status 30 row as Scaduta, not Da verificare", async () => {
     const user = userEvent.setup();
     const expired30: RowBody = {
+      overridden: false,
+      reports: [],
       nre: "0900A0000000066",
       fse: {
         id: "f66",
@@ -1489,5 +1512,124 @@ describe("VisitsView", () => {
         await screen.findByText("Aggiornamento non riuscito"),
       ).toBeVisible();
     });
+  });
+});
+
+function reportOf(abstractId: string): ReportBody {
+  return {
+    kind: "lab",
+    kindLabel: "Laboratorio",
+    abstractId,
+    detailId: "d1",
+    repCode: "r1",
+    provider: "Ospedale esempio",
+    unread: false,
+    hidden: false,
+    origin: "remote",
+    nres: [],
+  };
+}
+
+function refOf(abstractId: string): NonNullable<RowBody["reports"]>[number] {
+  return { kind: "lab", abstractId, detailId: "d1", repCode: "r1" };
+}
+
+function mockWithReports(
+  prescriptions: RowBody[],
+  reports: ReportBody[],
+): void {
+  mocks.get.mockImplementation((path: string) => {
+    if (path === "/api/appointments") {
+      return Promise.resolve({
+        data: {
+          appointments: [],
+          failed: [],
+          unbooked: [],
+          verdicts: [],
+          updated: noUpdates,
+        },
+      });
+    }
+    if (path === "/api/reports") {
+      return Promise.resolve({
+        data: { reports, failures: [], updated: null },
+      });
+    }
+    return Promise.resolve({ data: { prescriptions } });
+  });
+}
+
+describe("VisitsView manual status and linked reports", () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+    mocks.refreshPortals.mockReset();
+    window.location.hash = "";
+  });
+
+  it("shows the overridden status once with the manual marker", async () => {
+    const fse = toBook.fse;
+    const overridden: RowBody = {
+      ...toBook,
+      overridden: true,
+      ...(fse === undefined ? {} : { fse: { ...fse, status: 8 } }),
+    };
+    mockWithReports([overridden, cupOnly], []);
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Ecografia esempio, Prelievo esempio");
+    await pickStatuses(user, "Erogata (1)");
+    const row = rowOf("Visita esempio");
+    expect(within(row).getByText("Erogata")).toBeVisible();
+    expect(
+      within(row).getByRole("img", { name: "Stato impostato a mano" }),
+    ).toBeVisible();
+    expect(
+      within(rowOf("Ecografia esempio, Prelievo esempio")).queryByRole("img", {
+        name: "Stato impostato a mano",
+      }),
+    ).toBeNull();
+  });
+
+  it("has no linked reports icon when nothing is linked", async () => {
+    mockWithReports([toBook], []);
+    renderView();
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    expect(
+      within(row).queryByRole("button", { name: /^Referti collegati/ }),
+    ).toBeNull();
+  });
+
+  it("opens the report directly when exactly one is linked", async () => {
+    mockWithReports(
+      [{ ...toBook, reports: [refOf("a1")] }],
+      [reportOf("a1"), reportOf("a2")],
+    );
+    const user = userEvent.setup();
+    renderView();
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    await user.click(
+      await within(row).findByRole("button", { name: "Referti collegati (1)" }),
+    );
+    expect(await screen.findByText("dettaglio a1")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Visita esempio" })).toBeNull();
+  });
+
+  it("opens the visit detail when several reports are linked", async () => {
+    mockWithReports(
+      [{ ...toBook, reports: [refOf("a1"), refOf("a2")] }],
+      [reportOf("a1"), reportOf("a2")],
+    );
+    const user = userEvent.setup();
+    renderView();
+    const row = await waitFor(() => rowOf("Visita esempio"));
+    await user.click(
+      await within(row).findByRole("button", { name: "Referti collegati (2)" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Visita esempio",
+    });
+    expect(
+      within(dialog).getAllByRole("button", { name: /^Apri referto/ }),
+    ).toHaveLength(2);
   });
 });

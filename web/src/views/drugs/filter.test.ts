@@ -71,9 +71,14 @@ describe("drugStatusTone", () => {
 describe("drugRows", () => {
   it("keeps only drug rows with fse", () => {
     const rows: RowBody[] = [
-      { nre: a.nre, fse: a.fse },
-      { nre: "v", fse: { ...a.fse, kind: "visit" } },
-      { nre: "c" },
+      { overridden: false, reports: [], nre: a.nre, fse: a.fse },
+      {
+        overridden: false,
+        reports: [],
+        nre: "v",
+        fse: { ...a.fse, kind: "visit" },
+      },
+      { overridden: false, reports: [], nre: "c" },
     ];
 
     expect(nres(drugRows(rows))).toEqual([a.nre]);

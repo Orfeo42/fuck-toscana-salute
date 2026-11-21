@@ -9,6 +9,10 @@ const prescriptionLabels: Readonly<Record<number, string>> = {
   30: "Prenotata",
 };
 
+export const prescriptionStatuses = [3, 30, 5, 6, 7, 8, 9, 4] as const;
+
+export type SelectableStatus = (typeof prescriptionStatuses)[number];
+
 const closedStatuses: ReadonlySet<number> = new Set([4, 8, 9]);
 
 export function prescriptionStatusLabel(status: number): string {

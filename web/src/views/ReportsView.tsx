@@ -11,7 +11,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { RefreshCw, Search } from "lucide-react";
+import { Link2, RefreshCw, Search, Upload } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
@@ -31,12 +31,22 @@ import {
   type ReportSortKey,
 } from "./reports/filter";
 import { ReportDetailModal } from "./reports/ReportDetailModal";
+import { UploadReportDialog } from "./reports/UploadReportDialog";
 import { updatedLabel } from "./reports/updatedLabel";
 import { useReports } from "./reports/useReports";
 
 const descFirst: readonly ReportSortKey[] = ["date"];
 const rowPointer = { cursor: "pointer" };
 const allKinds = "";
+const fseKind = "fse";
+const fseHint =
+  "Accedi al Fascicolo Sanitario per vedere anche i referti del portale regionale.";
+
+function linkedLabel(count: number): string {
+  return count === 1
+    ? "Collegato a 1 visita"
+    : `Collegato a ${String(count)} visite`;
+}
 
 const columns: DataTableColumn<ReportBody>[] = [
   {
@@ -51,6 +61,19 @@ const columns: DataTableColumn<ReportBody>[] = [
     title: "Tipo",
     sortable: true,
     noWrap: true,
+    render: (report) =>
+      report.origin === "local" ? (
+        <Group gap={6} wrap="nowrap">
+          <Tooltip label="Caricato da te" withArrow>
+            <span role="img" aria-label="Caricato da te">
+              <Upload size={16} aria-hidden="true" />
+            </span>
+          </Tooltip>
+          <Text size="sm">{report.title ?? report.kindLabel}</Text>
+        </Group>
+      ) : (
+        report.kindLabel
+      ),
   },
   {
     accessor: "provider",
@@ -82,6 +105,16 @@ const columns: DataTableColumn<ReportBody>[] = [
             Oscurato
           </Badge>
         ) : null}
+        {(report.nres ?? []).length > 0 ? (
+          <Tooltip label={linkedLabel((report.nres ?? []).length)} withArrow>
+            <span
+              role="img"
+              aria-label={linkedLabel((report.nres ?? []).length)}
+            >
+              <Link2 size={16} aria-hidden="true" />
+            </span>
+          </Tooltip>
+        ) : null}
       </Group>
     ),
   },
@@ -97,11 +130,14 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState(allKinds);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | undefined>(undefined);
   const sort = useSort<ReportSortKey>("date", "desc", descFirst);
 
   const all = reports.data?.reports ?? [];
-  const failures = reports.data?.failures ?? [];
+  const allFailures = reports.data?.failures ?? [];
+  const failures = allFailures.filter((failure) => failure.kind !== fseKind);
+  const fseFailed = failures.length !== allFailures.length;
   const updated = reports.data?.updated ?? undefined;
   const visible = sortReports(
     filterByKind(searchReports(all, search), kind),
@@ -168,6 +204,14 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
         >
           Aggiorna tutto
         </Button>
+        <Button
+          leftSection={<Upload size={16} aria-hidden="true" />}
+          onClick={() => {
+            setUploadOpen(true);
+          }}
+        >
+          Carica referto
+        </Button>
       </Group>
       {reports.loading ? (
         <Group gap="xs">
@@ -183,6 +227,11 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
       {!reports.loading && reports.error === "unavailable" ? (
         <Alert color="red" role="alert" mb="md">
           Il portale regionale non risponde. Riprova tra poco.
+        </Alert>
+      ) : null}
+      {fseFailed ? (
+        <Alert color="yellow" role="alert" mb="md" p="xs">
+          {fseHint}
         </Alert>
       ) : null}
       {failures.length > 0 ? (
@@ -235,8 +284,16 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
           onClose={() => {
             setDetailId(undefined);
           }}
+          onChanged={reports.reload}
         />
       )}
+      <UploadReportDialog
+        opened={uploadOpen}
+        onClose={() => {
+          setUploadOpen(false);
+        }}
+        onUploaded={reports.reload}
+      />
     </section>
   );
 }

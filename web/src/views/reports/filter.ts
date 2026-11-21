@@ -26,7 +26,8 @@ export function searchReports(
   return reports.filter(
     (report) =>
       report.provider.toLowerCase().includes(needle) ||
-      report.kindLabel.toLowerCase().includes(needle),
+      report.kindLabel.toLowerCase().includes(needle) ||
+      (report.title ?? "").toLowerCase().includes(needle),
   );
 }
 

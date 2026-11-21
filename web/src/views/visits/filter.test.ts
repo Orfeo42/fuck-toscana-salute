@@ -25,6 +25,8 @@ function fseRow(
   description = "Visita esempio",
 ): RowBody {
   return {
+    overridden: false,
+    reports: [],
     nre,
     fse: {
       id: `f-${nre}`,
@@ -44,6 +46,8 @@ const done = fseRow("0900A0000000003", "visit", 8, "2026-10-01T09:00:00Z");
 const closed = fseRow("0900A0000000004", "visit", 4, "2026-09-01T09:00:00Z");
 const drug = fseRow("0900A0000000005", "drug", 5, "2026-11-02T09:00:00Z");
 const cupOnly: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000006",
   cup: {
     nre: "0900A0000000006",
@@ -54,6 +58,8 @@ const cupOnly: RowBody = {
   },
 };
 const nullItems: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000007",
   cup: { nre: "0900A0000000007", kind: "visit", status: 3, items: null },
 };
@@ -111,6 +117,7 @@ describe("effectiveState", () => {
       status: "PRENOTATO",
       label: "Prenotata",
       tone: "booked",
+      manual: false,
     });
   });
 
@@ -136,6 +143,7 @@ describe("effectiveState", () => {
       tone: "tobook",
       note: undefined,
       canBook: true,
+      manual: false,
     });
   });
 
@@ -150,6 +158,7 @@ describe("effectiveState", () => {
       tone: "pending",
       note: "FSE la segna come prenotata, ma nel CUP non c'è un tuo appuntamento: può essere già gestita altrove (prenotazione o accettazione) o ancora prenotabile",
       canBook: true,
+      manual: false,
     });
   });
 
@@ -164,6 +173,7 @@ describe("effectiveState", () => {
       tone: "booked",
       note: undefined,
       canBook: false,
+      manual: false,
     });
   });
 
@@ -215,8 +225,61 @@ describe("effectiveState", () => {
 
 function expiringRow(nre: string, status: number, expiresOn: string): RowBody {
   const row = fseRow(nre, "visit", status, "2026-11-01T09:00:00Z");
-  return row.fse === undefined ? row : { nre, fse: { ...row.fse, expiresOn } };
+  return row.fse === undefined
+    ? row
+    : { overridden: false, reports: [], nre, fse: { ...row.fse, expiresOn } };
 }
+
+describe("effectiveState manual status", () => {
+  it("uses the overridden fse status and flags it manual", () => {
+    const row: RowBody = {
+      ...fseRow("0900A0000000060", "visit", 8, "2026-11-01T09:00:00Z"),
+      overridden: true,
+    };
+    expect(effectiveState(row, new Map(), new Set(), now)).toMatchObject({
+      kind: "official",
+      status: 8,
+      label: "Erogata",
+      tone: "done",
+      manual: true,
+    });
+  });
+
+  it("falls back to the cup status when there is no fse", () => {
+    const row: RowBody = { ...cupOnly, overridden: true };
+    expect(effectiveState(row, new Map(), new Set(), now)).toMatchObject({
+      status: 3,
+      label: "Da prenotare",
+      manual: true,
+    });
+  });
+
+  it("ignores a booking, expiry and verdict when overridden", () => {
+    const row: RowBody = {
+      ...expiringRow("0900A0000000061", 5, "2026-11-01T09:00:00Z"),
+      overridden: true,
+    };
+    const bookings = new Map([
+      [
+        "0900A0000000061",
+        booking("0900A0000000061", "PRENOTATO", "2026-12-01T09:00:00Z"),
+      ],
+    ]);
+    expect(
+      effectiveState(row, bookings, new Set(["0900A0000000061"]), now),
+    ).toMatchObject({
+      kind: "official",
+      label: "Presa in carico",
+      manual: true,
+    });
+  });
+
+  it("is not manual when not overridden", () => {
+    expect(effectiveState(toBook, new Map(), new Set(), now)).toMatchObject({
+      manual: false,
+    });
+  });
+});
 
 describe("effectiveState expiry", () => {
   const yesterday = "2026-11-09T09:00:00Z";
@@ -231,6 +294,7 @@ describe("effectiveState expiry", () => {
       tone: "closed",
       expiresOn: yesterday,
       estimated: false,
+      manual: false,
     });
   });
 
@@ -239,7 +303,7 @@ describe("effectiveState expiry", () => {
     const estimated: RowBody =
       row.fse === undefined
         ? row
-        : { nre: row.nre, fse: { ...row.fse, expiryEstimated: true } };
+        : { ...row, fse: { ...row.fse, expiryEstimated: true } };
     expect(effectiveState(estimated, new Map(), new Set(), now)).toMatchObject({
       kind: "expired",
       estimated: true,
@@ -256,6 +320,7 @@ describe("effectiveState expiry", () => {
       tone: "closed",
       expiresOn: yesterday,
       estimated: false,
+      manual: false,
     });
   });
 
@@ -264,7 +329,7 @@ describe("effectiveState expiry", () => {
     const estimated: RowBody =
       row.fse === undefined
         ? row
-        : { nre: row.nre, fse: { ...row.fse, expiryEstimated: true } };
+        : { ...row, fse: { ...row.fse, expiryEstimated: true } };
     expect(
       effectiveState(estimated, new Map(), new Set(["0900A0000000059"]), now),
     ).toMatchObject({ kind: "expired", estimated: true });
@@ -528,7 +593,7 @@ describe("buildRows", () => {
     const appointment = booking("0900A0000000020", "PRENOTATO", undefined);
     expect(buildRows([toBook], [appointment])).toEqual([
       toBook,
-      { nre: "0900A0000000020" },
+      { nre: "0900A0000000020", overridden: false, reports: [] },
     ]);
   });
 

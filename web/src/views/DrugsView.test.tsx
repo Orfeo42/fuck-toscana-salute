@@ -37,6 +37,8 @@ function drug(
 ): RowBody {
   const nre = `0900A00000000${suffix}`;
   return {
+    overridden: false,
+    reports: [],
     nre,
     fse: {
       id: `f${suffix}`,
@@ -59,6 +61,8 @@ const pickupOld = drug(
 const pickupNew = drug("02", "Farmaco esempio", 3, "2026-11-02T09:00:00Z");
 const done = drug("03", "Farmaco erogato esempio", 8, "2026-09-01T09:00:00Z");
 const visit: RowBody = {
+  overridden: false,
+  reports: [],
   nre: "0900A0000000004",
   fse: {
     id: "f4",

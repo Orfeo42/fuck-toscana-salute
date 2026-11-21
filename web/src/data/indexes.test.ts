@@ -136,7 +136,12 @@ describe("buildIndexes", () => {
         verdicts: [],
         updated: noUpdates,
       },
-      { prescriptions: [{ nre: "0900a0000000003" }], updated: null },
+      {
+        prescriptions: [
+          { overridden: false, reports: [], nre: "0900a0000000003" },
+        ],
+        updated: null,
+      },
     );
     expect(result.bookingByNre.has("0900A0000000001")).toBe(true);
     expect(result.unbooked.has("0900A0000000002")).toBe(true);

@@ -9,7 +9,7 @@ import {
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 
 import { CopyButton } from "../components/CopyButton";
@@ -20,14 +20,17 @@ import { formatDate, formatUpdated } from "../lib/format";
 import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
-import type { RowBody } from "../api/client";
+import type { ReportBody, RowBody } from "../api/client";
 import {
   ActionsCell,
   AppointmentCell,
   PlaceCell,
   StatusCell,
 } from "./visits/VisitCells";
+import { LinkedReportsAction } from "./visits/LinkedReportsAction";
 import { VisitDetailModal } from "./visits/VisitDetailModal";
+import { ReportDetailModal } from "./reports/ReportDetailModal";
+import { useReports } from "./reports/useReports";
 import {
   buildRows,
   defaultExcludedLabels,
@@ -46,6 +49,7 @@ import {
 const descFirst: readonly VisitSortKey[] = ["prescritta"];
 const focusedBg = "var(--mantine-primary-color-light)";
 const rowPointer = { cursor: "pointer" };
+const noReports: readonly ReportBody[] = [];
 
 interface Props {
   now?: Date;
@@ -73,7 +77,18 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   const [search, setSearch] = useState("");
   const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
   const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
+  const [openReport, setOpenReport] = useState<ReportBody | undefined>(
+    undefined,
+  );
   const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
+  const reportsState = useReports();
+  const reports = reportsState.data?.reports ?? noReports;
+  const reloadPrescriptions = prescriptions.reload;
+  const reloadReports = reportsState.reload;
+  const onChanged = useCallback((): void => {
+    reloadPrescriptions();
+    reloadReports();
+  }, [reloadPrescriptions, reloadReports]);
 
   const currentNow = now ?? mountedAt;
   const context = { bookingByNre, unbooked, verdictByNre, now: currentNow };
@@ -216,18 +231,28 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       title: "Azioni",
       render: (row) => (
         <StopClick>
-          <ActionsCell
-            row={row}
-            state={effectiveState(
-              row,
-              bookingByNre,
-              unbooked,
-              currentNow,
-              verdictByNre,
-            )}
-            booking={bookingByNre.get(row.nre.toUpperCase())}
-            now={currentNow}
-          />
+          <Group gap={2} wrap="nowrap">
+            <ActionsCell
+              row={row}
+              state={effectiveState(
+                row,
+                bookingByNre,
+                unbooked,
+                currentNow,
+                verdictByNre,
+              )}
+              booking={bookingByNre.get(row.nre.toUpperCase())}
+              now={currentNow}
+            />
+            <LinkedReportsAction
+              row={row}
+              reports={reports}
+              onOpenReport={setOpenReport}
+              onOpenDetail={() => {
+                setDetailNre(row.nre);
+              }}
+            />
+          </Group>
         </StopClick>
       ),
     },
@@ -396,12 +421,23 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
             detailRow.nre.toUpperCase(),
           )}
           refreshing={refreshing}
+          reports={reports}
+          onChanged={onChanged}
           onRefresh={() => {
             void refresh({ nres: [detailRow.nre.toUpperCase()] });
           }}
           onClose={() => {
             setDetailNre(undefined);
           }}
+        />
+      )}
+      {openReport === undefined ? null : (
+        <ReportDetailModal
+          report={openReport}
+          onClose={() => {
+            setOpenReport(undefined);
+          }}
+          onChanged={onChanged}
         />
       )}
     </section>

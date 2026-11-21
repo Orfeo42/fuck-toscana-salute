@@ -23,6 +23,8 @@ function report(
     provider,
     unread: false,
     hidden: false,
+    origin: "remote",
+    nres: null,
     ...(date === undefined ? {} : { date }),
   };
 }
@@ -38,6 +40,16 @@ describe("searchReports", () => {
 
   it("matches the provider case-insensitively", () => {
     expect(searchReports([lab, radio], "ospedale")).toEqual([lab]);
+  });
+
+  it("matches the title of an uploaded report", () => {
+    const local: ReportBody = {
+      ...lab,
+      origin: "local",
+      title: "Ecografia addome",
+    };
+
+    expect(searchReports([lab, local], "addome")).toEqual([local]);
   });
 
   it("matches the kind label", () => {

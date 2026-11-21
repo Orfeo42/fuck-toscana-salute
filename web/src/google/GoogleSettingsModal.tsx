@@ -57,6 +57,8 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
     settings.calendarId === "" ? "primary" : settings.calendarId,
   );
   const [driveFolderId, setDriveFolderId] = useState(settings.driveFolderId);
+  const [apiKey, setApiKey] = useState(settings.apiKey);
+  const [appId, setAppId] = useState(settings.appId);
   const [clientIdError, setClientIdError] = useState<string | undefined>(
     undefined,
   );
@@ -81,11 +83,15 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
     }
     const trimmedCalendarId = calendarId.trim();
     const trimmedFolder = driveFolderId.trim();
+    const trimmedApiKey = apiKey.trim();
+    const trimmedAppId = appId.trim();
     const body: GoogleSettingsRequest = {
       clientId: trimmedClientId,
       ...(trimmedSecret === "" ? {} : { clientSecret: trimmedSecret }),
       ...(trimmedCalendarId === "" ? {} : { calendarId: trimmedCalendarId }),
       ...(trimmedFolder === "" ? {} : { driveFolderId: trimmedFolder }),
+      ...(trimmedApiKey === "" ? {} : { apiKey: trimmedApiKey }),
+      ...(trimmedAppId === "" ? {} : { appId: trimmedAppId }),
     };
     setSaving(true);
     try {
@@ -159,6 +165,23 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
           value={driveFolderId}
           onChange={(event) => {
             setDriveFolderId(event.currentTarget.value);
+          }}
+        />
+        <TextInput
+          label="API key (Picker)"
+          description="Chiave API di Google Cloud per scegliere i referti da Drive; vedi il README"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(event) => {
+            setApiKey(event.currentTarget.value);
+          }}
+        />
+        <TextInput
+          label="App ID (numero progetto)"
+          description="Numero del progetto Google Cloud, vedi il README"
+          value={appId}
+          onChange={(event) => {
+            setAppId(event.currentTarget.value);
           }}
         />
         {formError === undefined ? null : (

@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/google/picker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["google-picker"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/google/settings": {
         parameters: {
             query?: never;
@@ -111,6 +127,22 @@ export interface paths {
         put: operations["save-google-settings"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["link-report"];
+        post?: never;
+        delete: operations["unlink-report"];
         options?: never;
         head?: never;
         patch?: never;
@@ -244,6 +276,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update-local-report"];
+        post: operations["upload-local-report"];
+        delete: operations["delete-local-report"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/local/drive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["import-drive-report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/pdf": {
         parameters: {
             query?: never;
@@ -271,6 +335,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/visits/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set-visit-status"];
+        post?: never;
+        delete: operations["reset-visit-status"];
         options?: never;
         head?: never;
         patch?: never;
@@ -413,6 +493,8 @@ export interface components {
              * @example https://example.com/schemas/GoogleSettingsBody.json
              */
             readonly $schema?: string;
+            apiKey: string;
+            appId: string;
             calendarId: string;
             clientId: string;
             driveFolderId: string;
@@ -426,6 +508,8 @@ export interface components {
              * @example https://example.com/schemas/GoogleSettingsRequest.json
              */
             readonly $schema?: string;
+            apiKey?: string;
+            appId?: string;
             calendarId?: string;
             clientId: string;
             clientSecret?: string;
@@ -441,6 +525,20 @@ export interface components {
             configured: boolean;
             connected: boolean;
         };
+        ImportDriveRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ImportDriveRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: date */
+            date?: string;
+            fileId: string;
+            nre?: string;
+            provider?: string;
+            title?: string;
+        };
         ImportLoginRequest: {
             /**
              * Format: uri
@@ -455,10 +553,40 @@ export interface components {
             refresh: string;
             tessera?: string;
         };
+        LinkRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LinkRequest.json
+             */
+            readonly $schema?: string;
+            nre: string;
+            report: components["schemas"]["ReportRefRequest"];
+        };
+        LocalReportIDRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LocalReportIDRequest.json
+             */
+            readonly $schema?: string;
+            id: string;
+        };
         LoginBody: {
             error?: string;
             /** @enum {string} */
             phase: "idle" | "waiting" | "failed";
+        };
+        PickerBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PickerBody.json
+             */
+            readonly $schema?: string;
+            accessToken: string;
+            apiKey: string;
+            appId: string;
         };
         PortalBody: {
             /** Format: date-time */
@@ -516,6 +644,12 @@ export interface components {
             nres?: string[] | null;
         };
         ReportBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportBody.json
+             */
+            readonly $schema?: string;
             abstractId: string;
             /** Format: date-time */
             date?: string;
@@ -523,8 +657,12 @@ export interface components {
             hidden: boolean;
             kind: string;
             kindLabel: string;
+            nres: string[] | null;
+            /** @enum {string} */
+            origin: "remote" | "local";
             provider: string;
             repCode: string;
+            title?: string;
             unread: boolean;
             /** Format: date-time */
             updatedAt?: string;
@@ -563,6 +701,12 @@ export interface components {
             position?: string;
             repCode?: string;
         };
+        ReportRefBody: {
+            abstractId: string;
+            detailId: string;
+            kind: string;
+            repCode: string;
+        };
         ReportRefRequest: {
             /**
              * Format: uri
@@ -591,6 +735,8 @@ export interface components {
             cup?: components["schemas"]["PrescriptionCUPBody"];
             fse?: components["schemas"]["PrescriptionFSEBody"];
             nre: string;
+            overridden: boolean;
+            reports: components["schemas"]["ReportRefBody"][] | null;
         };
         SessionBody: {
             /**
@@ -614,11 +760,47 @@ export interface components {
             postalCode?: string;
             province: string;
         };
+        UpdateLocalReportRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateLocalReportRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: date */
+            date?: string;
+            id: string;
+            provider?: string;
+            title: string;
+        };
         VerdictBody: {
             message: string;
             nre: string;
             /** @enum {string} */
             reason: "bookable" | "handled" | "expired" | "other";
+        };
+        VisitNRERequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitNRERequest.json
+             */
+            readonly $schema?: string;
+            nre: string;
+        };
+        VisitStatusRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitStatusRequest.json
+             */
+            readonly $schema?: string;
+            nre: string;
+            /**
+             * Format: int64
+             * @enum {integer}
+             */
+            status: 3 | 30 | 5 | 6 | 7 | 8 | 9 | 4;
         };
     };
     responses: never;
@@ -842,6 +1024,35 @@ export interface operations {
             };
         };
     };
+    "google-picker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickerBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-google-settings": {
         parameters: {
             query?: never;
@@ -881,6 +1092,68 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GoogleSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "link-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "unlink-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
             };
         };
         responses: {
@@ -1138,6 +1411,141 @@ export interface operations {
             };
         };
     };
+    "update-local-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLocalReportRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "upload-local-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    date?: string;
+                    /** Format: binary */
+                    file: string;
+                    nre?: string;
+                    provider?: string;
+                    title?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-local-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalReportIDRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "import-drive-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportDriveRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-report-pdf": {
         parameters: {
             query?: never;
@@ -1190,6 +1598,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SessionBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-visit-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisitStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-visit-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisitNRERequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {
