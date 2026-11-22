@@ -227,7 +227,7 @@ func TestAddEvent(t *testing.T) {
 		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/event", Created: true}, got)
 
 		require.Len(t, f.uploadMeta, 1)
-		assert.Equal(t, "promemoria-2026-03-10.pdf", f.uploadMeta[0].Name)
+		assert.Equal(t, "2026-03-10-promemoria.pdf", f.uploadMeta[0].Name)
 		assert.Equal(t, "application/pdf", f.uploadMeta[0].MimeType)
 		assert.NotContains(t, f.uploadMeta[0].Name, fakeBooking)
 		assert.Equal(t, pdf, f.uploadMedia[0])
@@ -249,7 +249,7 @@ func TestAddEvent(t *testing.T) {
 		require.Len(t, ev.Attachments, 1)
 		assert.Equal(t, "https://drive.example.test/file1", ev.Attachments[0].FileUrl)
 		assert.Equal(t, "application/pdf", ev.Attachments[0].MimeType)
-		assert.Equal(t, "promemoria-2026-03-10.pdf", ev.Attachments[0].Title)
+		assert.Equal(t, "2026-03-10-promemoria.pdf", ev.Attachments[0].Title)
 		assert.Contains(t, f.insertQuery[0], "supportsAttachments=true")
 	})
 

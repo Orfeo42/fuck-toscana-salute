@@ -72,7 +72,7 @@ The repo name is the owner's choice. Keep it.
 - Link referti to visit rows by date + provider against saved appointments.
 - Prenota / Sposta buttons: copy NRE, open the logged-in CUP page (`#/prenotazione`, `#/gestione-prenotazioni`), refresh on close. Agreed, not built.
 - Cosmetic: some session times shown in UTC instead of local time.
-- Google popup sign-in and Drive import not tried end to end with real Google credentials (the owner has not created the Cloud project yet). Unverified: whether Google accepts `http://127.0.0.1:8800` as an Authorized JavaScript origin (documented examples use `localhost`; open the app on `http://localhost:8800` if not), and the exchange redirect URI (GIS docs say the page origin; many examples use `postmessage`). Over WireGuard from the phone the origin is a private IP, which Google rejects: normal upload only there.
+- Google popup sign-in and Calendar add work end to end with real Google (2026-11-22): `http://127.0.0.1:8800` is accepted as an Authorized JavaScript origin and the code exchange with the page origin as redirect URI works. Testing-mode consent requires the account in Audience → Test users (403 `access_denied` otherwise). Drive import through the Picker still not tried live. Over WireGuard from the phone the origin is a private IP, which Google rejects: normal upload only there.
 - Cosmetic: Drive download errors go through `google.classify` and carry its "add event" prefix.
 - Ricetta and promemoria PDFs are fetched with the document reference in the query string (`/api/documents/prescription?ref=`, `/api/documents/booking?id=`), against the hard rule above; move them to POST bodies with blob URLs like the referti.
 - Document text of uploaded referti (future): add a column to `local_reports`.

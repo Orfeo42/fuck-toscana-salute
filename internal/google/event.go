@@ -125,7 +125,7 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 		if err != nil {
 			return EventResult{}, err
 		}
-		name := "promemoria-" + ev.Start.In(rome).Format(time.DateOnly) + ".pdf"
+		name := ev.Start.In(rome).Format(time.DateOnly) + "-promemoria.pdf"
 		file, err := c.upload(ctx, svc, name, settings.DriveFolderID, pdf)
 		if err != nil {
 			return EventResult{}, c.classify(ctx, err)
