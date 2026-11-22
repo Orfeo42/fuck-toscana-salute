@@ -19,6 +19,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate, formatUpdated } from "../lib/format";
+import { tableScrollProps } from "../components/tableScroll";
 import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
@@ -232,7 +233,7 @@ export function DrugsView(): JSX.Element {
           highlightOnHover
           withTableBorder
           {...tableColors}
-          maxHeight="75vh"
+          {...tableScrollProps}
           idAccessor="nre"
           records={visible}
           selectedRecords={selected}

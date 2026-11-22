@@ -20,6 +20,7 @@ import type { ReportBody } from "../api/client";
 import { refreshPortals } from "../data/refresh";
 import { formatDate } from "../lib/format";
 import { useSort } from "../lib/useSort";
+import { tableScrollProps } from "../components/tableScroll";
 import { tableColors } from "../theme";
 import {
   filterByKind,
@@ -246,7 +247,7 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
           highlightOnHover
           withTableBorder
           {...tableColors}
-          maxHeight="75vh"
+          {...tableScrollProps}
           idAccessor={reportId}
           records={visible}
           columns={columns}

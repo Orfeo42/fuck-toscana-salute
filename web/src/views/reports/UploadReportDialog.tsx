@@ -1,5 +1,5 @@
 import { FileInput, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
-import { HardDrive, Upload } from "lucide-react";
+import { HardDrive, Upload, X } from "lucide-react";
 import { useContext, useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
@@ -64,6 +64,10 @@ function FormBody({
 }: UploadReportDialogProps): JSX.Element {
   const google = useContext(GoogleContext);
   const [file, setFile] = useState<File | null>(null);
+  const [driveFile, setDriveFile] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [title, setTitle] = useState(defaultTitle ?? "");
   const [date, setDate] = useState(defaultDate ?? "");
   const [provider, setProvider] = useState(defaultProvider ?? "");
@@ -85,6 +89,9 @@ function FormBody({
 
   const pickFile = (selected: File | null): void => {
     setFile(selected);
+    if (selected !== null) {
+      setDriveFile(null);
+    }
     if (selected !== null && selected.size > maxBytes) {
       setError(tooLargeMessage);
       return;
@@ -142,14 +149,8 @@ function FormBody({
       if (picked === null) {
         return;
       }
-      const { data, response } = await api.POST("/api/reports/local/drive", {
-        body: { fileId: picked.id, ...metadata },
-      });
-      if (data === undefined) {
-        setError(uploadErrorMessage(response.status));
-        return;
-      }
-      finish(data);
+      setDriveFile(picked);
+      setFile(null);
     } catch {
       setError(pickerFailedMessage);
     } finally {
@@ -157,8 +158,31 @@ function FormBody({
     }
   };
 
+  const uploadFromDrive = async (id: string): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const { data, response } = await api.POST("/api/reports/local/drive", {
+        body: { fileId: id, ...metadata },
+      });
+      if (data === undefined) {
+        setError(uploadErrorMessage(response.status));
+        return;
+      }
+      finish(data);
+    } catch {
+      setError(failedMessage);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSubmit = (event: FormSubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    if (driveFile !== null) {
+      void uploadFromDrive(driveFile.id);
+      return;
+    }
     void upload();
   };
 
@@ -186,6 +210,21 @@ function FormBody({
             />
           ) : null}
         </Group>
+        {driveFile === null ? null : (
+          <Group gap="xs" wrap="nowrap">
+            <HardDrive size={16} />
+            <Text size="sm" truncate style={{ flex: 1 }}>
+              {driveFile.name}
+            </Text>
+            <IconAction
+              label="Rimuovi file di Drive"
+              icon={X}
+              onClick={() => {
+                setDriveFile(null);
+              }}
+            />
+          </Group>
+        )}
         <TextInput
           label="Titolo"
           value={title}
@@ -220,7 +259,9 @@ function FormBody({
             type="submit"
             tone="primary"
             loading={busy}
-            disabled={file === null || file.size > maxBytes}
+            disabled={
+              driveFile === null && (file === null || file.size > maxBytes)
+            }
           />
         </Group>
       </Stack>

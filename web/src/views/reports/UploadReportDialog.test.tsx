@@ -271,7 +271,11 @@ describe("UploadReportDialog", () => {
     ).toBeNull();
   });
 
-  it("imports the picked Drive file with the metadata", async () => {
+  function mockDrivePick(): {
+    accessToken: string;
+    apiKey: string;
+    appId: string;
+  } {
     const credentials = { accessToken: "t", apiKey: "k", appId: "1" };
     mocks.post.mockImplementation((path: string) =>
       Promise.resolve(
@@ -281,33 +285,98 @@ describe("UploadReportDialog", () => {
       ),
     );
     mocks.pick.mockResolvedValue({ id: "drive1", name: "eco.pdf" });
+    return credentials;
+  }
+
+  async function pickFromDrive(): Promise<void> {
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scegli da Google Drive" }),
+    );
+    await screen.findByText("eco.pdf");
+  }
+
+  it("fills the file slot from Drive without uploading", async () => {
+    const credentials = mockDrivePick();
+    const { onUploaded, onClose } = renderDialog({ connected: true });
+
+    await pickFromDrive();
+
+    expect(mocks.pick).toHaveBeenCalledWith(credentials);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(onUploaded).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Rimuovi file di Drive" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Carica" })).toBeEnabled();
+  });
+
+  it("imports the picked Drive file with the metadata typed after picking", async () => {
+    mockDrivePick();
     const { onUploaded, onClose } = renderDialog({
       connected: true,
       nre: "0123A",
     });
 
-    await userEvent.type(screen.getByLabelText("Titolo"), "Eco");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Scegli da Google Drive" }),
-    );
+    await pickFromDrive();
+    await userEvent.type(screen.getByLabelText("Titolo"), "Eco nuovo");
+    await userEvent.click(screen.getByRole("button", { name: "Carica" }));
 
     await waitFor(() => {
       expect(onUploaded).toHaveBeenCalledWith(created);
     });
     expect(onClose).toHaveBeenCalled();
-    expect(mocks.pick).toHaveBeenCalledWith(credentials);
     expect(mocks.post).toHaveBeenCalledWith("/api/reports/local/drive", {
-      body: { fileId: "drive1", title: "Eco", nre: "0123A" },
+      body: { fileId: "drive1", title: "Eco nuovo", nre: "0123A" },
     });
   });
 
-  it("does nothing when the picker is cancelled", async () => {
+  it("clears the Drive file with the remove control", async () => {
+    mockDrivePick();
+    renderDialog({ connected: true });
+
+    await pickFromDrive();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Rimuovi file di Drive" }),
+    );
+
+    expect(screen.queryByText("eco.pdf")).toBeNull();
+    expect(screen.getByRole("button", { name: "Carica" })).toBeDisabled();
+  });
+
+  it("uploads a local file chosen after a Drive pick", async () => {
+    mockDrivePick();
+    mocks.post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/google/picker"
+          ? {
+              data: { accessToken: "t", apiKey: "k", appId: "1" },
+              response: { status: 200 },
+            }
+          : { data: created, response: { status: 201 } },
+      ),
+    );
+    const { onUploaded } = renderDialog({ connected: true });
+
+    await pickFromDrive();
+    await chooseFile(pdf("locale.pdf"));
+    expect(screen.queryByText("eco.pdf")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Carica" }));
+
+    await waitFor(() => {
+      expect(onUploaded).toHaveBeenCalledWith(created);
+    });
+    const paths = mocks.post.mock.calls.map((call: unknown[]) => call[0]);
+    expect(paths).toEqual(["/api/google/picker", "/api/reports/local"]);
+  });
+
+  it("keeps the dialog open with nothing selected when the picker is cancelled", async () => {
     mocks.post.mockResolvedValue({
       data: { accessToken: "t", apiKey: "k", appId: "1" },
       response: { status: 200 },
     });
     mocks.pick.mockResolvedValue(null);
-    const { onUploaded } = renderDialog({ connected: true });
+    const { onUploaded, onClose } = renderDialog({ connected: true });
 
     await userEvent.click(
       screen.getByRole("button", { name: "Scegli da Google Drive" }),
@@ -318,6 +387,11 @@ describe("UploadReportDialog", () => {
     });
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(onUploaded).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Rimuovi file di Drive" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Carica" })).toBeDisabled();
   });
 
   it("explains a picker that is not configured", async () => {
@@ -373,6 +447,9 @@ describe("UploadReportDialog", () => {
 
     await userEvent.click(
       screen.getByRole("button", { name: "Scegli da Google Drive" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Carica" }),
     );
 
     expect(
