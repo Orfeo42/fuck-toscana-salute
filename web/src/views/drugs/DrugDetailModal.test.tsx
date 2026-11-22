@@ -67,6 +67,10 @@ describe("DrugDetailModal", () => {
     });
     expect(within(dialog).getByText("Da ritirare")).toBeVisible();
     expect(
+      within(dialog).getByText("Prescritto il lun 2 nov 2026"),
+    ).toBeVisible();
+    expect(within(dialog).getByText("Data prescrizione")).toBeVisible();
+    expect(
       within(dialog).getByRole("button", { name: "Copia NRE 0900A0000000001" }),
     ).toBeVisible();
     expect(
@@ -82,12 +86,10 @@ describe("DrugDetailModal", () => {
     });
     renderModal();
 
-    expect(
-      await screen.findByRole("dialog", { name: "Farmaco non trovato" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Farmaco non trovato.")).toBeInTheDocument();
   });
 
-  it("shows the portal message on a server error", async () => {
+  it("shows the load error on a server error", async () => {
     mocks.post.mockResolvedValue({
       data: undefined,
       error: { detail: "x" },
@@ -95,9 +97,9 @@ describe("DrugDetailModal", () => {
     });
     renderModal();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Il portale regionale non risponde. Riprova tra poco.",
-    );
+    expect(
+      await screen.findByText("Impossibile caricare il farmaco."),
+    ).toBeInTheDocument();
   });
 
   it("starts a lists refresh then re-queries the row", async () => {

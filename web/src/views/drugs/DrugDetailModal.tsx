@@ -1,11 +1,11 @@
-import { Alert, Group, Loader, Modal, Stack } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { Loader, Paper, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import type { JSX } from "react";
 
 import { CopyButton } from "../../components/CopyButton";
+import { DetailDrawer } from "../../components/DetailDrawer";
 import { DetailField, DetailSection } from "../../components/DetailSection";
 import { IconAction } from "../../components/IconAction";
 import { PdfLink } from "../../components/PdfLink";
@@ -20,13 +20,37 @@ interface Props {
 }
 
 export function DrugDetailModal({ nre, onClose }: Props): JSX.Element {
-  const fullScreen = useMediaQuery("(max-width: 48em)");
-  const { data, error, notFound, loading, reload } = useRowQuery(
-    "/api/drugs/row",
-    { nre },
-  );
+  const query = useRowQuery("/api/drugs/row", { nre });
+  const { data, reload } = query;
   const [starting, setStarting] = useState(false);
-  const row = data?.row;
+
+  if (data === undefined) {
+    const message = query.notFound
+      ? "Farmaco non trovato."
+      : query.error === undefined
+        ? undefined
+        : "Impossibile caricare il farmaco.";
+    return (
+      <DetailDrawer
+        title="Farmaco"
+        tabs={[
+          {
+            value: "prescrizione",
+            label: "Prescrizione",
+            content:
+              message === undefined ? (
+                <Loader size="sm" aria-label="Carico il farmaco" />
+              ) : (
+                <Text size="sm">{message}</Text>
+              ),
+          },
+        ]}
+        onClose={onClose}
+      />
+    );
+  }
+
+  const { row } = data;
 
   const refreshLists = async (): Promise<void> => {
     setStarting(true);
@@ -50,54 +74,49 @@ export function DrugDetailModal({ nre, onClose }: Props): JSX.Element {
     }
   };
 
-  let title = "Carico il farmaco…";
-  if (row !== undefined) {
-    title = row.title;
-  }
-  if (notFound) {
-    title = "Farmaco non trovato";
-  }
-
   return (
-    <Modal
-      opened
+    <DetailDrawer
+      title={row.title}
+      badge={
+        <StatusBadge tone={row.status.tone}>{row.status.label}</StatusBadge>
+      }
+      summary={
+        row.date === undefined ? undefined : (
+          <Text size="sm">{`Prescritto il ${formatDate(row.date)}`}</Text>
+        )
+      }
+      actions={
+        <IconAction
+          label="Aggiorna"
+          icon={RefreshCw}
+          loading={starting || data.refreshing}
+          onClick={() => {
+            void refreshLists();
+          }}
+        />
+      }
+      tabs={[
+        {
+          value: "prescrizione",
+          label: "Prescrizione",
+          content: (
+            <Paper withBorder p="sm" radius="md">
+              <DetailSection
+                title="Prescrizione"
+                actions={<PdfLink documentRef={row.documentRef} />}
+              >
+                <DetailField label="Data prescrizione">
+                  {formatDate(row.date)}
+                </DetailField>
+                <DetailField label="NRE">
+                  <CopyButton value={row.nre} label="Copia NRE" />
+                </DetailField>
+              </DetailSection>
+            </Paper>
+          ),
+        },
+      ]}
       onClose={onClose}
-      title={title}
-      fullScreen={fullScreen}
-      centered
-    >
-      {loading && row === undefined ? <Loader size="sm" /> : null}
-      {error === undefined ? null : (
-        <Alert color="red" role="alert">
-          Il portale regionale non risponde. Riprova tra poco.
-        </Alert>
-      )}
-      {row === undefined ? null : (
-        <Stack gap="lg">
-          <DetailSection title="Stato">
-            <StatusBadge tone={row.status.tone}>{row.status.label}</StatusBadge>
-          </DetailSection>
-          <DetailSection title="Prescrizione">
-            <DetailField label="Data">{formatDate(row.date)}</DetailField>
-            <DetailField label="NRE">
-              <CopyButton value={row.nre} label="Copia NRE" />
-            </DetailField>
-          </DetailSection>
-          <DetailSection title="Azioni">
-            <Group gap="xs">
-              <PdfLink documentRef={row.documentRef} />
-              <IconAction
-                label="Aggiorna"
-                icon={RefreshCw}
-                loading={starting || data?.refreshing === true}
-                onClick={() => {
-                  void refreshLists();
-                }}
-              />
-            </Group>
-          </DetailSection>
-        </Stack>
-      )}
-    </Modal>
+    />
   );
 }
