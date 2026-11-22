@@ -4,22 +4,6 @@
  */
 
 export interface paths {
-    "/api/appointments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list-appointments"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/calendar/events": {
         parameters: {
             query?: never;
@@ -276,38 +260,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/prescriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list-prescriptions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["refresh"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/refresh/start": {
         parameters: {
             query?: never;
@@ -318,22 +270,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["start-refresh"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["list-reports"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -536,40 +472,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AppointmentBody: {
-            /** Format: date-time */
-            at?: string;
-            bookingId?: string;
-            cup?: components["schemas"]["PrescriptionCUPBody"];
-            fse?: components["schemas"]["PrescriptionFSEBody"];
-            id: string;
-            nre: string;
-            status: string;
-            unit: components["schemas"]["UnitBody"];
-        };
-        AppointmentsBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppointmentsBody.json
-             */
-            readonly $schema?: string;
-            appointments: components["schemas"]["AppointmentBody"][] | null;
-            failed: components["schemas"]["FailedBody"][] | null;
-            unbooked: string[] | null;
-            updated: components["schemas"]["AppointmentsUpdatedBody"];
-            verdicts: components["schemas"]["VerdictBody"][] | null;
-        };
-        AppointmentsUpdatedBody: {
-            appointments: {
-                [key: string]: string;
-            };
-            /** Format: date-time */
-            lists: string | null;
-            verdicts: {
-                [key: string]: string;
-            };
-        };
         CalendarEventBody: {
             /**
              * Format: uri
@@ -771,10 +673,6 @@ export interface components {
             readonly $schema?: string;
             facilities: components["schemas"]["FacilityBody"][] | null;
         };
-        FailedBody: {
-            nre: string;
-            reason: string;
-        };
         FocusBody: {
             found: boolean;
             nre: string;
@@ -933,50 +831,6 @@ export interface components {
             /** @enum {string} */
             state: "logged_out" | "active" | "expired";
         };
-        PrescriptionCUPBody: {
-            items: string[] | null;
-            kind: string;
-            nre: string;
-            /** Format: date-time */
-            prescribedOn?: string;
-            /** Format: int64 */
-            status: number;
-        };
-        PrescriptionFSEBody: {
-            /** Format: date-time */
-            date?: string;
-            description: string;
-            documentRef: string;
-            /** Format: date-time */
-            expiresOn?: string;
-            expiryEstimated?: boolean;
-            id: string;
-            kind: string;
-            nre: string;
-            /** Format: int64 */
-            status: number;
-        };
-        PrescriptionsBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PrescriptionsBody.json
-             */
-            readonly $schema?: string;
-            prescriptions: components["schemas"]["RowBody"][] | null;
-            /** Format: date-time */
-            updated: string | null;
-        };
-        RefreshRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RefreshRequest.json
-             */
-            readonly $schema?: string;
-            all?: boolean;
-            nres?: string[] | null;
-        };
         ReportBody: {
             /**
              * Format: uri
@@ -1110,18 +964,6 @@ export interface components {
             readonly $schema?: string;
             options: components["schemas"]["LinkedVisitBody"][];
         };
-        ReportsBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReportsBody.json
-             */
-            readonly $schema?: string;
-            failures: components["schemas"]["ReportFailureBody"][] | null;
-            reports: components["schemas"]["ReportBody"][] | null;
-            /** Format: date-time */
-            updated: string | null;
-        };
         ReportsQueryBody: {
             /**
              * Format: uri
@@ -1175,13 +1017,6 @@ export interface components {
              * @enum {string}
              */
             sort: "date" | "kind" | "provider";
-        };
-        RowBody: {
-            cup?: components["schemas"]["PrescriptionCUPBody"];
-            fse?: components["schemas"]["PrescriptionFSEBody"];
-            nre: string;
-            overridden: boolean;
-            reports: components["schemas"]["ReportRefBody"][] | null;
         };
         RowRequest: {
             /**
@@ -1244,15 +1079,6 @@ export interface components {
             /** @enum {string} */
             tone: "booked" | "done" | "tobook" | "pending" | "closed" | "error";
         };
-        UnitBody: {
-            address: string;
-            city: string;
-            description: string;
-            name: string;
-            place?: string;
-            postalCode?: string;
-            province: string;
-        };
         UpdateLocalReportRequest: {
             /**
              * Format: uri
@@ -1275,12 +1101,6 @@ export interface components {
             date: string;
             provider: string;
             title: string;
-        };
-        VerdictBody: {
-            message: string;
-            nre: string;
-            /** @enum {string} */
-            reason: "bookable" | "handled" | "expired" | "other";
         };
         VisitAppointmentBody: {
             /** Format: date-time */
@@ -1459,35 +1279,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    "list-appointments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppointmentsBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     "create-calendar-event": {
         parameters: {
             query?: never;
@@ -2073,66 +1864,6 @@ export interface operations {
             };
         };
     };
-    "list-prescriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PrescriptionsBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    refresh: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
     "start-refresh": {
         parameters: {
             query?: never;
@@ -2153,35 +1884,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StartRefreshBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "list-reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportsBody"];
                 };
             };
             /** @description Error */

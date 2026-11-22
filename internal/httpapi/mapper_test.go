@@ -7,14 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"fuck-toscana-salute/internal/agenda"
-	"fuck-toscana-salute/internal/cup"
-	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/session"
-	"fuck-toscana-salute/internal/upstream"
 )
 
 func TestToSessionBody(t *testing.T) {
@@ -64,146 +60,6 @@ func TestToSessionBody(t *testing.T) {
 	t.Run("carries the viewer flag", func(t *testing.T) {
 		assert.True(t, toSessionBody(session.Status{}, nil, "window", true).Viewer)
 		assert.False(t, toSessionBody(session.Status{}, nil, "window", false).Viewer)
-	})
-}
-
-func TestToPrescriptionsBodyExpiry(t *testing.T) {
-	t.Run("sets expiresOn when known", func(t *testing.T) {
-		at := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
-		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001", ExpiresAt: at}}})
-		require.NotNil(t, got.Prescriptions[0].FSE.ExpiresOn)
-		assert.True(t, at.Equal(*got.Prescriptions[0].FSE.ExpiresOn))
-	})
-
-	t.Run("omits expiresOn when unknown", func(t *testing.T) {
-		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001"}}})
-		assert.Nil(t, got.Prescriptions[0].FSE.ExpiresOn)
-	})
-}
-
-func TestToAppointmentsBodyBookingID(t *testing.T) {
-	t.Run("sets bookingId", func(t *testing.T) {
-		got := toAppointmentsBody(agenda.Result{Entries: []agenda.Entry{{NRE: "0900A0000000001", Appointment: cup.Appointment{ID: "1", BookingID: "ABC123456789"}}}})
-		assert.Equal(t, "ABC123456789", got.Appointments[0].BookingID)
-	})
-
-	t.Run("omits bookingId from json when empty", func(t *testing.T) {
-		got := toAppointmentsBody(agenda.Result{Entries: []agenda.Entry{{NRE: "0900A0000000001", Appointment: cup.Appointment{ID: "1"}}}})
-		assert.Empty(t, got.Appointments[0].BookingID)
-	})
-}
-
-func TestToAppointmentsBodyUnbooked(t *testing.T) {
-	t.Run("copies unbooked NREs in order", func(t *testing.T) {
-		got := toAppointmentsBody(agenda.Result{Unbooked: []string{"0900A0000000001", "0900A0000000002"}})
-		assert.Equal(t, []string{"0900A0000000001", "0900A0000000002"}, got.Unbooked)
-	})
-
-	t.Run("nil unbooked is an empty non-nil slice", func(t *testing.T) {
-		got := toAppointmentsBody(agenda.Result{})
-		assert.NotNil(t, got.Unbooked)
-		assert.Empty(t, got.Unbooked)
-	})
-}
-
-func TestToPrescriptionsBodyExpiryEstimated(t *testing.T) {
-	t.Run("sets expiryEstimated", func(t *testing.T) {
-		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001", ExpiryEstimated: true}}})
-		assert.True(t, got.Prescriptions[0].FSE.ExpiryEstimated)
-	})
-
-	t.Run("defaults to false", func(t *testing.T) {
-		got := toPrescriptionsBody([]agenda.Row{{NRE: "0900A0000000001", FSE: &fse.Prescription{NRE: "0900A0000000001"}}})
-		assert.False(t, got.Prescriptions[0].FSE.ExpiryEstimated)
-	})
-}
-
-func TestFailureReason(t *testing.T) {
-	t.Run("upstream 500 is a generic upstream failure", func(t *testing.T) {
-		assert.Equal(t, "upstream_500", failureReason(&upstream.StatusError{Status: 500}))
-	})
-}
-
-func TestToAppointmentsBodyVerdicts(t *testing.T) {
-	t.Run("verdicts follow unbooked order keyed by upper NRE", func(t *testing.T) {
-		result := agenda.Result{
-			Unbooked: []string{"0900a0000000002", "0900A0000000001", "0900A0000000003"},
-			Verdicts: map[string]cup.Verdict{
-				"0900A0000000001": {Reason: cup.VerdictExpired, Message: "scaduta"},
-				"0900A0000000002": {Reason: cup.VerdictBookable, Message: "ok"},
-			},
-		}
-
-		got := toAppointmentsBody(result)
-
-		assert.Equal(t, []VerdictBody{
-			{NRE: "0900a0000000002", Reason: "bookable", Message: "ok"},
-			{NRE: "0900A0000000001", Reason: "expired", Message: "scaduta"},
-		}, got.Verdicts)
-	})
-
-	t.Run("no verdicts is an empty slice", func(t *testing.T) {
-		got := toAppointmentsBody(agenda.Result{})
-
-		assert.NotNil(t, got.Verdicts)
-		assert.Empty(t, got.Verdicts)
-	})
-}
-
-func TestMergeLocal(t *testing.T) {
-	t.Run("override replaces the fse status and counts a difference", func(t *testing.T) {
-		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 5}, Reports: []ReportRefBody{}}}
-
-		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900a0000000001", Status: 8}})
-
-		assert.Equal(t, mergeStats{Overridden: 1, Differing: 1}, stats)
-		assert.True(t, rows[0].Overridden)
-		assert.Equal(t, 8, rows[0].FSE.Status)
-	})
-
-	t.Run("override replaces the cup status when there is no fse", func(t *testing.T) {
-		rows := []RowBody{{NRE: "0900A0000000001", CUP: &PrescriptionCUPBody{Status: 3}, Reports: []ReportRefBody{}}}
-
-		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900A0000000001", Status: 7}})
-
-		assert.Equal(t, mergeStats{Overridden: 1, Differing: 1}, stats)
-		assert.Equal(t, 7, rows[0].CUP.Status)
-	})
-
-	t.Run("override equal to the remote status is not differing", func(t *testing.T) {
-		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 8}, Reports: []ReportRefBody{}}}
-
-		stats := mergeLocal(rows, nil, []localrecords.Override{{NRE: "0900A0000000001", Status: 8}})
-
-		assert.Equal(t, mergeStats{Overridden: 1}, stats)
-	})
-
-	t.Run("rows without override stay untouched", func(t *testing.T) {
-		rows := []RowBody{{NRE: "0900A0000000001", FSE: &PrescriptionFSEBody{Status: 5}, Reports: []ReportRefBody{}}}
-
-		stats := mergeLocal(rows, nil, nil)
-
-		assert.Equal(t, mergeStats{}, stats)
-		assert.False(t, rows[0].Overridden)
-		assert.Equal(t, 5, rows[0].FSE.Status)
-		assert.Empty(t, rows[0].Reports)
-	})
-
-	t.Run("links are attached sorted by ref key", func(t *testing.T) {
-		rows := []RowBody{{NRE: "0900A0000000001", Reports: []ReportRefBody{}}, {NRE: "0900A0000000002", Reports: []ReportRefBody{}}}
-		links := []localrecords.Link{
-			{NRE: "0900a0000000001", Ref: referti.Ref{Kind: referti.KindRadiology, DetailID: "D2"}},
-			{NRE: "0900A0000000001", Ref: referti.Ref{Kind: referti.KindLab, AbstractID: "A1", DetailID: "D1", RepCode: "R1"}},
-		}
-
-		mergeLocal(rows, links, nil)
-
-		assert.Equal(t, []ReportRefBody{
-			{Kind: "lab", AbstractID: "A1", DetailID: "D1", RepCode: "R1"},
-			{Kind: "ris", DetailID: "D2"},
-		}, rows[0].Reports)
-		assert.Empty(t, rows[1].Reports)
-		assert.NotNil(t, rows[1].Reports)
 	})
 }
 

@@ -9,25 +9,6 @@ export interface SortState<K extends string> {
   ariaSort: (key: K) => "ascending" | "descending" | "none";
 }
 
-export function compareValues(
-  a: string | number | undefined,
-  b: string | number | undefined,
-  dir: SortDir,
-): number {
-  if (a === undefined && b === undefined) return 0;
-  if (a === undefined) return 1;
-  if (b === undefined) return -1;
-  const sign = dir === "asc" ? 1 : -1;
-  if (typeof a === "number" && typeof b === "number") return sign * (a - b);
-  return (
-    sign *
-    String(a).localeCompare(String(b), "it", {
-      sensitivity: "base",
-      numeric: true,
-    })
-  );
-}
-
 export function useSort<K extends string>(
   initialKey: K,
   initialDir: SortDir,

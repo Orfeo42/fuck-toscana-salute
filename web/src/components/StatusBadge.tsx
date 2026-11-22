@@ -2,8 +2,9 @@ import { Badge, Tooltip } from "@mantine/core";
 import { UserPen } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 
-export type StatusTone =
-  "booked" | "done" | "tobook" | "pending" | "closed" | "error";
+import type { StatusOptionBody } from "../api/client";
+
+export type StatusTone = StatusOptionBody["tone"];
 
 const colors: Readonly<Record<StatusTone, string>> = {
   booked: "blue",

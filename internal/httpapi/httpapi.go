@@ -10,12 +10,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
-	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/jwtclaims"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/session"
-	"fuck-toscana-salute/internal/upstream"
 )
 
 type sessionOutput struct {
@@ -40,14 +38,6 @@ type ImportLoginRequest struct {
 
 type emptyOutput struct{}
 
-type appointmentsOutput struct {
-	Body AppointmentsBody
-}
-
-type prescriptionsOutput struct {
-	Body PrescriptionsBody
-}
-
 type prescriptionPDFInput struct {
 	Ref string `query:"ref" required:"true" minLength:"1" maxLength:"200"`
 }
@@ -62,26 +52,10 @@ type bookingPDFInput struct {
 	ID string `query:"id" required:"true" minLength:"1" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
 }
 
-type refreshInput struct {
-	Body RefreshRequest
-}
-
-type RefreshRequest struct {
-	All  bool     `json:"all,omitempty"`
-	NREs []string `json:"nres,omitempty" maxItems:"200" pattern:"^[0-9A-Za-z]{10,20}$"`
-}
-
-func (r *RefreshRequest) Resolve(_ huma.Context, prefix *huma.PathBuffer) []error {
-	if r.All || len(r.NREs) > 0 {
-		return nil
-	}
-	return []error{&huma.ErrorDetail{Message: "all or nres is required", Location: prefix.With("all"), Value: r.All}}
-}
-
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, fac Facilities, visits VisitsView, reportsView ReportsView, drugs DrugsView, refresher Refresher, loginMode string, viewer bool) http.Handler {
+func New(store SessionStore, flow LoginFlow, docs Documents, g Google, reports Reports, local LocalRecords, fac Facilities, visits VisitsView, reportsView ReportsView, drugs DrugsView, refresher Refresher, loginMode string, viewer bool) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
-	register(api, store, flow, ag, docs, g, reports, local, fresh, loginMode, viewer)
+	register(api, store, flow, docs, g, reports, local, loginMode, viewer)
 	registerFacilities(api, fac)
 	registerVisits(api, visits)
 	registerReportsQuery(api, reportsView)
@@ -104,9 +78,9 @@ func sameOrigin(api huma.API) huma.Middlewares {
 	}}
 }
 
-func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, loginMode string, viewer bool) {
+func register(api huma.API, store SessionStore, flow LoginFlow, docs Documents, g Google, reports Reports, local LocalRecords, loginMode string, viewer bool) {
 	registerGoogle(api, g, docs)
-	registerReports(api, reports, fresh)
+	registerReports(api, reports)
 	registerLocal(api, local, g)
 
 	huma.Register(api, huma.Operation{
@@ -193,91 +167,6 @@ func register(api huma.API, store SessionStore, flow LoginFlow, ag Agenda, docs 
 		DefaultStatus: http.StatusNoContent,
 	}, func(_ context.Context, _ *struct{}) (*emptyOutput, error) {
 		store.Clear()
-		return &emptyOutput{}, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "list-appointments",
-		Method:        http.MethodGet,
-		Path:          "/api/appointments",
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, _ *struct{}) (*appointmentsOutput, error) {
-		result, err := ag.Appointments(ctx)
-		if err != nil {
-			return nil, toHTTPError(ctx, "list-appointments", err)
-		}
-		if len(result.Failed) > 0 {
-			first := result.Failed[0].Err
-			var statusErr *upstream.StatusError
-			exception := ""
-			shape := ""
-			if errors.As(first, &statusErr) {
-				exception = statusErr.ExceptionClass()
-				shape = statusErr.Shape()
-			}
-			slog.WarnContext(ctx, "appointment lookups failed",
-				slog.Int("failed", len(result.Failed)),
-				slog.Int("total", len(result.Entries)+len(result.Failed)),
-				slog.String("first_error", first.Error()),
-				slog.String("first_exception", exception),
-				slog.String("first_shape", shape))
-		}
-		body := toAppointmentsBody(result)
-		body.Updated = AppointmentsUpdatedBody{
-			Lists:        listUpdated(ctx, fresh, cache.SourceCUPPrescriptions, cache.SourceFSEPrescriptions),
-			Appointments: fetchedAt(ctx, fresh, cache.SourceCUPAppointments),
-			Verdicts:     fetchedAt(ctx, fresh, cache.SourceCUPVerdict),
-		}
-		return &appointmentsOutput{Body: body}, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "list-prescriptions",
-		Method:        http.MethodGet,
-		Path:          "/api/prescriptions",
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, _ *struct{}) (*prescriptionsOutput, error) {
-		rows, err := ag.Prescriptions(ctx)
-		if err != nil {
-			return nil, toHTTPError(ctx, "list-prescriptions", err)
-		}
-		overrides, err := local.Overrides(ctx)
-		if err != nil {
-			return nil, toHTTPError(ctx, "list-prescriptions", err)
-		}
-		links, err := local.Links(ctx)
-		if err != nil {
-			return nil, toHTTPError(ctx, "list-prescriptions", err)
-		}
-		body := toPrescriptionsBody(rows)
-		stats := mergeLocal(body.Prescriptions, links, overrides)
-		slog.InfoContext(ctx, "visit status overrides applied", slog.Int("overridden", stats.Overridden), slog.Int("differing", stats.Differing))
-		body.Updated = listUpdated(ctx, fresh, cache.SourceFSEPrescriptions)
-		return &prescriptionsOutput{Body: body}, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID:   "refresh",
-		Method:        http.MethodPost,
-		Path:          "/api/refresh",
-		DefaultStatus: http.StatusNoContent,
-		Middlewares:   sameOrigin(api),
-	}, func(ctx context.Context, in *refreshInput) (*emptyOutput, error) {
-		refreshCtx := cache.WithRefresh(ctx, cache.Scope{All: in.Body.All, NREs: in.Body.NREs})
-		if _, err := ag.Appointments(refreshCtx); err != nil {
-			return nil, toHTTPError(ctx, "refresh", err)
-		}
-		if !in.Body.All {
-			return &emptyOutput{}, nil
-		}
-		_, err := reports.List(refreshCtx)
-		if errors.Is(err, session.ErrNotLoggedIn) || errors.Is(err, session.ErrSessionExpired) {
-			slog.WarnContext(ctx, "refresh: reports skipped", slog.String("error", err.Error()))
-			return &emptyOutput{}, nil
-		}
-		if err != nil {
-			return nil, toHTTPError(ctx, "refresh", err)
-		}
 		return &emptyOutput{}, nil
 	})
 

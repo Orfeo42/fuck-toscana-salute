@@ -73,14 +73,6 @@ func (r remoteReports) CachedList(ctx context.Context) (cache.Entry[referti.List
 	return r.cached.CachedList(ctx)
 }
 
-type freshness struct {
-	st *store.Store
-}
-
-func (f freshness) FetchedAt(ctx context.Context, source string) (map[string]time.Time, error) {
-	return cache.FetchedAt(ctx, f.st, source)
-}
-
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
@@ -160,12 +152,10 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	api := httpapi.New(
 		sessions,
 		flow,
-		ag,
 		documents{Client: fseClient, bookings: cupClient},
 		googleClient,
 		reportsService,
 		local,
-		freshness{st: st},
 		facilitiesService,
 		visitsview.New(ag, reportsService, local, refresher),
 		reportsview.New(reportsService, ag, refresher),

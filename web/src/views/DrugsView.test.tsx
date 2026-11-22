@@ -1,21 +1,31 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { JSX } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RowBody, SessionBody } from "../api/client";
-import { HealthDataProvider } from "../data/HealthDataProvider";
-import { SessionContext } from "../session/useSession";
-import { callsTo } from "../test/calls";
+import type {
+  DrugRowBody,
+  DrugRowResponseBody,
+  DrugsQueryBody,
+  DrugsQueryRequest,
+} from "../api/client";
+import { TestProviders } from "../test/TestProviders";
+import { WithSession } from "../test/WithSession";
 import { DrugsView } from "./DrugsView";
-import { render } from "../test/render";
 
 const mocks = vi.hoisted(() => ({
-  get: vi.fn(),
-  refreshPortals: vi.fn(),
+  post: vi.fn<
+    (path: string, init: { body: DrugsQueryRequest }) => Promise<unknown>
+  >(),
+  startRefresh: vi.fn(),
 }));
 
-vi.mock("../data/refresh", () => ({ refreshPortals: mocks.refreshPortals }));
+vi.mock("../data/refresh", () => ({ startRefresh: mocks.startRefresh }));
 
 vi.mock("../lib/pdf", () => ({
   loadPdf: () => ({
@@ -25,108 +35,91 @@ vi.mock("../lib/pdf", () => ({
 }));
 
 vi.mock("../api/client", () => ({
-  api: { GET: mocks.get },
+  api: { POST: mocks.post },
   prescriptionPdfUrl: (ref: string) => `/api/documents/prescription?ref=${ref}`,
 }));
 
-function drug(
-  suffix: string,
-  description: string,
-  status: number,
-  date: string,
-): RowBody {
-  const nre = `0900A00000000${suffix}`;
+function drug(suffix: string, title: string, label: string): DrugRowBody {
   return {
-    overridden: false,
-    reports: [],
-    nre,
-    fse: {
-      id: `f${suffix}`,
-      nre,
-      description,
-      kind: "drug",
-      status,
-      date,
-      documentRef: `ref-${suffix}`,
-    },
+    nre: `0900A00000000${suffix}`,
+    title,
+    date: "2026-11-02T09:00:00Z",
+    documentRef: `ref-${suffix}`,
+    status: { key: "taken_in_charge", label, tone: "tobook" },
   };
 }
 
-const pickupOld = drug(
-  "01",
-  "Farmaco esempio antico",
-  3,
-  "2026-10-01T09:00:00Z",
-);
-const pickupNew = drug("02", "Farmaco esempio", 3, "2026-11-02T09:00:00Z");
-const done = drug("03", "Farmaco erogato esempio", 8, "2026-09-01T09:00:00Z");
-const visit: RowBody = {
-  overridden: false,
-  reports: [],
-  nre: "0900A0000000004",
-  fse: {
-    id: "f4",
-    nre: "0900A0000000004",
-    description: "Visita esempio",
-    kind: "visit",
-    status: 3,
-    date: "2026-11-04T09:00:00Z",
-    documentRef: "ref-4",
-  },
-};
+const first = drug("01", "Farmaco Esempio", "Da ritirare");
+const second = drug("02", "Farmaco Esempio Antico", "Da ritirare");
 
-const rows = [pickupOld, pickupNew, done, visit];
-
-function stubScroll(scroll: () => void): void {
-  vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(scroll);
+function page(overrides: Partial<DrugsQueryBody> = {}): DrugsQueryBody {
+  return {
+    rows: [first, second],
+    total: 2,
+    page: 1,
+    pageSize: 50,
+    statuses: [
+      {
+        key: "taken_in_charge",
+        label: "Da ritirare",
+        tone: "tobook",
+        count: 2,
+        excluded: false,
+      },
+      {
+        key: "done",
+        label: "Erogata",
+        tone: "done",
+        count: 1,
+        excluded: true,
+      },
+    ],
+    excludedStatuses: ["done"],
+    search: "",
+    refreshing: false,
+    updated: { at: null, label: "Aggiornato il 09/01 09:05" },
+    issue: "none",
+    ...overrides,
+  };
 }
 
-const session: SessionBody = {
-  gestioneReady: true,
-  loginMode: "window",
-  viewer: false,
-  portals: [
-    { portal: "cup", state: "active", login: { phase: "idle" } },
-    { portal: "fse", state: "active", login: { phase: "idle" } },
-  ],
-};
-
-function Harness(): JSX.Element {
-  return (
-    <SessionContext.Provider
-      value={{
-        session,
-        error: undefined,
-        refresh: vi.fn(),
-        loginAll: vi.fn(),
-        logout: vi.fn(),
-      }}
-    >
-      <HealthDataProvider>
-        <DrugsView />
-      </HealthDataProvider>
-    </SessionContext.Provider>
-  );
+function rowAnswer(row: DrugRowBody): DrugRowResponseBody {
+  return { row, refreshing: false };
 }
 
-function mockPrescriptions(body: {
-  prescriptions: RowBody[] | null;
-  updated?: string;
-}): void {
-  mocks.get.mockImplementation((path: string) => {
-    if (path === "/api/appointments") {
+function queryBodies(): DrugsQueryRequest[] {
+  return mocks.post.mock.calls
+    .filter((call) => call[0] === "/api/drugs/query")
+    .map((call) => call[1].body);
+}
+
+function answerQuery(body: DrugsQueryBody): void {
+  mocks.post.mockImplementation((path: string) => {
+    if (path === "/api/drugs/row") {
       return Promise.resolve({
-        data: {
-          appointments: [],
-          failed: [],
-          unbooked: [],
-          verdicts: [],
-          updated: { lists: null, appointments: {}, verdicts: {} },
-        },
+        data: rowAnswer(first),
+        response: { status: 200 },
       });
     }
-    return Promise.resolve({ data: body });
+    return Promise.resolve({ data: body, response: { status: 200 } });
   });
+}
+
+function failQuery(status: number): void {
+  mocks.post.mockResolvedValue({
+    data: undefined,
+    error: { detail: "x" },
+    response: { status },
+  });
+}
+
+function renderView(): void {
+  rtlRender(
+    <WithSession>
+      <DrugsView />
+    </WithSession>,
+    { wrapper: TestProviders },
+  );
 }
 
 function at(items: HTMLElement[], index: number): HTMLElement {
@@ -141,38 +134,33 @@ function bodyRows(): HTMLElement[] {
   return screen.getAllByRole("row").slice(1);
 }
 
-type User = ReturnType<typeof userEvent.setup>;
-
 function sortHeader(name: string): HTMLElement {
   return screen.getByRole("button", { name: new RegExp(`^${name}`) });
 }
 
-function sortLabel(name: string): string | null {
-  return within(sortHeader(name)).getByRole("img").getAttribute("aria-label");
-}
-
-async function openStatusFilter(user: User): Promise<void> {
+async function openStatusFilter(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
   await user.click(within(sortHeader("Stato")).getByRole("button"));
-}
-
-function descriptions(): (string | null)[] {
-  return bodyRows().map(
-    (row) => within(row).getAllByRole("cell")[2]?.textContent ?? null,
-  );
 }
 
 describe("DrugsView", () => {
   beforeEach(() => {
-    mocks.get.mockReset();
+    mocks.post.mockReset();
+    mocks.startRefresh.mockReset();
+    mocks.startRefresh.mockResolvedValue(true);
     window.location.hash = "";
-    mocks.refreshPortals.mockReset();
-    mocks.refreshPortals.mockResolvedValue(true);
-    mockPrescriptions({ prescriptions: rows });
+    answerQuery(page());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("shows the loading state", () => {
-    mocks.get.mockReturnValue(new Promise(() => undefined));
-    render(<Harness />);
+    mocks.post.mockReturnValue(new Promise(() => undefined));
+    renderView();
 
     expect(screen.getByText("Carico i farmaci…")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Farmaci" })).toHaveAttribute(
@@ -181,250 +169,111 @@ describe("DrugsView", () => {
     );
   });
 
-  it("excludes visit rows", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await openStatusFilter(user);
-    await user.click(await screen.findByRole("button", { name: "Tutti" }));
-
-    expect(screen.queryByText("Visita esempio")).not.toBeInTheDocument();
-    expect(bodyRows()).toHaveLength(3);
-  });
-
-  it("renders the columns", async () => {
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
+  it("renders rows, status badge and freshness from the response", async () => {
+    renderView();
+    await screen.findByText("Farmaco Esempio");
 
     const headers = [...screen.getByRole("table").querySelectorAll("th")].map(
       (h) => h.textContent,
     );
-    expect(headers).toEqual(["", "Data", "Farmaco", "Stato", "NRE", "Azioni"]);
-    const cells = within(at(bodyRows(), 0)).getAllByRole("cell");
-    expect(cells).toHaveLength(6);
-    expect(within(at(cells, 3)).getByText("Da ritirare")).toBeVisible();
-    expect(within(at(cells, 4)).getByText("0900A0000000002")).toBeVisible();
-  });
-
-  it("hides closed statuses by default, newest first", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    expect(descriptions()).toEqual([
-      "Farmaco esempio",
-      "Farmaco esempio antico",
-    ]);
+    expect(headers).toEqual(["Data", "Farmaco", "Stato", "NRE", "Azioni"]);
+    expect(bodyRows()).toHaveLength(2);
+    expect(screen.getAllByText("Da ritirare")[0]).toBeVisible();
+    expect(screen.getByText("0900A0000000001")).toBeVisible();
     expect(screen.getByText("2 farmaci")).toBeInTheDocument();
-
-    await openStatusFilter(user);
-
-    expect(
-      await screen.findByRole("checkbox", { name: "Da ritirare (2)" }),
-    ).toBeChecked();
-    expect(
-      screen.getByRole("checkbox", { name: "Erogata (1)" }),
-    ).not.toBeChecked();
+    expect(screen.getByText("Aggiornato il 09/01 09:05")).toBeVisible();
   });
 
-  it("shows closed rows after ticking Erogata", async () => {
+  it("sends the default request with no excluded statuses", async () => {
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+
+    expect(queryBodies()[0]).toEqual({
+      search: "",
+      sort: "date",
+      dir: "desc",
+      page: 1,
+      pageSize: 50,
+    });
+  });
+
+  it("sends the chosen excluded statuses and resets the page", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
+    renderView();
+    await screen.findByText("Farmaco Esempio");
     await openStatusFilter(user);
 
     await user.click(
       await screen.findByRole("checkbox", { name: "Erogata (1)" }),
     );
 
-    expect(bodyRows()).toHaveLength(3);
-    expect(screen.getByText("Farmaco erogato esempio")).toBeInTheDocument();
-    expect(screen.getByText("3 farmaci")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(queryBodies().at(-1)).toMatchObject({
+        excludeStatuses: [],
+        page: 1,
+      });
+    });
   });
 
-  it("shows the empty text with Nessuno", async () => {
+  it("sends Nessuno as every status key", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
+    renderView();
+    await screen.findByText("Farmaco Esempio");
     await openStatusFilter(user);
 
     await user.click(await screen.findByRole("button", { name: "Nessuno" }));
 
-    expect(
-      screen.getByText("Nessun farmaco in questa vista."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("0 farmaci")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(queryBodies().at(-1)).toMatchObject({
+        excludeStatuses: ["taken_in_charge", "done"],
+      });
+    });
   });
 
-  it("narrows the list with the search box", async () => {
+  it("sends the search text", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
+    renderView();
+    await screen.findByText("Farmaco Esempio");
 
-    await user.type(screen.getByRole("searchbox", { name: "Cerca" }), "ANTICO");
+    await user.type(screen.getByRole("searchbox", { name: "Cerca" }), "antico");
 
-    expect(descriptions()).toEqual(["Farmaco esempio antico"]);
-    expect(screen.getByText("1 farmaci")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(queryBodies().at(-1)).toMatchObject({ search: "antico", page: 1 });
+    });
   });
 
-  it("finds a row by NRE", async () => {
+  it("sends the sort key and direction", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await user.type(screen.getByRole("searchbox"), "0900A0000000002");
-
-    expect(descriptions()).toEqual(["Farmaco esempio"]);
-  });
-
-  it("sorts by header and shows the sort direction", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-    expect(sortLabel("Data")).toBe("Sorted descending");
-
-    await user.click(sortHeader("Data"));
-
-    expect(sortLabel("Data")).toBe("Sorted ascending");
-    expect(descriptions()).toEqual([
-      "Farmaco esempio antico",
-      "Farmaco esempio",
-    ]);
+    renderView();
+    await screen.findByText("Farmaco Esempio");
 
     await user.click(sortHeader("NRE"));
 
-    expect(sortLabel("NRE")).toBe("Sorted ascending");
-    expect(sortLabel("Data")).toBe("Not sorted");
-    expect(descriptions()).toEqual([
-      "Farmaco esempio antico",
-      "Farmaco esempio",
-    ]);
-  });
-
-  it("links the PDF", async () => {
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await userEvent.setup().click(
-      within(at(bodyRows(), 0)).getByRole("button", {
-        name: "Apri ricetta (PDF)",
-      }),
-    );
-    expect(
-      await screen.findByRole("dialog", { name: "Ricetta" }),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the copy button", async () => {
-    const user = userEvent.setup();
-    const writeText = vi.spyOn(navigator.clipboard, "writeText");
-    writeText.mockResolvedValue(undefined);
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await user.click(
-      within(at(bodyRows(), 0)).getByRole("button", {
-        name: "Copia NRE 0900A0000000002",
-      }),
-    );
-
-    expect(writeText).toHaveBeenCalledWith("0900A0000000002");
-  });
-
-  it("opens the detail modal on row click", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await user.click(within(at(bodyRows(), 0)).getByText("Farmaco esempio"));
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Farmaco esempio",
-    });
-    expect(within(dialog).getByText("Da ritirare")).toBeVisible();
-    expect(
-      within(dialog).getByRole("button", {
-        name: "Copia NRE 0900A0000000002",
-      }),
-    ).toBeVisible();
-    await user.click(
-      within(dialog).getByRole("button", { name: "Apri ricetta (PDF)" }),
-    );
-    expect(
-      await screen.findByRole("dialog", { name: "Ricetta" }),
-    ).toBeInTheDocument();
-  });
-
-  it("opens the detail modal with Enter on a focused row", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    at(bodyRows(), 0).focus();
-    await user.keyboard("{Enter}");
-
-    expect(
-      await screen.findByRole("dialog", { name: "Farmaco esempio" }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not open the detail modal from the NRE copy button", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await user.click(
-      within(at(bodyRows(), 0)).getByRole("button", {
-        name: "Copia NRE 0900A0000000002",
-      }),
-    );
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("shows the login message on 401", async () => {
-    mocks.get.mockResolvedValue({
-      error: { detail: "no session" },
-      response: { status: 401 },
-    });
-    render(<Harness />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Accedi per vedere i farmaci.",
-    );
-  });
-
-  it("shows the portal message when unavailable", async () => {
-    mocks.get.mockResolvedValue({
-      error: { detail: "bad gateway" },
-      response: { status: 502 },
-    });
-    render(<Harness />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Il portale regionale non risponde. Riprova tra poco.",
-    );
-  });
-
-  it("refreshes everything then refetches on Aggiorna tutto", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-    expect(callsTo(mocks.get, "/api/prescriptions")).toBe(1);
-
-    await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
-
-    expect(mocks.refreshPortals).toHaveBeenCalledWith({ all: true });
     await waitFor(() => {
-      expect(callsTo(mocks.get, "/api/prescriptions")).toBe(2);
+      expect(queryBodies().at(-1)).toMatchObject({
+        sort: "nre",
+        dir: "asc",
+        page: 1,
+      });
     });
   });
 
-  it("treats a null list as empty", async () => {
-    mockPrescriptions({ prescriptions: null });
-    render(<Harness />);
+  it("sends the page and page size from the pager", async () => {
+    const user = userEvent.setup();
+    answerQuery(page({ total: 120 }));
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+
+    await user.click(screen.getByRole("button", { name: "2" }));
+
+    await waitFor(() => {
+      expect(queryBodies().at(-1)).toMatchObject({ page: 2, pageSize: 50 });
+    });
+  });
+
+  it("shows the empty text", async () => {
+    answerQuery(page({ rows: [], total: 0 }));
+    renderView();
 
     expect(
       await screen.findByText("Nessun farmaco in questa vista."),
@@ -432,107 +281,181 @@ describe("DrugsView", () => {
     expect(screen.getByText("0 farmaci")).toBeInTheDocument();
   });
 
-  it("focuses the row of a deep-linked NRE", async () => {
-    const scroll = vi.fn();
-    stubScroll(scroll);
-    window.location.hash = "#/farmaci/0900A0000000002";
-    try {
-      render(<Harness />);
-      const row = (await screen.findByText("Farmaco esempio")).closest("tr");
+  it("shows the login message on 401", async () => {
+    failQuery(401);
+    renderView();
 
-      expect(row).toHaveAttribute("data-focused", "true");
-      expect(row).toHaveFocus();
-      expect(scroll).toHaveBeenCalled();
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-
-  it("shows and focuses a deep-linked row whose status is excluded", async () => {
-    const user = userEvent.setup();
-    stubScroll(vi.fn());
-    window.location.hash = "#/farmaci/0900A0000000003";
-    try {
-      render(<Harness />);
-      const row = (await screen.findByText("Farmaco erogato esempio")).closest(
-        "tr",
-      );
-
-      expect(row).toHaveAttribute("data-focused", "true");
-      expect(row).toHaveFocus();
-
-      await openStatusFilter(user);
-
-      expect(
-        await screen.findByRole("checkbox", { name: "Erogata (1)" }),
-      ).toBeChecked();
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-
-  it("refreshes the selected rows by NRE and clears the selection", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-    const row = at(bodyRows(), 0);
-    expect(
-      screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
-    ).not.toBeInTheDocument();
-
-    await user.click(within(row).getByRole("checkbox"));
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Aggiorna selezionate (1)" }),
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Accedi per vedere i farmaci.",
     );
-    expect(mocks.refreshPortals).toHaveBeenCalledWith({
-      nres: ["0900A0000000002"],
-    });
+  });
+
+  it("shows the portal message on a server error", async () => {
+    failQuery(502);
+    renderView();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Il portale regionale non risponde. Riprova tra poco.",
+    );
+  });
+
+  it("shows the login message from the response issue", async () => {
+    answerQuery(page({ issue: "login_required" }));
+    renderView();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Accedi per vedere i farmaci.",
+    );
+    expect(screen.getByText("Farmaco Esempio")).toBeInTheDocument();
+  });
+
+  it("shows the portal message from the response issue", async () => {
+    answerQuery(page({ issue: "unavailable" }));
+    renderView();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Il portale regionale non risponde. Riprova tra poco.",
+    );
+  });
+
+  it("starts a lists refresh then re-queries on Aggiorna", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+    expect(queryBodies()).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Aggiorna" }));
+
+    expect(mocks.startRefresh).toHaveBeenCalledWith({ lists: true });
     await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: /^Aggiorna selezionate/ }),
-      ).not.toBeInTheDocument();
+      expect(queryBodies()).toHaveLength(2);
     });
   });
 
-  it("refreshes one NRE from the detail modal", async () => {
+  it("shows a notification and does not re-query when the refresh fails", async () => {
     const user = userEvent.setup();
-    render(<Harness />);
-    await user.click(await screen.findByText("Farmaco esempio"));
+    mocks.startRefresh.mockResolvedValue(false);
+    renderView();
+    await screen.findByText("Farmaco Esempio");
 
-    const dialog = await screen.findByRole("dialog", {
-      name: "Farmaco esempio",
-    });
-    await user.click(within(dialog).getByRole("button", { name: "Aggiorna" }));
-
-    expect(mocks.refreshPortals).toHaveBeenCalledWith({
-      nres: ["0900A0000000002"],
-    });
-  });
-
-  it("shows a notification when the refresh fails", async () => {
-    const user = userEvent.setup();
-    mocks.refreshPortals.mockResolvedValue(false);
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
-
-    await user.click(screen.getByRole("button", { name: "Aggiorna tutto" }));
+    await user.click(screen.getByRole("button", { name: "Aggiorna" }));
 
     expect(await screen.findByText("Aggiornamento non riuscito")).toBeVisible();
+    expect(queryBodies()).toHaveLength(1);
   });
 
-  it("shows the freshness text and hides it when null", async () => {
-    mockPrescriptions({ prescriptions: rows, updated: "2026-01-09T08:05:00Z" });
-    render(<Harness />);
+  it("polls while the response says refreshing", async () => {
+    vi.useFakeTimers();
+    mocks.post.mockResolvedValueOnce({
+      data: page({ refreshing: true }),
+      response: { status: 200 },
+    });
+    mocks.post.mockResolvedValue({
+      data: page({ refreshing: false }),
+      response: { status: 200 },
+    });
+    renderView();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(queryBodies()).toHaveLength(1);
 
-    expect(await screen.findByText("Aggiornato il 09/01 09:05")).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(queryBodies()).toHaveLength(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    expect(queryBodies()).toHaveLength(2);
   });
 
-  it("hides the freshness text without an update time", async () => {
-    render(<Harness />);
-    await screen.findByText("Farmaco esempio");
+  it("opens the drawer on row click and renders the row", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await user.click(await screen.findByText("Farmaco Esempio Antico"));
 
-    expect(screen.queryByText(/^Aggiornato (alle|il)/)).not.toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", {
+      name: "Farmaco Esempio",
+    });
+    expect(within(dialog).getByText("Da ritirare")).toBeVisible();
+    expect(mocks.post).toHaveBeenCalledWith("/api/drugs/row", {
+      body: { nre: "0900A0000000002" },
+      signal: expect.any(AbortSignal) as AbortSignal,
+    });
+  });
+
+  it("opens the drawer with Enter on a focused row", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+
+    at(bodyRows(), 0).focus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not open the drawer from the NRE copy button", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+
+    await user.click(
+      screen.getByRole("button", { name: "Copia NRE 0900A0000000001" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the ricetta PDF from the row", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Farmaco Esempio");
+
+    await user.click(
+      within(at(bodyRows(), 0)).getByRole("button", {
+        name: "Apri ricetta (PDF)",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Ricetta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends the deep-linked NRE as focus once then follows the returned page", async () => {
+    window.location.hash = "#/farmaci/0900A0000000002";
+    mocks.post.mockResolvedValueOnce({
+      data: page({
+        page: 2,
+        excludedStatuses: [],
+        search: "",
+        focus: { nre: "0900A0000000002", found: true },
+      }),
+      response: { status: 200 },
+    });
+    mocks.post.mockResolvedValue({
+      data: page({ page: 2, excludedStatuses: [] }),
+      response: { status: 200 },
+    });
+    renderView();
+    const row = (await screen.findByText("Farmaco Esempio Antico")).closest(
+      "tr",
+    );
+
+    expect(row).toHaveAttribute("data-focused", "true");
+    await waitFor(() => {
+      expect(queryBodies()).toHaveLength(2);
+    });
+    expect(queryBodies()[0]).toMatchObject({ focus: "0900A0000000002" });
+    expect(queryBodies()[1]).toMatchObject({
+      page: 2,
+      excludeStatuses: [],
+      search: "",
+    });
+    expect(queryBodies()[1]).not.toHaveProperty("focus");
   });
 });

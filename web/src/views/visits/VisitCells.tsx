@@ -2,6 +2,7 @@ import {
   ActionIcon,
   Box,
   Group,
+  Loader,
   Popover,
   Stack,
   Text,
@@ -11,17 +12,14 @@ import {
 import { Info, MapPin } from "lucide-react";
 import { useState, type JSX } from "react";
 
-import type { AppointmentBody, RowBody } from "../../api/client";
+import type { VisitRowBody } from "../../api/client";
 import { PdfLink } from "../../components/PdfLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { StopClick } from "../../components/StopClick";
 import { formatCompactDateTime } from "../../lib/format";
 import { BookAction } from "./BookAction";
 import { CalendarAction } from "./CalendarAction";
-import { unitName, rowTitle, type EffectiveState } from "./filter";
-import { mapsSearchUrl } from "./mapsUrl";
 import { PromemoriaLink } from "./PromemoriaLink";
-import { statusDetails } from "./statusDetails";
 
 const slotSize = 34;
 const infoWidth = 280;
@@ -70,72 +68,70 @@ function StatusInfo({ details }: InfoProps): JSX.Element {
   );
 }
 
-interface StatusProps {
-  row: RowBody;
-  state: EffectiveState;
+interface RowProps {
+  row: VisitRowBody;
 }
 
-export function StatusCell({ row, state }: StatusProps): JSX.Element {
-  const details = statusDetails(row, state);
+export function StatusCell({ row }: RowProps): JSX.Element {
+  const { status } = row;
   return (
     <Group gap={4} wrap="nowrap">
-      <StatusBadge tone={state.tone} manual={state.manual}>
-        {state.label}
+      <StatusBadge tone={status.tone} manual={status.manual}>
+        {status.label}
       </StatusBadge>
-      {details.length === 0 ? null : <StatusInfo details={details} />}
+      {status.details.length === 0 ? null : (
+        <StatusInfo details={status.details} />
+      )}
+      {row.refreshing ? <Loader size="xs" aria-label="Aggiorno" /> : null}
     </Group>
   );
 }
 
-interface AppointmentProps {
-  state: EffectiveState;
-  loading: boolean;
-  failed: boolean;
+interface AppointmentProps extends RowProps {
   onOpen: () => void;
 }
 
 export function AppointmentCell({
-  state,
-  loading,
-  failed,
+  row,
   onOpen,
 }: AppointmentProps): JSX.Element | null {
-  const at = state.kind === "booked" ? state.at : undefined;
+  const at = row.appointment?.at;
   if (at !== undefined) {
     return (
-      <UnstyledButton aria-label="Dettagli appuntamento" onClick={onOpen}>
-        <Text size="sm" span>
-          {formatCompactDateTime(at)}
-        </Text>
-      </UnstyledButton>
+      <Stack gap={0}>
+        <UnstyledButton aria-label="Dettagli appuntamento" onClick={onOpen}>
+          <Text size="sm" span>
+            {formatCompactDateTime(at)}
+          </Text>
+        </UnstyledButton>
+        {row.appointment?.relativeDay === undefined ? null : (
+          <Text size="xs" c="dimmed">
+            {row.appointment.relativeDay}
+          </Text>
+        )}
+      </Stack>
     );
   }
-  if (loading) {
+  if (row.appointmentLookup === "checking") {
     return <>ricerca…</>;
   }
-  return failed ? <>—</> : null;
+  return row.appointmentLookup === "failed" ? <>—</> : null;
 }
 
-interface PlaceProps {
-  state: EffectiveState;
-  booking: AppointmentBody | undefined;
-}
-
-export function PlaceCell({ state, booking }: PlaceProps): JSX.Element | null {
-  const unit = state.kind === "booked" ? booking?.unit : undefined;
+export function PlaceCell({ row }: RowProps): JSX.Element | null {
+  const unit = row.appointment?.unit;
   if (unit === undefined || unit.address === "") {
     return null;
   }
-  const name = unitName(unit);
   return (
     <StopClick>
-      <Tooltip label={name} withArrow openDelay={150}>
+      <Tooltip label={unit.displayName} withArrow openDelay={150}>
         <ActionIcon
           component="a"
           variant="subtle"
           size="lg"
-          aria-label={`Apri in Google Maps: ${name}`}
-          href={mapsSearchUrl(unit)}
+          aria-label={`Apri in Google Maps: ${unit.displayName}`}
+          href={unit.mapsSearchUrl}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -146,43 +142,23 @@ export function PlaceCell({ state, booking }: PlaceProps): JSX.Element | null {
   );
 }
 
-interface ActionsProps {
-  row: RowBody;
-  state: EffectiveState;
-  booking: AppointmentBody | undefined;
-  now: Date;
-}
-
-export function ActionsCell({
-  row,
-  state,
-  booking,
-  now,
-}: ActionsProps): JSX.Element {
-  const at = state.kind === "booked" ? state.at : undefined;
-  const calendarBooking =
-    booking !== undefined &&
-    at !== undefined &&
-    new Date(at).getTime() > now.getTime()
-      ? booking
-      : undefined;
-  const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
-
+export function ActionsCell({ row }: RowProps): JSX.Element {
+  const { appointment } = row;
   return (
     <Group gap={2} wrap="nowrap">
       <Box w={slotSize} h={slotSize}>
-        <PromemoriaLink bookingId={bookingId} />
+        <PromemoriaLink bookingId={appointment?.bookingId} />
       </Box>
       <Box w={slotSize} h={slotSize}>
-        {calendarBooking === undefined ? null : (
-          <CalendarAction appointment={calendarBooking} title={rowTitle(row)} />
-        )}
+        {appointment?.upcoming === true ? (
+          <CalendarAction appointment={appointment} />
+        ) : null}
       </Box>
       <Box w={slotSize} h={slotSize}>
-        <PdfLink documentRef={row.fse?.documentRef} />
+        <PdfLink documentRef={row.documentRef} />
       </Box>
       <Box w={slotSize} h={slotSize}>
-        {state.kind === "official" && state.canBook ? <BookAction /> : null}
+        {row.status.canBook ? <BookAction /> : null}
       </Box>
     </Group>
   );

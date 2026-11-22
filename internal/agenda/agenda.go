@@ -13,7 +13,6 @@ import (
 	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/session"
 )
 
@@ -24,10 +23,15 @@ func (e agendaError) Error() string { return string(e) }
 const (
 	ErrCUPPrescriptions = agendaError("agenda: cup prescriptions failed")
 	ErrFSEPrescriptions = agendaError("agenda: fse prescriptions failed")
+	ErrAppointments     = agendaError("agenda: cached appointments failed")
+	ErrVerdicts         = agendaError("agenda: cached verdicts failed")
+	ErrRefreshNREs      = agendaError("agenda: refresh of some NREs failed")
 )
 
 const (
 	bookedStatus     = "PRENOTATO"
+	cancelledStatus  = "DISDETTO"
+	defaultTitle     = "Prescrizione"
 	maxPrescribedAge = 365 * 24 * time.Hour
 )
 
@@ -251,7 +255,10 @@ func (a *Agenda) Prescriptions(ctx context.Context) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
+	return mergeRows(cupPrescriptions, fsePrescriptions), nil
+}
 
+func mergeRows(cupPrescriptions []cup.Prescription, fsePrescriptions []fse.Prescription) []Row {
 	rows := []Row{}
 	index := map[string]int{}
 	for i := range cupPrescriptions {
@@ -276,7 +283,7 @@ func (a *Agenda) Prescriptions(ctx context.Context) ([]Row, error) {
 		rows = append(rows, Row{NRE: fsePrescriptions[i].NRE, FSE: &fsePrescriptions[i]})
 	}
 	slices.SortStableFunc(rows, compareRows)
-	return rows, nil
+	return rows
 }
 
 func compareRows(a, b Row) int {
@@ -327,30 +334,144 @@ type Snapshot struct {
 	Lookups map[string]Lookup
 }
 
-func (a *Agenda) Snapshot(_ context.Context) (Snapshot, error) {
-	return Snapshot{}, notimpl.ErrNotImplemented
+func listState(at time.Time, stale bool, err error) (ListState, error) {
+	if errors.Is(err, cache.ErrNotCached) {
+		return ListState{Missing: true}, nil
+	}
+	if err != nil {
+		return ListState{}, err
+	}
+	return ListState{At: at, Stale: stale}, nil
 }
 
-func (a *Agenda) Lists(_ context.Context) error {
-	return notimpl.ErrNotImplemented
+func (a *Agenda) Snapshot(ctx context.Context) (Snapshot, error) {
+	cupList, err := a.cup.CachedPrescriptions(ctx)
+	cupState, err := listState(cupList.FetchedAt, cupList.Stale, err)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("%w: %w", ErrCUPPrescriptions, err)
+	}
+	fseList, err := a.fse.CachedPrescriptions(ctx)
+	fseState, err := listState(fseList.FetchedAt, fseList.Stale, err)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("%w: %w", ErrFSEPrescriptions, err)
+	}
+	appointments, err := a.cup.CachedAppointments(ctx)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("%w: %w", ErrAppointments, err)
+	}
+	verdicts, err := a.cup.CachedVerdicts(ctx)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("%w: %w", ErrVerdicts, err)
+	}
+
+	snapshot := Snapshot{
+		Rows:    mergeRows(cupList.Value, fseList.Value),
+		CUPList: cupState,
+		FSEList: fseState,
+		Lookups: map[string]Lookup{},
+	}
+	for _, c := range a.candidates(cupList.Value, fseList.Value) {
+		key := strings.ToUpper(c.nre)
+		snapshot.Lookups[key] = buildLookup(appointments[key], verdicts[key])
+	}
+	return snapshot, nil
 }
 
-func (a *Agenda) RefreshNREs(_ context.Context, _ []string) error {
-	return notimpl.ErrNotImplemented
+func buildLookup(appointments cache.Entry[[]cup.Appointment], verdict cache.Entry[cup.Verdict]) Lookup {
+	if appointments.FetchedAt.IsZero() {
+		return Lookup{Candidate: true}
+	}
+	lookup := Lookup{
+		Candidate:    true,
+		Checked:      true,
+		CheckedAt:    appointments.FetchedAt,
+		Stale:        appointments.Stale,
+		Appointments: appointments.Value,
+	}
+	if len(appointments.Value) == 0 && !verdict.FetchedAt.IsZero() {
+		lookup.Verdict = &VerdictEntry{Verdict: verdict.Value, VerifiedAt: verdict.FetchedAt, Stale: verdict.Stale}
+	}
+	return lookup
 }
 
-func BestBooking(_ []cup.Appointment) (cup.Appointment, bool) {
-	return cup.Appointment{}, false
+func (a *Agenda) Lists(ctx context.Context) error {
+	_, _, err := a.sources(ctx)
+	return err
+}
+
+func (a *Agenda) RefreshNREs(ctx context.Context, nres []string) error {
+	ctx = cache.WithRefresh(ctx, cache.Scope{NREs: nres})
+	candidates := make([]candidate, 0, len(nres))
+	for _, nre := range nres {
+		candidates = append(candidates, candidate{nre: nre})
+	}
+	results, errs := a.lookupAppointments(ctx, candidates)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	unbooked := []string{}
+	for i, c := range candidates {
+		if errs[i] == nil && len(results[i]) == 0 {
+			unbooked = append(unbooked, c.nre)
+		}
+	}
+	a.lookupVerdicts(ctx, unbooked)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	failed := errors.Join(errs...)
+	if failed != nil {
+		return fmt.Errorf("%w: %w", ErrRefreshNREs, failed)
+	}
+	return nil
+}
+
+func isLive(appointment cup.Appointment) bool {
+	return appointment.Status != cancelledStatus
+}
+
+func BestBooking(appointments []cup.Appointment) (cup.Appointment, bool) {
+	if len(appointments) == 0 {
+		return cup.Appointment{}, false
+	}
+	best := appointments[0]
+	for _, candidate := range appointments[1:] {
+		if isLive(candidate) != isLive(best) {
+			if isLive(candidate) {
+				best = candidate
+			}
+			continue
+		}
+		if candidate.At.After(best.At) {
+			best = candidate
+		}
+	}
+	return best, true
 }
 
 func (r Row) Title() string {
-	return ""
+	if r.FSE != nil && r.FSE.Description != "" {
+		return r.FSE.Description
+	}
+	if r.CUP != nil && len(r.CUP.Items) > 0 {
+		return strings.Join(r.CUP.Items, ", ")
+	}
+	return defaultTitle
 }
 
 func (r Row) PrescribedOn() time.Time {
+	if r.FSE != nil && !r.FSE.Date.IsZero() {
+		return r.FSE.Date
+	}
+	if r.CUP != nil {
+		return r.CUP.PrescribedOn
+	}
 	return time.Time{}
 }
 
 func (r Row) IsVisit() bool {
-	return false
+	if r.FSE != nil {
+		return r.FSE.Kind == fse.KindVisit
+	}
+	return r.CUP != nil
 }

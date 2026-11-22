@@ -10,9 +10,6 @@ vi.mock("./session/SessionProvider", () => ({
 vi.mock("./google/GoogleProvider", () => ({
   GoogleProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("./data/HealthDataProvider", () => ({
-  HealthDataProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
 vi.mock("./components/AppNav", () => ({ AppNav: () => <nav>menu</nav> }));
 vi.mock("./components/LoginViewer", () => ({ LoginViewer: () => null }));
 vi.mock("./components/SessionMenu", () => ({ SessionMenu: () => null }));

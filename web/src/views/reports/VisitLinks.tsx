@@ -1,49 +1,59 @@
 import { Anchor, Group, Select, Stack, Text } from "@mantine/core";
 import { SquareArrowOutUpRight, Unlink } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { api, type ReportRefBody } from "../../api/client";
+import {
+  api,
+  type LinkedVisitBody,
+  type ReportRefBody,
+} from "../../api/client";
 import { CappedList } from "../../components/CappedList";
 import { IconAction } from "../../components/IconAction";
-import { useHealthData } from "../../data/useHealthData";
 import { requestOpenVisit } from "../../lib/openVisit";
-import { buildRows, rowTitle } from "../visits/filter";
 
 interface Props {
   reportRef: ReportRefBody;
-  nres: readonly string[];
-  onLinked: (nre: string) => void;
-  onUnlinked: (nre: string) => void;
+  visits: readonly LinkedVisitBody[];
+  onChanged: () => void;
 }
 
 const linkFailed = "Operazione non riuscita";
 
 export function VisitLinks({
   reportRef,
-  nres,
-  onLinked,
-  onUnlinked,
+  visits,
+  onChanged,
 }: Props): JSX.Element {
-  const { prescriptions, appointments } = useHealthData();
+  const [options, setOptions] = useState<readonly LinkedVisitBody[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const linkedKey = visits.map((visit) => visit.nre).join("|");
 
-  const rows = buildRows(
-    prescriptions.data?.prescriptions ?? [],
-    appointments.data?.appointments ?? [],
-  );
-  const linkedKeys = nres.map((nre) => nre.toUpperCase());
-  const linked = nres.map((nre) => ({
-    nre,
-    row: rows.find((row) => row.nre.toUpperCase() === nre.toUpperCase()),
-  }));
-  const options = rows
-    .filter((row) => !linkedKeys.includes(row.nre.toUpperCase()))
-    .map((row) => ({
-      value: row.nre,
-      label: `${rowTitle(row)} · ${row.nre}`,
-    }));
+  useEffect(() => {
+    const controller = new AbortController();
+    const run = async (): Promise<void> => {
+      try {
+        const { data } = await api.POST("/api/reports/visit-options", {
+          body: { ref: reportRef },
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) {
+          return;
+        }
+        setOptions(data?.options ?? []);
+      } catch {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setOptions([]);
+      }
+    };
+    void run();
+    return () => {
+      controller.abort();
+    };
+  }, [reportRef, linkedKey]);
 
   const change = async (nre: string, link: boolean): Promise<void> => {
     setBusy(true);
@@ -57,12 +67,7 @@ export function VisitLinks({
         setError(linkFailed);
         return;
       }
-      prescriptions.reload();
-      if (link) {
-        onLinked(nre);
-        return;
-      }
-      onUnlinked(nre);
+      onChanged();
     } catch {
       setError(linkFailed);
     } finally {
@@ -72,11 +77,11 @@ export function VisitLinks({
 
   return (
     <Stack gap="xs">
-      {linked.length === 0 ? <Text>Nessuna visita collegata.</Text> : null}
+      {visits.length === 0 ? <Text>Nessuna visita collegata.</Text> : null}
       <CappedList
-        items={linked}
+        items={visits}
         getKey={({ nre }) => nre}
-        renderItem={({ nre, row }) => (
+        renderItem={({ nre, title }) => (
           <Group justify="space-between" wrap="nowrap">
             <Stack gap={0}>
               <Anchor
@@ -87,7 +92,7 @@ export function VisitLinks({
                   requestOpenVisit(nre);
                 }}
               >
-                {row === undefined ? nre : rowTitle(row)}
+                {title}
               </Anchor>
               <Text size="xs" c="dimmed">
                 {nre}
@@ -117,7 +122,10 @@ export function VisitLinks({
         placeholder="Cerca una visita"
         searchable
         nothingFoundMessage="Nessuna visita trovata"
-        data={options}
+        data={options.map((option) => ({
+          value: option.nre,
+          label: `${option.title} · ${option.nre}`,
+        }))}
         value={null}
         disabled={busy}
         onChange={(nre) => {

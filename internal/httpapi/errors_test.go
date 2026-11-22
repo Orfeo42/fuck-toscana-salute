@@ -20,7 +20,6 @@ import (
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/localrecords"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
@@ -173,11 +172,6 @@ func TestToHTTPError(t *testing.T) {
 	t.Run("empty file is 422", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", localrecords.ErrEmptyFile)
 		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
-	})
-
-	t.Run("not implemented is 501", func(t *testing.T) {
-		err := toHTTPError(ctx, "op", notimpl.ErrNotImplemented)
-		assert.Equal(t, http.StatusNotImplemented, statusOf(t, err))
 	})
 
 	t.Run("visit not found is 404", func(t *testing.T) {

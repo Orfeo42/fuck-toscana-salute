@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -9,7 +10,6 @@ import (
 
 	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/localrecords"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 )
 
@@ -70,6 +70,31 @@ func (s *Service) List(ctx context.Context) (Listing, error) {
 		slog.WarnContext(ctx, "remote reports unavailable", slog.String("error", err.Error()))
 		remote = referti.Listing{Failures: []referti.Failure{{Kind: referti.KindFSE, Err: err}}}
 	}
+	listing, err := s.merge(ctx, remote)
+	if err != nil {
+		return Listing{}, err
+	}
+	slog.InfoContext(ctx, "reports listed",
+		slog.Int("remote", len(remote.Reports)),
+		slog.Int("local", len(listing.Reports)-len(remote.Reports)),
+		slog.Int("failures", len(remote.Failures)))
+	return listing, nil
+}
+
+func (s *Service) CachedList(ctx context.Context) (CachedListing, error) {
+	entry, err := s.remote.CachedList(ctx)
+	missing := errors.Is(err, cache.ErrNotCached)
+	if err != nil && !missing {
+		return CachedListing{}, fmt.Errorf("reports cached list remote: %w", err)
+	}
+	listing, err := s.merge(ctx, entry.Value)
+	if err != nil {
+		return CachedListing{}, err
+	}
+	return CachedListing{Listing: listing, FetchedAt: entry.FetchedAt, Stale: entry.Stale, Missing: missing}, nil
+}
+
+func (s *Service) merge(ctx context.Context, remote referti.Listing) (Listing, error) {
 	locals, err := s.local.List(ctx)
 	if err != nil {
 		return Listing{}, fmt.Errorf("reports list local: %w", err)
@@ -105,15 +130,7 @@ func (s *Service) List(ctx context.Context) (Listing, error) {
 	}
 	slices.SortStableFunc(reports, compareDateDesc)
 
-	slog.InfoContext(ctx, "reports listed",
-		slog.Int("remote", len(remote.Reports)),
-		slog.Int("local", len(locals)),
-		slog.Int("failures", len(remote.Failures)))
 	return Listing{Reports: reports, Failures: remote.Failures}, nil
-}
-
-func (s *Service) CachedList(_ context.Context) (CachedListing, error) {
-	return CachedListing{}, notimpl.ErrNotImplemented
 }
 
 func nresFor(nres map[string][]string, ref referti.Ref) []string {

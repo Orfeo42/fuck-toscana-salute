@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AppointmentBody, GoogleStatusBody } from "../../api/client";
+import type { GoogleStatusBody, VisitAppointmentBody } from "../../api/client";
 import { GoogleContext } from "../../google/useGoogle";
 import { CalendarDialog } from "./CalendarDialog";
 import { render } from "../../test/render";
@@ -23,19 +23,28 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-function appointment(withBooking = true): AppointmentBody {
+function appointment(withBooking = true): VisitAppointmentBody {
   return {
     id: "APP1",
-    nre: "0900A0000000001",
     status: "PRENOTATO",
     at: "2026-11-12T09:30:00+01:00",
+    upcoming: true,
     ...(withBooking ? { bookingId: "ABC123456789" } : {}),
+    calendar: {
+      title: "Visita cardiologica",
+      location: "Ospedale Esempio, Via Roma 1, Firenze, FI",
+      details: "Prenotazione CUP Regione Toscana",
+    },
     unit: {
       name: "OSP ESEMPIO",
       description: "Ospedale Esempio",
+      displayName: "Ospedale Esempio",
       address: "Via Roma 1",
       city: "Firenze",
       province: "FI",
+      fullAddress: "Via Roma 1, Firenze, FI",
+      mapsSearchUrl: "https://maps.example.com/search",
+      mapsDirectionsUrl: "https://maps.example.com/dir",
     },
   };
 }
@@ -51,7 +60,7 @@ const connected: GoogleStatusBody = {
 function renderDialog(
   options: {
     status?: GoogleStatusBody;
-    appt?: AppointmentBody;
+    appt?: VisitAppointmentBody;
     signIn?: () => Promise<boolean>;
     refresh?: () => void;
     openSettings?: () => void;
@@ -72,7 +81,6 @@ function renderDialog(
     >
       <CalendarDialog
         appointment={options.appt ?? appointment()}
-        title="Visita cardiologica"
         onClose={options.onClose ?? vi.fn()}
       />
     </GoogleContext>,

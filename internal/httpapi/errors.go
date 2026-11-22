@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 	"golang.org/x/oauth2"
@@ -15,7 +14,6 @@ import (
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/localrecords"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
@@ -55,9 +53,6 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	}
 	if errors.Is(err, google.ErrNotConnected) {
 		return huma.Error401Unauthorized("google_not_connected")
-	}
-	if errors.Is(err, notimpl.ErrNotImplemented) {
-		return huma.NewError(http.StatusNotImplemented, "not implemented")
 	}
 	if errors.Is(err, localrecords.ErrNotFound) || errors.Is(err, visitsview.ErrNotFound) || errors.Is(err, reportsview.ErrNotFound) || errors.Is(err, drugsview.ErrNotFound) {
 		return huma.Error404NotFound("not found")

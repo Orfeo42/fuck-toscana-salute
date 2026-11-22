@@ -7,218 +7,211 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 
+import type {
+  ReportRefBody,
+  VisitRowBody,
+  VisitsQueryRequest,
+} from "../api/client";
 import { CopyButton } from "../components/CopyButton";
+import { StatusKeyFilter } from "../components/StatusKeyFilter";
 import { StopClick } from "../components/StopClick";
-import { StatusColumnFilter } from "../components/StatusColumnFilter";
-import { useHealthData } from "../data/useHealthData";
-import { formatDate, formatUpdated } from "../lib/format";
-import { clearRequestedVisit, useRequestedVisit } from "../lib/openVisit";
 import { tableScrollProps } from "../components/tableScroll";
-import { tableColors } from "../theme";
+import { startRefresh, type StartRefreshScope } from "../data/refresh";
+import { formatDate } from "../lib/format";
+import { clearRequestedVisit, useRequestedVisit } from "../lib/openVisit";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
-import type { ReportBody, RowBody } from "../api/client";
+import { useViewQuery } from "../lib/useViewQuery";
+import { tableColors } from "../theme";
+import { ReportDetailModal } from "./reports/ReportDetailModal";
+import { LinkedReportsAction } from "./visits/LinkedReportsAction";
 import {
   ActionsCell,
   AppointmentCell,
   PlaceCell,
   StatusCell,
 } from "./visits/VisitCells";
-import { LinkedReportsAction } from "./visits/LinkedReportsAction";
 import { VisitDetailModal } from "./visits/VisitDetailModal";
-import { ReportDetailModal } from "./reports/ReportDetailModal";
-import { useReports } from "./reports/useReports";
-import {
-  buildRows,
-  defaultExcludedLabels,
-  effectiveState,
-  excludeLabels,
-  labelCounts,
-  rowDate,
-  rowLabel,
-  rowTitle,
-  searchRows,
-  sortRows,
-  visitSortKeys,
-  type VisitSortKey,
-} from "./visits/filter";
 
-const descFirst: readonly VisitSortKey[] = ["prescritta"];
-const focusedBg = "var(--mantine-primary-color-light)";
-const rowPointer = { cursor: "pointer" };
-const noReports: readonly ReportBody[] = [];
+type VisitSortKey = VisitsQueryRequest["sort"];
+type ExcludedStatus = NonNullable<
+  VisitsQueryRequest["excludeStatuses"]
+>[number];
 
-interface Props {
-  now?: Date;
+const pageSizes: readonly VisitsQueryRequest["pageSize"][] = [25, 50, 100];
+const defaultPageSize = 50;
+const descFirst: readonly VisitSortKey[] = ["prescribed"];
+const sortKeys: readonly VisitSortKey[] = [
+  "prescribed",
+  "title",
+  "status",
+  "appointment",
+  "place",
+  "nre",
+];
+
+const statusKeys: Readonly<Record<ExcludedStatus, true>> = {
+  booked: true,
+  prescribed: true,
+  unverified: true,
+  handled: true,
+  taken_in_charge: true,
+  partially_done: true,
+  suspended: true,
+  done: true,
+  done_after_cancel: true,
+  cancelled: true,
+  expired: true,
+  other: true,
+};
+
+function isExcludedStatus(key: string): key is ExcludedStatus {
+  return Object.hasOwn(statusKeys, key);
 }
 
-export function VisitsView({ now }: Props = {}): JSX.Element {
-  const health = useHealthData();
-  const {
-    prescriptions,
-    appointments,
-    bookingByNre,
-    unbooked,
-    verdictByNre,
-    appointmentCheckedAtByNre,
-    refresh,
-    refreshing,
-  } = health;
-  const [mountedAt] = useState(() => new Date());
+const focusedBg = "var(--mantine-primary-color-light)";
+const rowPointer = { cursor: "pointer" };
+
+export function VisitsView(): JSX.Element {
+  const [search, setSearch] = useState("");
+  const [excluded, setExcluded] = useState<ExcludedStatus[] | undefined>(
+    undefined,
+  );
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] =
+    useState<VisitsQueryRequest["pageSize"]>(defaultPageSize);
+  const [queryFocus, setQueryFocus] = useState<string | undefined>(undefined);
   const [handledFocus, setHandledFocus] = useState<string | undefined>(
     undefined,
   );
-  const [excluded, setExcluded] = useState<readonly string[]>(
-    defaultExcludedLabels,
-  );
-  const requested = useRequestedVisit();
   const [handledRequest, setHandledRequest] = useState<string | undefined>(
     undefined,
   );
-  const [search, setSearch] = useState("");
   const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
   const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
-  const [openReport, setOpenReport] = useState<ReportBody | undefined>(
+  const [openReport, setOpenReport] = useState<ReportRefBody | undefined>(
     undefined,
   );
-  const sort = useSort<VisitSortKey>("prescritta", "desc", descFirst);
-  const reportsState = useReports();
-  const reports = reportsState.data?.reports ?? noReports;
-  const reloadPrescriptions = prescriptions.reload;
-  const reloadReports = reportsState.reload;
-  const onChanged = useCallback((): void => {
-    reloadPrescriptions();
-    reloadReports();
-  }, [reloadPrescriptions, reloadReports]);
+  const sort = useSort<VisitSortKey>("prescribed", "desc", descFirst);
+  const requested = useRequestedVisit();
 
-  const currentNow = now ?? mountedAt;
-  const context = { bookingByNre, unbooked, verdictByNre, now: currentNow };
-  const dataReady = prescriptions.data !== undefined && !appointments.loading;
-  const focus = useFocusTarget("visite", dataReady);
-  const data = buildRows(
-    prescriptions.data?.prescriptions ?? [],
-    appointments.data?.appointments ?? [],
-  );
-  const searched = searchRows(data, search, context);
-  const options = labelCounts(searched, context);
-  const visible = sortRows(
-    excludeLabels(searched, excluded, context),
-    sort.key,
-    sort.dir,
-    context,
-  );
+  const request: VisitsQueryRequest = {
+    dir: sort.dir,
+    page,
+    pageSize,
+    sort: sort.key,
+    ...(search === "" ? {} : { search }),
+    ...(excluded === undefined ? {} : { excludeStatuses: excluded }),
+    ...(queryFocus === undefined ? {} : { focus: queryFocus }),
+  };
+  const query = useViewQuery("/api/visits/query", request);
+  const { data, error, reload } = query;
 
-  if (dataReady && focus !== handledFocus) {
-    setHandledFocus(focus);
-    const focused = data.find((row) => row.nre.toUpperCase() === focus);
-    const shown = visible.some((row) => row.nre.toUpperCase() === focus);
-    if (focused !== undefined && !shown) {
-      const label = rowLabel(focused, context);
-      setExcluded(excluded.filter((item) => item !== label));
-      setSearch("");
+  const routeFocus = useFocusTarget("visite", data?.focus?.found === true);
+
+  if (routeFocus !== handledFocus) {
+    setHandledFocus(routeFocus);
+    if (routeFocus !== undefined) {
+      setQueryFocus(routeFocus);
     }
   }
 
   if (requested === undefined && handledRequest !== undefined) {
     setHandledRequest(undefined);
   }
-  if (dataReady && requested !== undefined && requested !== handledRequest) {
+  if (requested !== undefined && requested !== handledRequest) {
     setHandledRequest(requested);
-    const target = data.find((row) => row.nre.toUpperCase() === requested);
-    if (target !== undefined) {
-      const shown = visible.some((row) => row.nre === target.nre);
-      if (!shown) {
-        const label = rowLabel(target, context);
-        setExcluded(excluded.filter((item) => item !== label));
-        setSearch("");
-      }
-      setDetailNre(target.nre);
-    }
+    setQueryFocus(requested);
+    setDetailNre(requested);
+  }
+
+  if (
+    data?.focus !== undefined &&
+    queryFocus !== undefined &&
+    data.focus.nre === queryFocus
+  ) {
+    setQueryFocus(undefined);
+    setSearch(data.search);
+    setExcluded(data.excludedStatuses.filter(isExcludedStatus));
+    setPage(data.page);
   }
 
   useEffect(() => {
-    if (dataReady && requested !== undefined) {
+    if (requested !== undefined) {
       clearRequestedVisit();
     }
-  }, [dataReady, requested]);
+  }, [requested]);
 
-  const columns: DataTableColumn<RowBody>[] = [
+  const refresh = async (scope: StartRefreshScope): Promise<void> => {
+    try {
+      const started = await startRefresh(scope);
+      if (!started) {
+        notifications.show({
+          color: "red",
+          message: "Impossibile avviare l'aggiornamento",
+        });
+        return;
+      }
+      reload();
+    } catch {
+      notifications.show({
+        color: "red",
+        message: "Impossibile avviare l'aggiornamento",
+      });
+    }
+  };
+
+  const rows = data?.rows ?? [];
+  const selected = rows.filter((row) => selectedNres.includes(row.nre));
+
+  const columns: DataTableColumn<VisitRowBody>[] = [
     {
-      accessor: "prescritta",
+      accessor: "prescribed",
       title: "Prescritta",
       sortable: true,
       noWrap: true,
-      render: (row) => formatDate(rowDate(row)),
+      render: (row) => formatDate(row.prescribedOn),
     },
     {
-      accessor: "prestazione",
+      accessor: "title",
       title: "Prestazione",
       sortable: true,
-      render: (row) => rowTitle(row),
+      render: (row) => row.title,
     },
     {
-      accessor: "stato",
+      accessor: "status",
       title: "Stato",
       sortable: true,
-      filtering: excluded.length > 0,
+      filtering: excluded !== undefined && excluded.length > 0,
       filter: (
-        <StatusColumnFilter
-          options={options.map((option) => ({
-            value: option.label,
-            label: option.label,
-            count: option.count,
-          }))}
-          selected={options
-            .map((option) => option.label)
-            .filter((label) => !excluded.includes(label))}
-          onChange={(next) => {
-            setExcluded([
-              ...excluded.filter(
-                (label) => !options.some((option) => option.label === label),
-              ),
-              ...options
-                .map((option) => option.label)
-                .filter((label) => !next.includes(label)),
-            ]);
+        <StatusKeyFilter
+          options={data?.statuses ?? []}
+          onChange={(keys) => {
+            setExcluded(keys.filter(isExcludedStatus));
+            setPage(1);
           }}
         />
       ),
-      render: (row) => (
-        <StatusCell
-          row={row}
-          state={effectiveState(
-            row,
-            bookingByNre,
-            unbooked,
-            currentNow,
-            verdictByNre,
-          )}
-        />
-      ),
+      render: (row) => <StatusCell row={row} />,
     },
     {
-      accessor: "appuntamento",
+      accessor: "appointment",
       title: "Appuntamento",
       sortable: true,
       noWrap: true,
       width: 170,
-      customCellAttributes: () => ({ "aria-busy": appointments.loading }),
+      customCellAttributes: (row) => ({
+        "aria-busy": row.appointmentLookup === "checking",
+      }),
       render: (row) => (
         <AppointmentCell
-          state={effectiveState(
-            row,
-            bookingByNre,
-            unbooked,
-            currentNow,
-            verdictByNre,
-          )}
-          loading={appointments.loading}
-          failed={appointments.error !== undefined}
+          row={row}
           onOpen={() => {
             setDetailNre(row.nre);
           }}
@@ -226,23 +219,12 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       ),
     },
     {
-      accessor: "struttura",
+      accessor: "place",
       title: "Luogo",
       sortable: true,
       width: 96,
       textAlign: "center",
-      render: (row) => (
-        <PlaceCell
-          state={effectiveState(
-            row,
-            bookingByNre,
-            unbooked,
-            currentNow,
-            verdictByNre,
-          )}
-          booking={bookingByNre.get(row.nre.toUpperCase())}
-        />
-      ),
+      render: (row) => <PlaceCell row={row} />,
     },
     {
       accessor: "nre",
@@ -256,26 +238,14 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       ),
     },
     {
-      accessor: "azioni",
+      accessor: "actions",
       title: "Azioni",
       render: (row) => (
         <StopClick>
           <Group gap={2} wrap="nowrap">
-            <ActionsCell
-              row={row}
-              state={effectiveState(
-                row,
-                bookingByNre,
-                unbooked,
-                currentNow,
-                verdictByNre,
-              )}
-              booking={bookingByNre.get(row.nre.toUpperCase())}
-              now={currentNow}
-            />
+            <ActionsCell row={row} />
             <LinkedReportsAction
               row={row}
-              reports={reports}
               onOpenReport={setOpenReport}
               onOpenDetail={() => {
                 setDetailNre(row.nre);
@@ -287,21 +257,16 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
     },
   ];
 
-  const detailRow =
-    detailNre === undefined
-      ? undefined
-      : data.find((row) => row.nre === detailNre);
-
-  const selected = visible.filter((row) => selectedNres.includes(row.nre));
-  const updatedText = formatUpdated(
-    appointments.data?.updated.lists,
-    currentNow,
-  );
-  const summary = `${String(visible.length)} visite/esami`;
-  const ready = !prescriptions.loading && prescriptions.error === undefined;
+  const refreshing = data?.refreshing === true;
+  const loadingFirst = data === undefined && error === undefined;
+  const listsIssue =
+    error === "unavailable" || data?.issues.lists === "unavailable";
+  const listsLogin =
+    error === "unauthorized" || data?.issues.lists === "login_required";
+  const appointmentsIssue = data?.issues.appointments;
 
   return (
-    <section aria-labelledby="visits-title" aria-busy={prescriptions.loading}>
+    <section aria-labelledby="visits-title" aria-busy={loadingFirst}>
       <Title order={2} id="visits-title">
         Visite ed esami
       </Title>
@@ -313,12 +278,15 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value);
+            setPage(1);
           }}
         />
-        <Text aria-live="polite">{summary}</Text>
-        {updatedText === undefined ? null : (
+        <Text aria-live="polite">
+          {`${String(data?.total ?? 0)} visite/esami`}
+        </Text>
+        {data === undefined || data.updated.label === "" ? null : (
           <Text size="sm" c="dimmed">
-            {updatedText}
+            {data.updated.label}
           </Text>
         )}
         <Button
@@ -337,56 +305,48 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
             loading={refreshing}
             leftSection={<RefreshCw size={16} aria-hidden="true" />}
             onClick={() => {
-              const nres = [
-                ...new Set(
-                  selected
-                    .map((row) => row.nre.toUpperCase())
-                    .filter((nre) => nre !== ""),
-                ),
-              ];
               setSelectedNres([]);
-              void refresh({ nres });
+              void refresh({ nres: selected.map((row) => row.nre) });
             }}
           >
             {`Aggiorna selezionate (${String(selected.length)})`}
           </Button>
         )}
       </Group>
-      {prescriptions.loading ? (
+      {loadingFirst ? (
         <Group gap="xs">
           <Loader size="sm" />
           <Text>Carico visite ed esami…</Text>
         </Group>
       ) : null}
-      {!prescriptions.loading && prescriptions.error === "unauthorized" ? (
+      {listsLogin ? (
         <Alert color="yellow" role="alert" mb="md">
           Accedi per vedere visite ed esami.
         </Alert>
       ) : null}
-      {!prescriptions.loading &&
-      prescriptions.error !== undefined &&
-      prescriptions.error !== "unauthorized" ? (
+      {listsIssue ? (
         <Alert color="red" role="alert" mb="md">
           Il portale regionale non risponde. Riprova tra poco.
         </Alert>
       ) : null}
-      {ready && appointments.error === "unauthorized" ? (
+      {appointmentsIssue === "login_required" ? (
         <Alert color="yellow" role="alert" mb="md">
           Accedi per vedere gli appuntamenti.
         </Alert>
       ) : null}
-      {ready && appointments.error === "needs_gestione" ? (
+      {error === "needs_gestione" ||
+      appointmentsIssue === "gestione_required" ? (
         <Alert color="yellow" role="alert" mb="md">
           Per vedere date e orari serve l&apos;accesso a Gestione Prenotazioni:
           premi Accedi.
         </Alert>
       ) : null}
-      {ready && appointments.error === "unavailable" ? (
+      {appointmentsIssue === "unavailable" ? (
         <Alert color="red" role="alert" mb="md">
           Appuntamenti non disponibili: il portale regionale non risponde.
         </Alert>
       ) : null}
-      {ready ? (
+      {data === undefined ? null : (
         <DataTable
           striped
           highlightOnHover
@@ -394,7 +354,24 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           {...tableColors}
           {...tableScrollProps}
           idAccessor="nre"
-          records={visible}
+          records={rows}
+          fetching={query.loading}
+          totalRecords={data.total}
+          page={data.page}
+          onPageChange={setPage}
+          recordsPerPage={pageSize}
+          recordsPerPageOptions={[...pageSizes]}
+          recordsPerPageLabel="Righe per pagina"
+          paginationText={({ from, to, totalRecords }) =>
+            `${String(from)}–${String(to)} di ${String(totalRecords)}`
+          }
+          onRecordsPerPageChange={(size) => {
+            const next = pageSizes.find((item) => item === size);
+            if (next !== undefined) {
+              setPageSize(next);
+              setPage(1);
+            }
+          }}
           selectedRecords={selected}
           onSelectedRecordsChange={(records) => {
             setSelectedNres(records.map((row) => row.nre));
@@ -403,11 +380,10 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
           noRecordsText="Nessuna visita o esame in questa vista."
           sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
           onSortStatusChange={(status) => {
-            const key = visitSortKeys.find(
-              (item) => item === status.columnAccessor,
-            );
+            const key = sortKeys.find((item) => item === status.columnAccessor);
             if (key !== undefined) {
               sort.toggle(key);
+              setPage(1);
             }
           }}
           onRowClick={({ record }) => {
@@ -425,36 +401,19 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
               }
             },
             "data-focused":
-              row.nre.toUpperCase() === focus ? "true" : undefined,
+              row.nre.toUpperCase() === routeFocus ? "true" : undefined,
           })}
           rowStyle={(row) =>
-            row.nre.toUpperCase() === focus
+            row.nre.toUpperCase() === routeFocus
               ? { ...rowPointer, backgroundColor: focusedBg }
               : rowPointer
           }
         />
-      ) : null}
-      {detailRow === undefined ? null : (
+      )}
+      {detailNre === undefined ? null : (
         <VisitDetailModal
-          row={detailRow}
-          state={effectiveState(
-            detailRow,
-            bookingByNre,
-            unbooked,
-            currentNow,
-            verdictByNre,
-          )}
-          booking={bookingByNre.get(detailRow.nre.toUpperCase())}
-          now={currentNow}
-          appointmentCheckedAt={appointmentCheckedAtByNre.get(
-            detailRow.nre.toUpperCase(),
-          )}
-          refreshing={refreshing}
-          reports={reports}
-          onChanged={onChanged}
-          onRefresh={() => {
-            void refresh({ nres: [detailRow.nre.toUpperCase()] });
-          }}
+          nre={detailNre}
+          onChanged={reload}
           onClose={() => {
             setDetailNre(undefined);
           }}
@@ -462,11 +421,11 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       )}
       {openReport === undefined ? null : (
         <ReportDetailModal
-          report={openReport}
+          reportRef={openReport}
           onClose={() => {
             setOpenReport(undefined);
           }}
-          onChanged={onChanged}
+          onChanged={reload}
         />
       )}
     </section>

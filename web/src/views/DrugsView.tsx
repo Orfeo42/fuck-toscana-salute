@@ -7,126 +7,132 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 
+import type { DrugRowBody, DrugsQueryRequest } from "../api/client";
 import { CopyButton } from "../components/CopyButton";
 import { PdfLink } from "../components/PdfLink";
-import { StopClick } from "../components/StopClick";
 import { StatusBadge } from "../components/StatusBadge";
-import { StatusColumnFilter } from "../components/StatusColumnFilter";
-import { useHealthData } from "../data/useHealthData";
-import { formatDate, formatUpdated } from "../lib/format";
+import { StatusKeyFilter } from "../components/StatusKeyFilter";
+import { StopClick } from "../components/StopClick";
 import { tableScrollProps } from "../components/tableScroll";
-import { tableColors } from "../theme";
+import { startRefresh } from "../data/refresh";
+import { formatDate } from "../lib/format";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
+import { useRoute } from "../lib/route";
 import { useSort } from "../lib/useSort";
+import { useViewQuery } from "../lib/useViewQuery";
+import { tableColors } from "../theme";
 import { DrugDetailModal } from "./drugs/DrugDetailModal";
-import {
-  defaultExcludedDrugLabels,
-  drugLabelCounts,
-  drugRows,
-  drugSortKeys,
-  drugStatusLabel,
-  drugStatusTone,
-  excludeDrugLabels,
-  searchDrugs,
-  sortDrugs,
-  type DrugRowData,
-  type DrugSortKey,
-} from "./drugs/filter";
 
-const descFirst: readonly DrugSortKey[] = ["data"];
+type SortKey = DrugsQueryRequest["sort"];
+type PageSize = DrugsQueryRequest["pageSize"];
+type ExcludedKey = NonNullable<DrugsQueryRequest["excludeStatuses"]>[number];
+
+const sortKeys: readonly SortKey[] = ["date", "name", "status", "nre"];
+const descFirst: readonly SortKey[] = ["date"];
+const pageSizes: readonly PageSize[] = [25, 50, 100];
 const focusedBg = "var(--mantine-primary-color-light)";
 const rowPointer = { cursor: "pointer" };
 
 export function DrugsView(): JSX.Element {
-  const health = useHealthData();
-  const { refresh, refreshing } = health;
-  const { data: body, error, loading } = health.prescriptions;
-  const [now] = useState(() => new Date());
-  const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
-  const [handledFocus, setHandledFocus] = useState<string | undefined>(
-    undefined,
-  );
-  const [excluded, setExcluded] = useState<readonly string[]>(
-    defaultExcludedDrugLabels,
-  );
   const [search, setSearch] = useState("");
+  const [excluded, setExcluded] = useState<string[] | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(50);
   const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
-  const sort = useSort<DrugSortKey>("data", "desc", descFirst);
-  const focus = useFocusTarget("farmaci", body !== undefined);
+  const [focusDone, setFocusDone] = useState<string | undefined>(undefined);
+  const [starting, setStarting] = useState(false);
+  const sort = useSort<SortKey>("date", "desc", descFirst);
+  const current = useRoute();
+  const route = current.tab === "farmaci" ? current.focus : undefined;
+  const focus = route === focusDone ? undefined : route;
 
-  const drugs = drugRows(body?.prescriptions ?? []);
-  const searched = searchDrugs(drugs, search);
-  const options = drugLabelCounts(searched);
-  const visible = sortDrugs(
-    excludeDrugLabels(searched, excluded),
-    sort.key,
-    sort.dir,
+  const request: DrugsQueryRequest = {
+    search,
+    sort: sort.key,
+    dir: sort.dir,
+    page,
+    pageSize,
+    ...(excluded === undefined
+      ? {}
+      : { excludeStatuses: excluded as ExcludedKey[] }),
+    ...(focus === undefined ? {} : { focus }),
+  };
+  const { data, error, loading, reload } = useViewQuery(
+    "/api/drugs/query",
+    request,
   );
+  useFocusTarget("farmaci", data !== undefined && focus === undefined);
 
-  if (body !== undefined && focus !== handledFocus) {
-    setHandledFocus(focus);
-    const focused = drugs.find((row) => row.nre.toUpperCase() === focus);
-    const shown = visible.some((row) => row.nre.toUpperCase() === focus);
-    if (focused !== undefined && !shown) {
-      const label = drugStatusLabel(focused.fse.status);
-      setExcluded(excluded.filter((item) => item !== label));
-      setSearch("");
+  if (
+    focus !== undefined &&
+    data?.focus?.nre.toUpperCase() === focus.toUpperCase()
+  ) {
+    setFocusDone(route);
+    if (data.focus.found) {
+      setPage(data.page);
+      setExcluded(data.excludedStatuses);
+      setSearch(data.search);
     }
   }
 
-  const selected = visible.filter((row) => selectedNres.includes(row.nre));
-  const updatedText = formatUpdated(body?.updated, now);
+  const refreshLists = async (): Promise<void> => {
+    setStarting(true);
+    try {
+      const ok = await startRefresh({ lists: true });
+      if (!ok) {
+        notifications.show({
+          color: "red",
+          message: "Aggiornamento non riuscito",
+        });
+        return;
+      }
+      reload();
+    } catch {
+      notifications.show({
+        color: "red",
+        message: "Aggiornamento non riuscito",
+      });
+    } finally {
+      setStarting(false);
+    }
+  };
 
-  const columns: DataTableColumn<DrugRowData>[] = [
+  const columns: DataTableColumn<DrugRowBody>[] = [
     {
-      accessor: "data",
+      accessor: "date",
       title: "Data",
       sortable: true,
       noWrap: true,
-      render: (row) => formatDate(row.fse.date),
+      render: (row) => formatDate(row.date),
     },
     {
-      accessor: "farmaco",
+      accessor: "name",
       title: "Farmaco",
       sortable: true,
-      render: (row) => row.fse.description || "Farmaco",
+      render: (row) => row.title,
     },
     {
-      accessor: "stato",
+      accessor: "status",
       title: "Stato",
       sortable: true,
-      filtering: excluded.length > 0,
+      filtering: (data?.excludedStatuses.length ?? 0) > 0,
       filter: (
-        <StatusColumnFilter
-          options={options.map((option) => ({
-            value: option.label,
-            label: option.label,
-            count: option.count,
-          }))}
-          selected={options
-            .map((option) => option.label)
-            .filter((label) => !excluded.includes(label))}
-          onChange={(next) => {
-            setExcluded([
-              ...excluded.filter(
-                (label) => !options.some((option) => option.label === label),
-              ),
-              ...options
-                .map((option) => option.label)
-                .filter((label) => !next.includes(label)),
-            ]);
+        <StatusKeyFilter
+          options={data?.statuses ?? []}
+          onChange={(keys) => {
+            setExcluded(keys);
+            setPage(1);
           }}
         />
       ),
       render: (row) => (
-        <StatusBadge tone={drugStatusTone(row.fse.status)}>
-          {drugStatusLabel(row.fse.status)}
-        </StatusBadge>
+        <StatusBadge tone={row.status.tone}>{row.status.label}</StatusBadge>
       ),
     },
     {
@@ -146,18 +152,20 @@ export function DrugsView(): JSX.Element {
       render: (row) => (
         <StopClick>
           <Group gap={2} wrap="nowrap">
-            <PdfLink documentRef={row.fse.documentRef} />
+            <PdfLink documentRef={row.documentRef} />
           </Group>
         </StopClick>
       ),
     },
   ];
 
-  const detailRow =
-    detailNre === undefined
-      ? undefined
-      : drugs.find((row) => row.nre === detailNre);
-  const ready = !loading && error === undefined;
+  const unauthorized =
+    error === "unauthorized" || data?.issue === "login_required";
+  const unavailable =
+    (error !== undefined && error !== "unauthorized") ||
+    data?.issue === "unavailable";
+  const showTable = data !== undefined && error === undefined;
+  const refreshing = starting || data?.refreshing === true;
 
   return (
     <section aria-labelledby="drugs-title" aria-busy={loading}>
@@ -172,12 +180,15 @@ export function DrugsView(): JSX.Element {
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
+            setPage(1);
           }}
         />
-        <Text aria-live="polite">{`${String(visible.length)} farmaci`}</Text>
-        {updatedText === undefined ? null : (
+        {data === undefined ? null : (
+          <Text aria-live="polite">{`${String(data.total)} farmaci`}</Text>
+        )}
+        {data === undefined || data.updated.label === "" ? null : (
           <Text size="sm" c="dimmed">
-            {updatedText}
+            {data.updated.label}
           </Text>
         )}
         <Button
@@ -185,49 +196,29 @@ export function DrugsView(): JSX.Element {
           loading={refreshing}
           leftSection={<RefreshCw size={16} />}
           onClick={() => {
-            void refresh({ all: true });
+            void refreshLists();
           }}
         >
-          Aggiorna tutto
+          Aggiorna
         </Button>
-        {selected.length === 0 ? null : (
-          <Button
-            variant="light"
-            loading={refreshing}
-            leftSection={<RefreshCw size={16} />}
-            onClick={() => {
-              const nres = [
-                ...new Set(
-                  selected
-                    .map((row) => row.nre.toUpperCase())
-                    .filter((nre) => nre !== ""),
-                ),
-              ];
-              setSelectedNres([]);
-              void refresh({ nres });
-            }}
-          >
-            {`Aggiorna selezionate (${String(selected.length)})`}
-          </Button>
-        )}
       </Group>
-      {loading ? (
+      {loading && data === undefined ? (
         <Group gap="xs">
           <Loader size="sm" />
           <Text>Carico i farmaci…</Text>
         </Group>
       ) : null}
-      {!loading && error === "unauthorized" ? (
+      {unauthorized ? (
         <Alert color="yellow" role="alert">
           Accedi per vedere i farmaci.
         </Alert>
       ) : null}
-      {!loading && error !== undefined && error !== "unauthorized" ? (
+      {unavailable && !unauthorized ? (
         <Alert color="red" role="alert">
           Il portale regionale non risponde. Riprova tra poco.
         </Alert>
       ) : null}
-      {ready ? (
+      {showTable ? (
         <DataTable
           striped
           highlightOnHover
@@ -235,20 +226,28 @@ export function DrugsView(): JSX.Element {
           {...tableColors}
           {...tableScrollProps}
           idAccessor="nre"
-          records={visible}
-          selectedRecords={selected}
-          onSelectedRecordsChange={(records) => {
-            setSelectedNres(records.map((row) => row.nre));
-          }}
+          fetching={loading}
+          records={data.rows}
           columns={columns}
+          totalRecords={data.total}
+          page={data.page}
+          onPageChange={setPage}
+          recordsPerPage={data.pageSize}
+          recordsPerPageOptions={[...pageSizes]}
+          onRecordsPerPageChange={(size) => {
+            const next = pageSizes.find((item) => item === size);
+            if (next !== undefined) {
+              setPageSize(next);
+              setPage(1);
+            }
+          }}
           noRecordsText="Nessun farmaco in questa vista."
           sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
           onSortStatusChange={(status) => {
-            const key = drugSortKeys.find(
-              (item) => item === status.columnAccessor,
-            );
+            const key = sortKeys.find((item) => item === status.columnAccessor);
             if (key !== undefined) {
               sort.toggle(key);
+              setPage(1);
             }
           }}
           onRowClick={({ record }) => {
@@ -266,22 +265,20 @@ export function DrugsView(): JSX.Element {
               }
             },
             "data-focused":
-              row.nre.toUpperCase() === focus ? "true" : undefined,
+              row.nre.toUpperCase() === route?.toUpperCase()
+                ? "true"
+                : undefined,
           })}
           rowStyle={(row) =>
-            row.nre.toUpperCase() === focus
+            row.nre.toUpperCase() === route?.toUpperCase()
               ? { ...rowPointer, backgroundColor: focusedBg }
               : rowPointer
           }
         />
       ) : null}
-      {detailRow === undefined ? null : (
+      {detailNre === undefined ? null : (
         <DrugDetailModal
-          row={detailRow}
-          refreshing={refreshing}
-          onRefresh={() => {
-            void refresh({ nres: [detailRow.nre.toUpperCase()] });
-          }}
+          nre={detailNre}
           onClose={() => {
             setDetailNre(undefined);
           }}

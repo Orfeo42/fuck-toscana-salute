@@ -1,23 +1,18 @@
 import { Button, Checkbox, Group, Stack } from "@mantine/core";
 import type { JSX } from "react";
 
-export interface StatusOption {
-  value: string;
-  label: string;
-  count: number;
-}
+import type { StatusOptionBody } from "../api/client";
 
 interface Props {
-  options: readonly StatusOption[];
-  selected: readonly string[];
-  onChange: (next: string[]) => void;
+  options: readonly StatusOptionBody[];
+  onChange: (excludedKeys: string[]) => void;
 }
 
-export function StatusColumnFilter({
-  options,
-  selected,
-  onChange,
-}: Props): JSX.Element {
+export function StatusKeyFilter({ options, onChange }: Props): JSX.Element {
+  const shown = options
+    .filter((option) => !option.excluded)
+    .map((option) => option.key);
+
   return (
     <Stack gap="xs">
       <Group gap="xs">
@@ -25,7 +20,7 @@ export function StatusColumnFilter({
           size="compact-xs"
           variant="light"
           onClick={() => {
-            onChange(options.map((option) => option.value));
+            onChange([]);
           }}
         >
           Tutti
@@ -34,18 +29,27 @@ export function StatusColumnFilter({
           size="compact-xs"
           variant="light"
           onClick={() => {
-            onChange([]);
+            onChange(options.map((option) => option.key));
           }}
         >
           Nessuno
         </Button>
       </Group>
-      <Checkbox.Group value={[...selected]} onChange={onChange}>
+      <Checkbox.Group
+        value={shown}
+        onChange={(next) => {
+          onChange(
+            options
+              .map((option) => option.key)
+              .filter((key) => !next.includes(key)),
+          );
+        }}
+      >
         <Stack gap="xs">
           {options.map((option) => (
             <Checkbox
-              key={option.value}
-              value={option.value}
+              key={option.key}
+              value={option.key}
               label={`${option.label} (${String(option.count)})`}
             />
           ))}

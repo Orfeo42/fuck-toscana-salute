@@ -1,136 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AppointmentBody": {
-        "additionalProperties": false,
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "bookingId": {
-            "type": "string"
-          },
-          "cup": {
-            "$ref": "#/components/schemas/PrescriptionCUPBody"
-          },
-          "fse": {
-            "$ref": "#/components/schemas/PrescriptionFSEBody"
-          },
-          "id": {
-            "type": "string"
-          },
-          "nre": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "unit": {
-            "$ref": "#/components/schemas/UnitBody"
-          }
-        },
-        "required": [
-          "id",
-          "nre",
-          "status",
-          "unit"
-        ],
-        "type": "object"
-      },
-      "AppointmentsBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/AppointmentsBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "appointments": {
-            "items": {
-              "$ref": "#/components/schemas/AppointmentBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "failed": {
-            "items": {
-              "$ref": "#/components/schemas/FailedBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "unbooked": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "updated": {
-            "$ref": "#/components/schemas/AppointmentsUpdatedBody"
-          },
-          "verdicts": {
-            "items": {
-              "$ref": "#/components/schemas/VerdictBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "appointments",
-          "failed",
-          "unbooked",
-          "verdicts",
-          "updated"
-        ],
-        "type": "object"
-      },
-      "AppointmentsUpdatedBody": {
-        "additionalProperties": false,
-        "properties": {
-          "appointments": {
-            "additionalProperties": {
-              "format": "date-time",
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "lists": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "verdicts": {
-            "additionalProperties": {
-              "format": "date-time",
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "lists",
-          "appointments",
-          "verdicts"
-        ],
-        "type": "object"
-      },
       "CalendarEventBody": {
         "additionalProperties": false,
         "properties": {
@@ -667,22 +537,6 @@
         ],
         "type": "object"
       },
-      "FailedBody": {
-        "additionalProperties": false,
-        "properties": {
-          "nre": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "nre",
-          "reason"
-        ],
-        "type": "object"
-      },
       "FocusBody": {
         "additionalProperties": false,
         "properties": {
@@ -1179,149 +1033,6 @@
         ],
         "type": "object"
       },
-      "PrescriptionCUPBody": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "kind": {
-            "type": "string"
-          },
-          "nre": {
-            "type": "string"
-          },
-          "prescribedOn": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "status": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "nre",
-          "kind",
-          "status",
-          "items"
-        ],
-        "type": "object"
-      },
-      "PrescriptionFSEBody": {
-        "additionalProperties": false,
-        "properties": {
-          "date": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "documentRef": {
-            "type": "string"
-          },
-          "expiresOn": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "expiryEstimated": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "nre": {
-            "type": "string"
-          },
-          "status": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "nre",
-          "description",
-          "kind",
-          "status",
-          "documentRef"
-        ],
-        "type": "object"
-      },
-      "PrescriptionsBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/PrescriptionsBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "prescriptions": {
-            "items": {
-              "$ref": "#/components/schemas/RowBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "updated": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "prescriptions",
-          "updated"
-        ],
-        "type": "object"
-      },
-      "RefreshRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/RefreshRequest.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "all": {
-            "type": "boolean"
-          },
-          "nres": {
-            "items": {
-              "pattern": "^[0-9A-Za-z]{10,20}$",
-              "type": "string"
-            },
-            "maxItems": 200,
-            "type": [
-              "array",
-              "null"
-            ]
-          }
-        },
-        "type": "object"
-      },
       "ReportBody": {
         "additionalProperties": false,
         "properties": {
@@ -1741,51 +1452,6 @@
         ],
         "type": "object"
       },
-      "ReportsBody": {
-        "additionalProperties": false,
-        "properties": {
-          "$schema": {
-            "description": "A URL to the JSON Schema for this object.",
-            "examples": [
-              "https://example.com/schemas/ReportsBody.json"
-            ],
-            "format": "uri",
-            "readOnly": true,
-            "type": "string"
-          },
-          "failures": {
-            "items": {
-              "$ref": "#/components/schemas/ReportFailureBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "reports": {
-            "items": {
-              "$ref": "#/components/schemas/ReportBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "updated": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "reports",
-          "failures",
-          "updated"
-        ],
-        "type": "object"
-      },
       "ReportsQueryBody": {
         "additionalProperties": false,
         "properties": {
@@ -1924,38 +1590,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "RowBody": {
-        "additionalProperties": false,
-        "properties": {
-          "cup": {
-            "$ref": "#/components/schemas/PrescriptionCUPBody"
-          },
-          "fse": {
-            "$ref": "#/components/schemas/PrescriptionFSEBody"
-          },
-          "nre": {
-            "type": "string"
-          },
-          "overridden": {
-            "type": "boolean"
-          },
-          "reports": {
-            "items": {
-              "$ref": "#/components/schemas/ReportRefBody"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "nre",
-          "overridden",
-          "reports"
-        ],
         "type": "object"
       },
       "RowRequest": {
@@ -2137,40 +1771,6 @@
         ],
         "type": "object"
       },
-      "UnitBody": {
-        "additionalProperties": false,
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "place": {
-            "type": "string"
-          },
-          "postalCode": {
-            "type": "string"
-          },
-          "province": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "description",
-          "address",
-          "city",
-          "province"
-        ],
-        "type": "object"
-      },
       "UpdateLocalReportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2244,32 +1844,6 @@
           "title",
           "date",
           "provider"
-        ],
-        "type": "object"
-      },
-      "VerdictBody": {
-        "additionalProperties": false,
-        "properties": {
-          "message": {
-            "type": "string"
-          },
-          "nre": {
-            "type": "string"
-          },
-          "reason": {
-            "enum": [
-              "bookable",
-              "handled",
-              "expired",
-              "other"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "nre",
-          "reason",
-          "message"
         ],
         "type": "object"
       },
@@ -2819,33 +2393,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/appointments": {
-      "get": {
-        "operationId": "list-appointments",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AppointmentsBody"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        }
-      }
-    },
     "/api/calendar/events": {
       "post": {
         "operationId": "create-calendar-event",
@@ -3470,63 +3017,6 @@
         }
       }
     },
-    "/api/prescriptions": {
-      "get": {
-        "operationId": "list-prescriptions",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrescriptionsBody"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        }
-      }
-    },
-    "/api/refresh": {
-      "post": {
-        "operationId": "refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        }
-      }
-    },
     "/api/refresh/start": {
       "post": {
         "operationId": "start-refresh",
@@ -3550,33 +3040,6 @@
               }
             },
             "description": "Accepted"
-          },
-          "default": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorModel"
-                }
-              }
-            },
-            "description": "Error"
-          }
-        }
-      }
-    },
-    "/api/reports": {
-      "get": {
-        "operationId": "list-reports",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReportsBody"
-                }
-              }
-            },
-            "description": "OK"
           },
           "default": {
             "content": {

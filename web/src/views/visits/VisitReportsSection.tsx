@@ -8,71 +8,82 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { FileText, FileUp, Unlink, Upload } from "lucide-react";
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 
 import {
   api,
-  type AppointmentBody,
-  type ReportBody,
-  type RowBody,
+  type LinkedReportBody,
+  type ReportOptionBody,
+  type ReportRefBody,
+  type VisitRowBody,
 } from "../../api/client";
 import { CappedList } from "../../components/CappedList";
 import { IconAction } from "../../components/IconAction";
 import { formatDate } from "../../lib/format";
 import { ReportDetailModal } from "../reports/ReportDetailModal";
 import { UploadReportDialog } from "../reports/UploadReportDialog";
-import { rowTitle, unitName, type EffectiveState } from "./filter";
-import { romeDay } from "./relativeDay";
-import { linkedReports, reportKey, reportLabel } from "./reportLinks";
 
 interface Props {
-  row: RowBody;
-  state: EffectiveState;
-  booking: AppointmentBody | undefined;
-  now: Date;
-  reports: readonly ReportBody[];
+  row: VisitRowBody;
   onChanged: () => void;
 }
 
-function optionLabel(report: ReportBody): string {
-  return `${reportLabel(report)} · ${formatDate(report.date)} · ${report.provider}`;
+function refKey(ref: ReportRefBody): string {
+  return `${ref.kind}|${ref.abstractId}|${ref.detailId}|${ref.repCode}`;
 }
 
-export function VisitReportsSection({
-  row,
-  state,
-  booking,
-  now,
-  reports,
-  onChanged,
-}: Props): JSX.Element {
-  const [openReport, setOpenReport] = useState<ReportBody | undefined>(
+function reportLine(report: {
+  label: string;
+  date?: string | undefined;
+  provider: string;
+}): string {
+  return `${report.label} · ${formatDate(report.date)} · ${report.provider}`;
+}
+
+export function VisitReportsSection({ row, onChanged }: Props): JSX.Element {
+  const { nre } = row;
+  const [openReport, setOpenReport] = useState<ReportRefBody | undefined>(
     undefined,
   );
   const [uploading, setUploading] = useState(false);
-  const linked = linkedReports(row, reports);
-  const linkedKeys = new Set(linked.map(reportKey));
-  const options = reports
-    .filter((report) => !linkedKeys.has(reportKey(report)))
-    .map((report) => ({
-      value: reportKey(report),
-      label: optionLabel(report),
-    }));
-  const appointmentAt = state.kind === "booked" ? state.at : undefined;
-  const unit = state.kind === "booked" ? booking?.unit : undefined;
-  const defaultDate = romeDay(
-    appointmentAt === undefined ? now : new Date(appointmentAt),
-  );
+  const [options, setOptions] = useState<readonly ReportOptionBody[]>([]);
+  const [optionsVersion, setOptionsVersion] = useState(0);
 
-  const link = async (key: string): Promise<void> => {
-    const report = reports.find((item) => reportKey(item) === key);
-    if (report === undefined) {
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async (): Promise<void> => {
+      try {
+        const { data } = await api.POST("/api/visits/report-options", {
+          body: { nre },
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted || data === undefined) {
+          return;
+        }
+        setOptions(data.options);
+      } catch {
+        return;
+      }
+    };
+    void load();
+    return () => {
+      controller.abort();
+    };
+  }, [nre, optionsVersion]);
+
+  const changed = (): void => {
+    setOptionsVersion((version) => version + 1);
+    onChanged();
+  };
+
+  const link = async (index: number): Promise<void> => {
+    const option = options[index];
+    if (option === undefined) {
       return;
     }
-    const { kind, abstractId, detailId, repCode } = report;
     try {
       const { response } = await api.PUT("/api/links", {
-        body: { nre: row.nre, report: { kind, abstractId, detailId, repCode } },
+        body: { nre, report: option.ref },
       });
       if (!response.ok) {
         notifications.show({
@@ -81,7 +92,7 @@ export function VisitReportsSection({
         });
         return;
       }
-      onChanged();
+      changed();
     } catch {
       notifications.show({
         color: "red",
@@ -90,11 +101,10 @@ export function VisitReportsSection({
     }
   };
 
-  const unlink = async (report: ReportBody): Promise<void> => {
-    const { kind, abstractId, detailId, repCode } = report;
+  const unlink = async (report: LinkedReportBody): Promise<void> => {
     try {
       const { response } = await api.DELETE("/api/links", {
-        body: { nre: row.nre, report: { kind, abstractId, detailId, repCode } },
+        body: { nre, report: report.ref },
       });
       if (!response.ok) {
         notifications.show({
@@ -103,7 +113,7 @@ export function VisitReportsSection({
         });
         return;
       }
-      onChanged();
+      changed();
     } catch {
       notifications.show({
         color: "red",
@@ -114,14 +124,14 @@ export function VisitReportsSection({
 
   return (
     <Stack gap="xs">
-      {linked.length === 0 ? (
+      {row.reports.length === 0 ? (
         <Text size="sm" c="dimmed">
           Nessun referto collegato.
         </Text>
       ) : null}
       <CappedList
-        items={linked}
-        getKey={reportKey}
+        items={row.reports}
+        getKey={(report) => refKey(report.ref)}
         renderItem={(report) => (
           <Group gap="xs" wrap="nowrap">
             {report.origin === "local" ? (
@@ -130,23 +140,25 @@ export function VisitReportsSection({
               </Tooltip>
             ) : null}
             <UnstyledButton
+              disabled={!report.available}
               onClick={() => {
-                setOpenReport(report);
+                setOpenReport(report.ref);
               }}
             >
               <Text size="sm" span>
-                {`${reportLabel(report)} · ${formatDate(report.date)} · ${report.provider}`}
+                {reportLine(report)}
               </Text>
             </UnstyledButton>
             <IconAction
-              label={`Apri referto ${reportLabel(report)}`}
+              label={`Apri referto ${report.label}`}
               icon={FileText}
+              disabled={!report.available}
               onClick={() => {
-                setOpenReport(report);
+                setOpenReport(report.ref);
               }}
             />
             <IconAction
-              label={`Scollega referto ${reportLabel(report)}`}
+              label={`Scollega referto ${report.label}`}
               icon={Unlink}
               onClick={() => {
                 void unlink(report);
@@ -158,13 +170,16 @@ export function VisitReportsSection({
       <Select
         label="Collega referto"
         placeholder="Cerca un referto"
-        data={options}
+        data={options.map((option, index) => ({
+          value: String(index),
+          label: reportLine(option),
+        }))}
         value={null}
         searchable
         nothingFoundMessage="Nessun referto disponibile"
         onChange={(next) => {
           if (next !== null) {
-            void link(next);
+            void link(Number(next));
           }
         }}
       />
@@ -185,21 +200,21 @@ export function VisitReportsSection({
           }}
           onUploaded={() => {
             setUploading(false);
-            onChanged();
+            changed();
           }}
-          nre={row.nre}
-          defaultTitle={rowTitle(row)}
-          defaultDate={defaultDate}
-          {...(unit === undefined ? {} : { defaultProvider: unitName(unit) })}
+          nre={nre}
+          defaultTitle={row.upload.title}
+          defaultDate={row.upload.date}
+          defaultProvider={row.upload.provider}
         />
       ) : null}
       {openReport === undefined ? null : (
         <ReportDetailModal
-          report={openReport}
+          reportRef={openReport}
           onClose={() => {
             setOpenReport(undefined);
           }}
-          onChanged={onChanged}
+          onChanged={changed}
         />
       )}
     </Stack>

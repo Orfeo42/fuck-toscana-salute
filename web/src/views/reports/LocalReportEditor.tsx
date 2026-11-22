@@ -3,12 +3,12 @@ import { Check, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
-import { api, type ReportBody } from "../../api/client";
+import { api, type ReportRowBody } from "../../api/client";
 import { FacilityInput } from "../../components/FacilityInput";
 import { IconAction } from "../../components/IconAction";
 
 interface Props {
-  report: ReportBody;
+  row: ReportRowBody;
   onChanged: () => void;
 }
 
@@ -16,10 +16,10 @@ const saveFailed = "Salvataggio non riuscito";
 const deleteFailed = "Eliminazione non riuscita";
 const titleRequired = "Il titolo è obbligatorio";
 
-export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
-  const [title, setTitle] = useState(report.title ?? "");
-  const [date, setDate] = useState(report.date?.slice(0, 10) ?? "");
-  const [provider, setProvider] = useState(report.provider);
+export function LocalReportEditor({ row, onChanged }: Props): JSX.Element {
+  const [title, setTitle] = useState(row.customTitle ?? "");
+  const [date, setDate] = useState(row.editDate ?? "");
+  const [provider, setProvider] = useState(row.provider);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -36,7 +36,7 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
     try {
       const { response } = await api.PUT("/api/reports/local", {
         body: {
-          id: report.abstractId,
+          id: row.ref.abstractId,
           title: trimmedTitle,
           ...(date === "" ? {} : { date }),
           ...(trimmedProvider === "" ? {} : { provider: trimmedProvider }),
@@ -59,7 +59,7 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
     setError(undefined);
     try {
       const { response } = await api.DELETE("/api/reports/local", {
-        body: { id: report.abstractId },
+        body: { id: row.ref.abstractId },
       });
       if (!response.ok) {
         setError(deleteFailed);

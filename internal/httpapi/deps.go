@@ -2,9 +2,7 @@ package httpapi
 
 import (
 	"context"
-	"time"
 
-	"fuck-toscana-salute/internal/agenda"
 	"fuck-toscana-salute/internal/drugsview"
 	"fuck-toscana-salute/internal/facilities"
 	"fuck-toscana-salute/internal/google"
@@ -13,7 +11,6 @@ import (
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/refresh"
-	"fuck-toscana-salute/internal/reports"
 	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/visitsview"
@@ -32,25 +29,15 @@ type LoginFlow interface {
 	States() map[session.Portal]loginflow.State
 }
 
-//go:generate moq -out data_mock.go . Agenda:MockAgenda Documents:MockDocuments Reports:MockReports Freshness:MockFreshness
-type Agenda interface {
-	Appointments(ctx context.Context) (agenda.Result, error)
-	Prescriptions(ctx context.Context) ([]agenda.Row, error)
-}
-
+//go:generate moq -out data_mock.go . Documents:MockDocuments Reports:MockReports
 type Documents interface {
 	PrescriptionPDF(ctx context.Context, documentRef string) ([]byte, error)
 	Promemoria(ctx context.Context, bookingID string) ([]byte, error)
 }
 
 type Reports interface {
-	List(ctx context.Context) (reports.Listing, error)
 	Documents(ctx context.Context, ref referti.Ref) ([]referti.Document, error)
 	Download(ctx context.Context, ref referti.Ref, position string) ([]byte, error)
-}
-
-type Freshness interface {
-	FetchedAt(ctx context.Context, source string) (map[string]time.Time, error)
 }
 
 //go:generate moq -out google_mock.go . Google:MockGoogle

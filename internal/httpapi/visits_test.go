@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"fuck-toscana-salute/internal/listview"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/refresh"
 	"fuck-toscana-salute/internal/reports"
@@ -228,17 +227,6 @@ func TestRegisterQueryVisits(t *testing.T) {
 		assert.Contains(t, resp.Body.String(), `"at":null`)
 	})
 
-	t.Run("not implemented is 501", func(t *testing.T) {
-		view := &MockVisitsView{QueryFunc: func(context.Context, visitsview.Query) (visitsview.Page, error) {
-			return visitsview.Page{}, notimpl.ErrNotImplemented
-		}}
-		api := newVisitsAPI(t, view)
-
-		resp := api.Post("/api/visits/query", map[string]any{})
-
-		assert.Equal(t, http.StatusNotImplemented, resp.Code)
-	})
-
 	t.Run("failure is 500", func(t *testing.T) {
 		view := &MockVisitsView{QueryFunc: func(context.Context, visitsview.Query) (visitsview.Page, error) {
 			return visitsview.Page{}, assert.AnError
@@ -269,6 +257,56 @@ func TestRegisterGetVisitRow(t *testing.T) {
 		assert.Equal(t, validNRE, view.RowCalls()[0].Nre)
 		assert.Contains(t, resp.Body.String(), `"manualStatus":{"current":8,"options":[{"code":3,"label":"Da prenotare"}]}`)
 		assert.Contains(t, resp.Body.String(), `"refreshing":true`)
+	})
+
+	t.Run("maps every row field", func(t *testing.T) {
+		when := time.Date(2026, 11, 12, 9, 30, 0, 0, time.UTC)
+		view := &MockVisitsView{RowFunc: func(context.Context, string) (visitsview.RowResult, error) {
+			return visitsview.RowResult{Row: visitsview.Row{
+				NRE:               validNRE,
+				Title:             "Visita",
+				PrescribedOn:      when,
+				DocumentRef:       "ref-1",
+				AppointmentLookup: visitsview.LookupDone,
+				Status: visitsview.Status{
+					Key: "unverified", Label: "Da verificare", Tone: listview.TonePending, Kind: visitsview.KindOfficial,
+					Code: 30, Manual: true, Note: "nota", VerifiedAt: when, CanBook: true, ExpiresOn: when, ExpiryEstimated: true, Details: []string{"d1"},
+				},
+				Appointment: &visitsview.Appointment{
+					ID: "a1", BookingID: "b1", Status: "PRENOTATO", At: when, RelativeDay: "domani", Upcoming: true,
+					Unit:     visitsview.Unit{DisplayName: "Ospedale", FullAddress: "Via Roma 1", MapsDirectionsURL: "https://maps/dir"},
+					Calendar: visitsview.CalendarFields{Title: "Visita", Location: "Ospedale", Details: "Prenotazione"},
+				},
+				Reports:   []visitsview.LinkedReport{{Ref: referti.Ref{Kind: referti.KindLab, AbstractID: "1"}, Label: "Lab", Date: when, Provider: "P", Origin: reports.OriginLocal, Available: true}},
+				CheckedAt: visitsview.Checked{Appointments: when},
+				Upload:    visitsview.UploadDefaults{Title: "Visita", Date: "2026-11-12", Provider: "Ospedale"},
+			}}, nil
+		}}
+		api := newVisitsAPI(t, view)
+
+		resp := api.Post("/api/visits/row", map[string]any{"nre": validNRE})
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		body := resp.Body.String()
+		for _, want := range []string{
+			`"documentRef":"ref-1"`,
+			`"appointmentLookup":"done"`,
+			`"code":30`,
+			`"manual":true`,
+			`"canBook":true`,
+			`"expiryEstimated":true`,
+			`"bookingId":"b1"`,
+			`"relativeDay":"domani"`,
+			`"upcoming":true`,
+			`"mapsDirectionsUrl":"https://maps/dir"`,
+			`"calendar":{"title":"Visita","location":"Ospedale","details":"Prenotazione"}`,
+			`"origin":"local"`,
+			`"available":true`,
+			`"verdict":null`,
+			`"upload":{"title":"Visita","date":"2026-11-12","provider":"Ospedale"}`,
+		} {
+			assert.Contains(t, body, want)
+		}
 	})
 
 	t.Run("unknown visit is 404", func(t *testing.T) {

@@ -5,8 +5,8 @@ import type { JSX } from "react";
 
 import {
   api,
-  type ReportBody,
   type ReportDocumentBody,
+  type ReportRefBody,
 } from "../../api/client";
 import { CappedList } from "../../components/CappedList";
 import { IconAction } from "../../components/IconAction";
@@ -15,11 +15,12 @@ import { ImageViewerModal } from "../../components/ImageViewerModal";
 import { PdfViewerModal } from "../../components/PdfViewerModal";
 import { blobToDataUrl } from "../../lib/blob";
 import { formatDate, formatDateTime } from "../../lib/format";
+import { useRowQuery } from "../../lib/useRowQuery";
 import { LocalReportEditor } from "./LocalReportEditor";
 import { VisitLinks } from "./VisitLinks";
 
 interface Props {
-  report: ReportBody;
+  reportRef: ReportRefBody;
   onClose: () => void;
   onChanged?: () => void;
 }
@@ -37,6 +38,8 @@ interface DocumentsResult {
 
 const unauthorizedMessage = "Accedi per vedere i referti.";
 const documentsMessage = "Documenti non disponibili.";
+const rowMessage = "Referto non disponibile.";
+const notFoundMessage = "Referto non trovato.";
 const pdfMessage = "Impossibile aprire il PDF.";
 
 function failureMessage(status: number, fallback: string): string {
@@ -44,16 +47,17 @@ function failureMessage(status: number, fallback: string): string {
 }
 
 export function ReportDetailModal({
-  report,
+  reportRef,
   onClose,
   onChanged,
 }: Props): JSX.Element {
   const [result, setResult] = useState<DocumentsResult | undefined>(undefined);
   const [viewer, setViewer] = useState<Viewer | undefined>(undefined);
-  const [nres, setNres] = useState<readonly string[]>(report.nres ?? []);
   const [opening, setOpening] = useState<string | undefined>(undefined);
   const [pdfError, setPdfError] = useState<string | undefined>(undefined);
-  const { kind, abstractId, detailId, repCode } = report;
+  const { kind, abstractId, detailId, repCode } = reportRef;
+  const rowQuery = useRowQuery("/api/reports/row", { ref: reportRef });
+  const row = rowQuery.data?.row;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,9 +102,10 @@ export function ReportDetailModal({
     };
   }, [pdfUrl]);
 
-  const local = report.origin === "local";
-  const reportRef = { kind, abstractId, detailId, repCode };
+  const local = row?.origin === "local";
+  const { reload } = rowQuery;
   const notifyChanged = (): void => {
+    reload();
     onChanged?.();
   };
 
@@ -122,7 +127,8 @@ export function ReportDetailModal({
         setPdfError(failureMessage(response.status, pdfMessage));
         return;
       }
-      const title = document.label === "" ? report.kindLabel : document.label;
+      const title =
+        document.label === "" ? (row?.kindLabel ?? "Referto") : document.label;
       if (data.type.startsWith("image/")) {
         setViewer({ kind: "image", url: await blobToDataUrl(data), title });
         return;
@@ -136,13 +142,26 @@ export function ReportDetailModal({
   };
 
   const documents = result?.documents;
-  const summary = [report.provider, report.date ? formatDate(report.date) : ""]
+  const summary = [row?.provider ?? "", row?.date ? formatDate(row.date) : ""]
     .filter((part) => part !== "")
     .join(" · ");
   const fallbackLabel = local ? "Apri documento" : "Apri PDF";
 
+  const rowError = rowQuery.notFound
+    ? notFoundMessage
+    : rowQuery.error === "unauthorized"
+      ? unauthorizedMessage
+      : rowQuery.error === undefined
+        ? undefined
+        : rowMessage;
+
   const documentsTab = (
     <>
+      {rowError === undefined ? null : (
+        <Text c="red" role="alert">
+          {rowError}
+        </Text>
+      )}
       {result === undefined ? (
         <Group gap="xs">
           <Loader size="sm" />
@@ -203,7 +222,7 @@ export function ReportDetailModal({
   return (
     <>
       <DetailDrawer
-        title={local ? (report.title ?? report.kindLabel) : report.kindLabel}
+        title={row?.title ?? "Referto"}
         badge={
           local ? (
             <Badge
@@ -228,33 +247,30 @@ export function ReportDetailModal({
             ...(documents === undefined ? {} : { count: documents.length }),
             content: documentsTab,
           },
-          {
-            value: "visite",
-            label: "Visite collegate",
-            count: nres.length,
-            content: (
-              <VisitLinks
-                reportRef={reportRef}
-                nres={nres}
-                onLinked={(nre) => {
-                  setNres([...nres, nre]);
-                  notifyChanged();
-                }}
-                onUnlinked={(nre) => {
-                  setNres(nres.filter((item) => item !== nre));
-                  notifyChanged();
-                }}
-              />
-            ),
-          },
-          ...(local
+          ...(row === undefined
+            ? []
+            : [
+                {
+                  value: "visite",
+                  label: "Visite collegate",
+                  count: row.visits.length,
+                  content: (
+                    <VisitLinks
+                      reportRef={reportRef}
+                      visits={row.visits}
+                      onChanged={notifyChanged}
+                    />
+                  ),
+                },
+              ]),
+          ...(row !== undefined && local
             ? [
                 {
                   value: "modifica",
                   label: "Modifica",
                   content: (
                     <LocalReportEditor
-                      report={report}
+                      row={row}
                       onChanged={() => {
                         notifyChanged();
                         onClose();

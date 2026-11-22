@@ -19,8 +19,8 @@ func TestRun(t *testing.T) {
 
 		require.NoError(t, run(&buf))
 
-		assert.Contains(t, buf.String(), `"/api/reports"`)
-		assert.Contains(t, buf.String(), `"/api/refresh"`)
+		assert.Contains(t, buf.String(), `"/api/reports/query"`)
+		assert.Contains(t, buf.String(), `"/api/refresh/start"`)
 		assert.Contains(t, buf.String(), `"/api/google/settings"`)
 	})
 

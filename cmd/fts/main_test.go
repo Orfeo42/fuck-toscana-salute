@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"fuck-toscana-salute/internal/config"
-	"fuck-toscana-salute/internal/store"
 	"fuck-toscana-salute/internal/vault"
 )
 
@@ -187,20 +187,20 @@ func TestServe(t *testing.T) {
 		stopServe(t, cancel, done)
 	})
 
-	t.Run("serves local reports with an fse failure when logged out", func(t *testing.T) {
+	t.Run("serves the reports query when logged out", func(t *testing.T) {
 		setEnv(t)
 		cfg, err := config.Load()
 		require.NoError(t, err)
 		base, cancel, done := startServe(t, cfg)
 
-		resp, err := client.Get(base + "/api/reports")
+		resp, err := client.Post(base+"/api/reports/query", "application/json", strings.NewReader("{}"))
 		require.NoError(t, err)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Contains(t, string(body), `"kind":"fse"`)
+		assert.Contains(t, string(body), `"rows":[]`)
 		stopServe(t, cancel, done)
 	})
 
@@ -323,26 +323,5 @@ func TestMigrateSecrets(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
 
 		require.ErrorIs(t, migrateSecrets(ctx, path, []byte("short"), memoryBackend{}), vault.ErrInvalidKey)
-	})
-}
-
-func TestFreshness(t *testing.T) {
-	t.Run("reads fetch times from the store", func(t *testing.T) {
-		setEnv(t)
-		cfg, err := config.Load()
-		require.NoError(t, err)
-		dsn, err := cfg.DatabaseDSN()
-		require.NoError(t, err)
-		ctx := context.Background()
-		st, err := store.Open(ctx, dsn, testKey())
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, st.Close()) })
-		at := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
-		require.NoError(t, st.Put(ctx, store.Record{Source: "freshness.test", Subject: "SUBJ", FetchedAt: at, Status: 200, Payload: []byte("{}")}))
-
-		got, err := freshness{st: st}.FetchedAt(ctx, "freshness.test")
-
-		require.NoError(t, err)
-		assert.True(t, at.Equal(got["SUBJ"]))
 	})
 }

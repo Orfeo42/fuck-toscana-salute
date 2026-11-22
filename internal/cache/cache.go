@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/store"
 )
@@ -70,6 +70,16 @@ type scopeKey struct{}
 
 func WithRefresh(ctx context.Context, scope Scope) context.Context {
 	return context.WithValue(ctx, scopeKey{}, scope)
+}
+
+func forcedLists(ctx context.Context) bool {
+	scope, ok := ctx.Value(scopeKey{}).(Scope)
+	return ok && (scope.All || scope.Lists)
+}
+
+func forcedReports(ctx context.Context) bool {
+	scope, ok := ctx.Value(scopeKey{}).(Scope)
+	return ok && (scope.All || scope.Reports)
 }
 
 func forced(ctx context.Context, nre string) bool {
@@ -137,14 +147,47 @@ func readThrough[T any](ctx context.Context, st Store, now func() time.Time, q q
 	return fresh, nil
 }
 
-func FetchedAt(ctx context.Context, st Store, source string) (map[string]time.Time, error) {
+func decodeEntry[T any](rec store.Record, ttl time.Duration, now time.Time) (Entry[T], error) {
+	var value T
+	if err := json.Unmarshal(rec.Payload, &value); err != nil {
+		return Entry[T]{}, fmt.Errorf("cache: decode %s: %w", rec.Source, err)
+	}
+	return Entry[T]{Value: value, FetchedAt: rec.FetchedAt, Stale: now.Sub(rec.FetchedAt) >= ttl}, nil
+}
+
+func cachedEntry[T any](ctx context.Context, st Store, source string, ttl time.Duration, now time.Time) (Entry[T], error) {
+	rec, err := st.Latest(ctx, source, "")
+	if errors.Is(err, store.ErrNotFound) {
+		return Entry[T]{}, ErrNotCached
+	}
+	if err != nil {
+		return Entry[T]{}, fmt.Errorf("cache: read %s: %w", source, err)
+	}
+	entry, err := decodeEntry[T](rec, ttl, now)
+	if err != nil {
+		slog.WarnContext(ctx, "cache: stored payload undecodable", slog.String("source", source), slog.String("error", err.Error()))
+		return Entry[T]{}, ErrNotCached
+	}
+	return entry, nil
+}
+
+func cachedEntries[T any](ctx context.Context, st Store, source string, ttl time.Duration, now time.Time) (map[string]Entry[T], error) {
 	recs, err := st.LatestBySource(ctx, source)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cache: read %s: %w", source, err)
 	}
-	out := make(map[string]time.Time, len(recs))
-	for _, r := range recs {
-		out[r.Subject] = r.FetchedAt
+	out := make(map[string]Entry[T], len(recs))
+	undecodable := 0
+	for _, rec := range recs {
+		entry, err := decodeEntry[T](rec, ttl, now)
+		if err != nil {
+			undecodable++
+			continue
+		}
+		out[strings.ToUpper(rec.Subject)] = entry
+	}
+	if undecodable > 0 {
+		slog.WarnContext(ctx, "cache: stored payloads undecodable", slog.String("source", source), slog.Int("count", undecodable))
 	}
 	return out, nil
 }
@@ -173,7 +216,7 @@ func NewCUP(src CUPSource, st Store, p Policy) *CUP {
 }
 
 func (c *CUP) Prescriptions(ctx context.Context) ([]cup.Prescription, error) {
-	q := query{source: SourceCUPPrescriptions, ttl: c.policy.Lists, forced: forced(ctx, "")}
+	q := query{source: SourceCUPPrescriptions, ttl: c.policy.Lists, forced: forcedLists(ctx)}
 	return readThrough(ctx, c.st, c.now, q, c.src.Prescriptions)
 }
 
@@ -198,16 +241,16 @@ func (c *CUP) Verdict(ctx context.Context, nre string) (cup.Verdict, error) {
 	})
 }
 
-func (c *CUP) CachedPrescriptions(_ context.Context) (Entry[[]cup.Prescription], error) {
-	return Entry[[]cup.Prescription]{}, notimpl.ErrNotImplemented
+func (c *CUP) CachedPrescriptions(ctx context.Context) (Entry[[]cup.Prescription], error) {
+	return cachedEntry[[]cup.Prescription](ctx, c.st, SourceCUPPrescriptions, c.policy.Lists, c.now())
 }
 
-func (c *CUP) CachedAppointments(_ context.Context) (map[string]Entry[[]cup.Appointment], error) {
-	return nil, notimpl.ErrNotImplemented
+func (c *CUP) CachedAppointments(ctx context.Context) (map[string]Entry[[]cup.Appointment], error) {
+	return cachedEntries[[]cup.Appointment](ctx, c.st, SourceCUPAppointments, c.policy.Appointments, c.now())
 }
 
-func (c *CUP) CachedVerdicts(_ context.Context) (map[string]Entry[cup.Verdict], error) {
-	return nil, notimpl.ErrNotImplemented
+func (c *CUP) CachedVerdicts(ctx context.Context) (map[string]Entry[cup.Verdict], error) {
+	return cachedEntries[cup.Verdict](ctx, c.st, SourceCUPVerdict, c.policy.Verdicts, c.now())
 }
 
 func stripPatient(raw []byte) []byte {
@@ -251,12 +294,12 @@ func NewFSE(src FSESource, st Store, p Policy) *FSE {
 }
 
 func (f *FSE) Prescriptions(ctx context.Context) ([]fse.Prescription, error) {
-	q := query{source: SourceFSEPrescriptions, ttl: f.policy.Lists, forced: forced(ctx, "")}
+	q := query{source: SourceFSEPrescriptions, ttl: f.policy.Lists, forced: forcedLists(ctx)}
 	return readThrough(ctx, f.st, f.now, q, f.src.Prescriptions)
 }
 
-func (f *FSE) CachedPrescriptions(_ context.Context) (Entry[[]fse.Prescription], error) {
-	return Entry[[]fse.Prescription]{}, notimpl.ErrNotImplemented
+func (f *FSE) CachedPrescriptions(ctx context.Context) (Entry[[]fse.Prescription], error) {
+	return cachedEntry[[]fse.Prescription](ctx, f.st, SourceFSEPrescriptions, f.policy.Lists, f.now())
 }
 
 //go:generate moq -out reportssource_mock.go . ReportsSource:MockReportsSource
@@ -306,7 +349,7 @@ func NewReports(src ReportsSource, st Store, p Policy) *Reports {
 }
 
 func (r *Reports) List(ctx context.Context) (referti.Listing, error) {
-	q := query{source: SourceFSEReports, ttl: r.policy.Lists, forced: forced(ctx, "")}
+	q := query{source: SourceFSEReports, ttl: r.policy.Lists, forced: forcedReports(ctx)}
 	stored, err := readThrough(ctx, r.st, r.now, q, func(ctx context.Context) (storedListing, error) {
 		listing, err := r.src.List(ctx)
 		if err != nil {
@@ -320,6 +363,10 @@ func (r *Reports) List(ctx context.Context) (referti.Listing, error) {
 	return fromStored(stored), nil
 }
 
-func (r *Reports) CachedList(_ context.Context) (Entry[referti.Listing], error) {
-	return Entry[referti.Listing]{}, notimpl.ErrNotImplemented
+func (r *Reports) CachedList(ctx context.Context) (Entry[referti.Listing], error) {
+	entry, err := cachedEntry[storedListing](ctx, r.st, SourceFSEReports, r.policy.Lists, r.now())
+	if err != nil {
+		return Entry[referti.Listing]{}, err
+	}
+	return Entry[referti.Listing]{Value: fromStored(entry.Value), FetchedAt: entry.FetchedAt, Stale: entry.Stale}, nil
 }

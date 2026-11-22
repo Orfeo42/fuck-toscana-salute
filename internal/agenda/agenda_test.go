@@ -2,7 +2,9 @@ package agenda
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,9 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/store"
 )
 
 var errBoom = errors.New("boom")
@@ -431,5 +435,336 @@ func TestPrescriptions(t *testing.T) {
 			nres = append(nres, r.NRE)
 		}
 		assert.Equal(t, []string{"OLD", "MID", "ZERO"}, nres)
+	})
+}
+
+func cachedCUP(list cache.Entry[[]cup.Prescription], listErr error, appointments map[string]cache.Entry[[]cup.Appointment], verdicts map[string]cache.Entry[cup.Verdict]) *MockCUP {
+	return &MockCUP{
+		CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]cup.Prescription], error) { return list, listErr },
+		CachedAppointmentsFunc: func(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error) {
+			return appointments, nil
+		},
+		CachedVerdictsFunc: func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error) { return verdicts, nil },
+	}
+}
+
+func cachedFSE(list cache.Entry[[]fse.Prescription], err error) *MockFSE {
+	return &MockFSE{CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]fse.Prescription], error) { return list, err }}
+}
+
+func TestSnapshot(t *testing.T) {
+	at := fixedNow.Add(-10 * time.Minute)
+	visit := func(nre string, status int) fse.Prescription {
+		return fse.Prescription{ID: "id-" + nre, NRE: nre, Kind: fse.KindVisit, Status: status}
+	}
+
+	t.Run("reads only the store four times and never upstream", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, cache.ErrNotCached, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("A1", 3), visit("A2", 3), visit("A3", 3)}, FetchedAt: at}, nil)
+		_, err := newAgenda(c, f, 2).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.Len(t, c.CachedPrescriptionsCalls(), 1)
+		assert.Len(t, c.CachedAppointmentsCalls(), 1)
+		assert.Len(t, c.CachedVerdictsCalls(), 1)
+		assert.Len(t, f.CachedPrescriptionsCalls(), 1)
+		assert.Empty(t, c.PrescriptionsCalls())
+		assert.Empty(t, c.AppointmentsCalls())
+		assert.Empty(t, c.VerdictCalls())
+		assert.Empty(t, f.PrescriptionsCalls())
+	})
+
+	t.Run("missing lists are flagged and rows are empty", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, cache.ErrNotCached, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{}, cache.ErrNotCached)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.True(t, snapshot.CUPList.Missing)
+		assert.True(t, snapshot.FSEList.Missing)
+		assert.Empty(t, snapshot.Rows)
+		assert.Empty(t, snapshot.Lookups)
+	})
+
+	t.Run("list state carries time and stale flag", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{FetchedAt: at, Stale: true}, nil, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, ListState{At: at, Stale: true}, snapshot.CUPList)
+		assert.Equal(t, ListState{At: at}, snapshot.FSEList)
+	})
+
+	t.Run("other list error is returned", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, errBoom, nil, nil)
+		_, err := newAgenda(c, cachedFSE(cache.Entry[[]fse.Prescription]{}, nil), 1).Snapshot(context.Background())
+		require.ErrorIs(t, err, errBoom)
+		require.ErrorIs(t, err, ErrCUPPrescriptions)
+	})
+
+	t.Run("fse list error is returned", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, nil, nil)
+		_, err := newAgenda(c, cachedFSE(cache.Entry[[]fse.Prescription]{}, errBoom), 1).Snapshot(context.Background())
+		require.ErrorIs(t, err, ErrFSEPrescriptions)
+	})
+
+	t.Run("appointment and verdict read errors are returned", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, nil, nil)
+		c.CachedAppointmentsFunc = func(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error) { return nil, errBoom }
+		_, err := newAgenda(c, cachedFSE(cache.Entry[[]fse.Prescription]{}, nil), 1).Snapshot(context.Background())
+		require.ErrorIs(t, err, ErrAppointments)
+
+		c = cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, nil, nil)
+		c.CachedVerdictsFunc = func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error) { return nil, errBoom }
+		_, err = newAgenda(c, cachedFSE(cache.Entry[[]fse.Prescription]{}, nil), 1).Snapshot(context.Background())
+		require.ErrorIs(t, err, ErrVerdicts)
+	})
+
+	t.Run("lookups follow the candidates rules", func(t *testing.T) {
+		cupList := []cup.Prescription{{NRE: "0a1b", Status: cup.StatusPrescribed}}
+		fseList := []fse.Prescription{
+			visit("0A1B", 3),
+			visit("OK1", 30),
+			{ID: "d", NRE: "DRUG", Kind: fse.KindDrug, Status: 3},
+			{ID: "e", NRE: "", Kind: fse.KindVisit, Status: 3},
+			visit("CANC", 4),
+			visit("DONE", 8),
+			visit("DONE9", 9),
+			{ID: "old", NRE: "OLD", Kind: fse.KindVisit, Status: 3, Date: fixedNow.AddDate(-2, 0, 0)},
+		}
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{Value: cupList, FetchedAt: at}, nil, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: fseList, FetchedAt: at}, nil)
+		ag := newAgenda(c, f, 1)
+		snapshot, err := ag.Snapshot(context.Background())
+		require.NoError(t, err)
+
+		expected := map[string]bool{}
+		for _, cand := range ag.candidates(cupList, fseList) {
+			expected[strings.ToUpper(cand.nre)] = true
+		}
+		got := map[string]bool{}
+		for key, lookup := range snapshot.Lookups {
+			got[key] = true
+			assert.True(t, lookup.Candidate)
+		}
+		assert.Equal(t, expected, got)
+		assert.Equal(t, map[string]bool{"OK1": true}, got)
+	})
+
+	t.Run("lookup carries appointments, check time and stale flag", func(t *testing.T) {
+		appointments := map[string]cache.Entry[[]cup.Appointment]{
+			"A1": {Value: []cup.Appointment{{ID: "x", Status: bookedStatus}}, FetchedAt: at, Stale: true},
+		}
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, appointments, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("a1", 3)}, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		lookup := snapshot.Lookups["A1"]
+		assert.True(t, lookup.Checked)
+		assert.True(t, lookup.Stale)
+		assert.Equal(t, at, lookup.CheckedAt)
+		require.Len(t, lookup.Appointments, 1)
+		assert.Nil(t, lookup.Verdict)
+	})
+
+	t.Run("unchecked candidate is not Checked", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, map[string]cache.Entry[[]cup.Appointment]{}, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("A1", 3)}, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, Lookup{Candidate: true}, snapshot.Lookups["A1"])
+	})
+
+	t.Run("unbooked candidate carries its verdict", func(t *testing.T) {
+		verdictAt := fixedNow.Add(-time.Hour)
+		appointments := map[string]cache.Entry[[]cup.Appointment]{"A1": {Value: []cup.Appointment{}, FetchedAt: at}}
+		verdicts := map[string]cache.Entry[cup.Verdict]{"A1": {Value: cup.Verdict{Reason: cup.VerdictHandled}, FetchedAt: verdictAt, Stale: true}}
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, appointments, verdicts)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("A1", 3)}, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		lookup := snapshot.Lookups["A1"]
+		require.NotNil(t, lookup.Verdict)
+		assert.Equal(t, cup.VerdictHandled, lookup.Verdict.Verdict.Reason)
+		assert.Equal(t, verdictAt, lookup.Verdict.VerifiedAt)
+		assert.True(t, lookup.Verdict.Stale)
+	})
+
+	t.Run("rows match the list merge", func(t *testing.T) {
+		cupList := []cup.Prescription{{NRE: "0A1B", PrescribedOn: fixedNow.AddDate(0, -3, 0)}}
+		fseList := []fse.Prescription{{ID: "f1", NRE: "0a1b", Date: fixedNow.AddDate(0, -2, 0)}, {ID: "f2", NRE: "F2", Date: fixedNow.AddDate(0, -1, 0)}}
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{Value: cupList, FetchedAt: at}, nil, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: fseList, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		require.Len(t, snapshot.Rows, 2)
+		assert.Equal(t, "F2", snapshot.Rows[0].NRE)
+		assert.Equal(t, "0A1B", snapshot.Rows[1].NRE)
+		assert.NotNil(t, snapshot.Rows[1].CUP)
+		assert.NotNil(t, snapshot.Rows[1].FSE)
+	})
+}
+
+func TestLists(t *testing.T) {
+	t.Run("refreshes both prescription lists only", func(t *testing.T) {
+		c := noCUP()
+		f := visits("A1")
+		require.NoError(t, newAgenda(c, f, 1).Lists(context.Background()))
+		assert.Len(t, c.PrescriptionsCalls(), 1)
+		assert.Len(t, f.PrescriptionsCalls(), 1)
+		assert.Empty(t, c.AppointmentsCalls())
+		assert.Empty(t, c.VerdictCalls())
+	})
+
+	t.Run("both login errors fail", func(t *testing.T) {
+		c := noCUP()
+		c.PrescriptionsFunc = func(ctx context.Context) ([]cup.Prescription, error) { return nil, session.ErrNotLoggedIn }
+		f := &MockFSE{PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) { return nil, session.ErrNotLoggedIn }}
+		require.ErrorIs(t, newAgenda(c, f, 1).Lists(context.Background()), session.ErrNotLoggedIn)
+	})
+}
+
+func TestRefreshNREs(t *testing.T) {
+	t.Run("touches only the given NREs", func(t *testing.T) {
+		c := noCUP()
+		c.AppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			if nre == "B2" {
+				return []cup.Appointment{{ID: "x"}}, nil
+			}
+			return nil, nil
+		}
+		f := visits("A1", "B2", "C3")
+		require.NoError(t, newAgenda(c, f, 2).RefreshNREs(context.Background(), []string{"A1", "B2"}))
+		got := []string{}
+		for _, call := range c.AppointmentsCalls() {
+			got = append(got, call.Nre)
+		}
+		assert.ElementsMatch(t, []string{"A1", "B2"}, got)
+		require.Len(t, c.VerdictCalls(), 1)
+		assert.Equal(t, "A1", c.VerdictCalls()[0].Nre)
+		assert.Empty(t, c.PrescriptionsCalls())
+		assert.Empty(t, f.PrescriptionsCalls())
+	})
+
+	t.Run("forces the real cache for the given NRE only", func(t *testing.T) {
+		st := &cache.MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				payload, err := json.Marshal([]cup.Appointment{})
+				require.NoError(t, err)
+				return store.Record{Source: source, Subject: subject, FetchedAt: time.Now(), Payload: payload}, nil
+			},
+			PutFunc: func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		src := &cache.MockCUPSource{
+			AppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+				return []cup.Appointment{{ID: "x"}}, nil
+			},
+		}
+		ag := New(cache.NewCUP(src, st, cache.DefaultPolicy()), emptyFSE(), 2)
+		require.NoError(t, ag.RefreshNREs(context.Background(), []string{"a1"}))
+		require.Len(t, src.AppointmentsCalls(), 1)
+		assert.Equal(t, "A1", src.AppointmentsCalls()[0].Nre)
+
+		_, err := ag.cup.Appointments(context.Background(), "B2")
+		require.NoError(t, err)
+		assert.Len(t, src.AppointmentsCalls(), 1)
+	})
+
+	t.Run("lookup failure is joined and keeps its cause", func(t *testing.T) {
+		c := noCUP()
+		c.AppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			return nil, session.ErrSessionExpired
+		}
+		err := newAgenda(c, emptyFSE(), 1).RefreshNREs(context.Background(), []string{"A1"})
+		require.ErrorIs(t, err, session.ErrSessionExpired)
+		require.ErrorIs(t, err, ErrRefreshNREs)
+		assert.Empty(t, c.VerdictCalls())
+	})
+}
+
+func TestBestBooking(t *testing.T) {
+	early := time.Date(2026, 11, 12, 9, 30, 0, 0, time.UTC)
+	late := time.Date(2026, 12, 12, 9, 30, 0, 0, time.UTC)
+
+	t.Run("empty input has no booking", func(t *testing.T) {
+		_, ok := BestBooking(nil)
+		assert.False(t, ok)
+	})
+
+	t.Run("prefers a live booking over a later cancelled one", func(t *testing.T) {
+		got, ok := BestBooking([]cup.Appointment{{ID: "b", Status: "DISDETTO", At: late}, {ID: "a", Status: bookedStatus, At: early}})
+		require.True(t, ok)
+		assert.Equal(t, "a", got.ID)
+	})
+
+	t.Run("prefers the latest among live bookings", func(t *testing.T) {
+		got, _ := BestBooking([]cup.Appointment{{ID: "b", Status: bookedStatus, At: late}, {ID: "a", Status: bookedStatus, At: early}})
+		assert.Equal(t, "b", got.ID)
+		got, _ = BestBooking([]cup.Appointment{{ID: "a", Status: bookedStatus, At: early}, {ID: "b", Status: bookedStatus, At: late}})
+		assert.Equal(t, "b", got.ID)
+	})
+
+	t.Run("falls back to the latest cancelled booking", func(t *testing.T) {
+		got, _ := BestBooking([]cup.Appointment{{ID: "a", Status: "DISDETTO", At: early}, {ID: "b", Status: "DISDETTO", At: late}})
+		assert.Equal(t, "b", got.ID)
+	})
+
+	t.Run("a booking without date is the oldest", func(t *testing.T) {
+		got, _ := BestBooking([]cup.Appointment{{ID: "b", Status: bookedStatus, At: early}, {ID: "a", Status: bookedStatus}})
+		assert.Equal(t, "b", got.ID)
+		got, _ = BestBooking([]cup.Appointment{{ID: "a", Status: bookedStatus}, {ID: "b", Status: bookedStatus, At: early}})
+		assert.Equal(t, "b", got.ID)
+	})
+
+	t.Run("a later live booking replaces an earlier cancelled one", func(t *testing.T) {
+		got, _ := BestBooking([]cup.Appointment{{ID: "a", Status: "DISDETTO", At: late}, {ID: "b", Status: bookedStatus, At: early}})
+		assert.Equal(t, "b", got.ID)
+	})
+
+	t.Run("equal bookings keep the first", func(t *testing.T) {
+		got, _ := BestBooking([]cup.Appointment{{ID: "a", Status: bookedStatus, At: early}, {ID: "b", Status: bookedStatus, At: early}})
+		assert.Equal(t, "a", got.ID)
+	})
+}
+
+func TestRowHelpers(t *testing.T) {
+	d1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("title prefers the fse description", func(t *testing.T) {
+		r := Row{FSE: &fse.Prescription{Description: "Visita"}, CUP: &cup.Prescription{Items: []string{"X"}}}
+		assert.Equal(t, "Visita", r.Title())
+	})
+
+	t.Run("title joins cup items when fse description is empty", func(t *testing.T) {
+		r := Row{FSE: &fse.Prescription{}, CUP: &cup.Prescription{Items: []string{"ECG", "VISITA"}}}
+		assert.Equal(t, "ECG, VISITA", r.Title())
+	})
+
+	t.Run("title falls back to Prescrizione", func(t *testing.T) {
+		assert.Equal(t, "Prescrizione", Row{CUP: &cup.Prescription{}}.Title())
+		assert.Equal(t, "Prescrizione", Row{}.Title())
+	})
+
+	t.Run("prescribed date prefers fse over cup", func(t *testing.T) {
+		r := Row{FSE: &fse.Prescription{Date: d2}, CUP: &cup.Prescription{PrescribedOn: d1}}
+		assert.Equal(t, d2, r.PrescribedOn())
+	})
+
+	t.Run("prescribed date falls back to cup then zero", func(t *testing.T) {
+		assert.Equal(t, d1, Row{FSE: &fse.Prescription{}, CUP: &cup.Prescription{PrescribedOn: d1}}.PrescribedOn())
+		assert.True(t, Row{}.PrescribedOn().IsZero())
+	})
+
+	t.Run("fse visit is a visit and fse drug is not", func(t *testing.T) {
+		assert.True(t, Row{FSE: &fse.Prescription{Kind: fse.KindVisit}}.IsVisit())
+		assert.False(t, Row{FSE: &fse.Prescription{Kind: fse.KindDrug}}.IsVisit())
+	})
+
+	t.Run("fse drug with cup is not a visit", func(t *testing.T) {
+		assert.False(t, Row{FSE: &fse.Prescription{Kind: fse.KindDrug}, CUP: &cup.Prescription{}}.IsVisit())
+	})
+
+	t.Run("cup-only row is a visit", func(t *testing.T) {
+		assert.True(t, Row{CUP: &cup.Prescription{}}.IsVisit())
+		assert.False(t, Row{}.IsVisit())
 	})
 }

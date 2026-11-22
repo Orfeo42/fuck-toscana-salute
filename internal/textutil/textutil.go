@@ -35,3 +35,13 @@ func CompareNatural(a, b string) int {
 func ContainsFolded(haystack, needle string) bool {
 	return strings.Contains(Fold(haystack), Fold(needle))
 }
+
+func JoinNonEmpty(sep string, parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, sep)
+}

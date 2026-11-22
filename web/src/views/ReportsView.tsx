@@ -16,40 +16,44 @@ import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 
-import type { ReportBody } from "../api/client";
-import { refreshPortals } from "../data/refresh";
+import type { ReportRowBody, ReportsQueryRequest } from "../api/client";
+import { startRefresh } from "../data/refresh";
 import { formatDate } from "../lib/format";
 import { useSort } from "../lib/useSort";
+import { useViewQuery } from "../lib/useViewQuery";
 import { tableScrollProps } from "../components/tableScroll";
 import { tableColors } from "../theme";
-import {
-  filterByKind,
-  kindLabels,
-  reportId,
-  reportSortKeys,
-  searchReports,
-  sortReports,
-  type ReportSortKey,
-} from "./reports/filter";
 import { ReportDetailModal } from "./reports/ReportDetailModal";
 import { UploadReportDialog } from "./reports/UploadReportDialog";
-import { updatedLabel } from "./reports/updatedLabel";
-import { useReports } from "./reports/useReports";
 
-const descFirst: readonly ReportSortKey[] = ["date"];
+type ReportKind = NonNullable<ReportsQueryRequest["kind"]>;
+type ReportSort = ReportsQueryRequest["sort"];
+type PageSize = ReportsQueryRequest["pageSize"];
+
+const reportKinds: readonly ReportKind[] = [
+  "lab",
+  "labtrasf",
+  "ris",
+  "ldo",
+  "ps",
+  "rsa",
+  "rap",
+  "local",
+];
+const sortKeys: readonly ReportSort[] = ["date", "kind", "provider"];
+const pageSizes: readonly PageSize[] = [25, 50, 100];
+const descFirst: readonly ReportSort[] = ["date"];
 const rowPointer = { cursor: "pointer" };
 const allKinds = "";
-const fseKind = "fse";
 const fseHint =
   "Accedi al Fascicolo Sanitario per vedere anche i referti del portale regionale.";
 
-function linkedLabel(count: number): string {
-  return count === 1
-    ? "Collegato a 1 visita"
-    : `Collegato a ${String(count)} visite`;
+function sortKeyOf(accessor: string): ReportSort | undefined {
+  const name = accessor === "kindLabel" ? "kind" : accessor;
+  return sortKeys.find((key) => key === name);
 }
 
-const columns: DataTableColumn<ReportBody>[] = [
+const columns: DataTableColumn<ReportRowBody>[] = [
   {
     accessor: "date",
     title: "Data",
@@ -70,7 +74,7 @@ const columns: DataTableColumn<ReportBody>[] = [
               <Upload size={16} aria-hidden="true" />
             </span>
           </Tooltip>
-          <Text size="sm">{report.title ?? report.kindLabel}</Text>
+          <Text size="sm">{report.title}</Text>
         </Group>
       ) : (
         report.kindLabel
@@ -106,54 +110,47 @@ const columns: DataTableColumn<ReportBody>[] = [
             Oscurato
           </Badge>
         ) : null}
-        {(report.nres ?? []).length > 0 ? (
-          <Tooltip label={linkedLabel((report.nres ?? []).length)} withArrow>
-            <span
-              role="img"
-              aria-label={linkedLabel((report.nres ?? []).length)}
-            >
+        {report.linkedLabel === "" ? null : (
+          <Tooltip label={report.linkedLabel} withArrow>
+            <span role="img" aria-label={report.linkedLabel}>
               <Link2 size={16} aria-hidden="true" />
             </span>
           </Tooltip>
-        ) : null}
+        )}
       </Group>
     ),
   },
 ];
 
-interface Props {
-  now?: Date;
-}
-
-export function ReportsView({ now }: Props = {}): JSX.Element {
-  const reports = useReports();
-  const [mountedAt] = useState(() => new Date());
+export function ReportsView(): JSX.Element {
   const [search, setSearch] = useState("");
-  const [kind, setKind] = useState(allKinds);
-  const [refreshing, setRefreshing] = useState(false);
+  const [kind, setKind] = useState<ReportKind | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(50);
+  const [starting, setStarting] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [detailId, setDetailId] = useState<string | undefined>(undefined);
-  const sort = useSort<ReportSortKey>("date", "desc", descFirst);
+  const [opened, setOpened] = useState<ReportRowBody | undefined>(undefined);
+  const sort = useSort<ReportSort>("date", "desc", descFirst);
 
-  const all = reports.data?.reports ?? [];
-  const allFailures = reports.data?.failures ?? [];
-  const failures = allFailures.filter((failure) => failure.kind !== fseKind);
-  const fseFailed = failures.length !== allFailures.length;
-  const updated = reports.data?.updated ?? undefined;
-  const visible = sortReports(
-    filterByKind(searchReports(all, search), kind),
-    sort.key,
-    sort.dir,
-  );
-  const detail =
-    detailId === undefined
-      ? undefined
-      : all.find((report) => reportId(report) === detailId);
+  const request: ReportsQueryRequest = {
+    search,
+    sort: sort.key,
+    dir: sort.dir,
+    page,
+    pageSize,
+  };
+  if (kind !== undefined) {
+    request.kind = kind;
+  }
+  const reports = useViewQuery("/api/reports/query", request);
+  const data = reports.data;
+  const refreshing = starting || data?.refreshing === true;
+  const issue = reports.error === undefined ? data?.issue : undefined;
 
   const refreshAll = async (): Promise<void> => {
-    setRefreshing(true);
-    const ok = await refreshPortals({ all: true }).catch(() => false);
-    setRefreshing(false);
+    setStarting(true);
+    const ok = await startRefresh({ reports: true }).catch(() => false);
+    setStarting(false);
     if (!ok) {
       notifications.show({
         color: "red",
@@ -176,23 +173,31 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value);
+            setPage(1);
           }}
         />
         <NativeSelect
           label="Tipo"
-          value={kind}
+          value={kind ?? allKinds}
           data={[
             { value: allKinds, label: "Tutti i tipi" },
-            ...kindLabels(all).map((label) => ({ value: label, label })),
+            ...(data?.kinds ?? []).map((option) => ({
+              value: option.key,
+              label: `${option.label} (${String(option.count)})`,
+            })),
           ]}
           onChange={(event) => {
-            setKind(event.currentTarget.value);
+            const value = event.currentTarget.value;
+            setKind(reportKinds.find((item) => item === value));
+            setPage(1);
           }}
         />
-        <Text aria-live="polite">{`${String(visible.length)} referti`}</Text>
-        {updated === undefined ? null : (
+        {data === undefined ? null : (
+          <Text aria-live="polite">{`${String(data.total)} referti`}</Text>
+        )}
+        {data === undefined || data.updated.label === "" ? null : (
           <Text size="sm" c="dimmed">
-            {updatedLabel(updated, now ?? mountedAt)}
+            {data.updated.label}
           </Text>
         )}
         <Button
@@ -214,55 +219,69 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
           Carica referto
         </Button>
       </Group>
-      {reports.loading ? (
+      {reports.loading && data === undefined ? (
         <Group gap="xs">
           <Loader size="sm" />
           <Text>Carico i referti…</Text>
         </Group>
       ) : null}
-      {!reports.loading && reports.error === "unauthorized" ? (
+      {reports.error === "unauthorized" || issue === "login_required" ? (
         <Alert color="yellow" role="alert" mb="md">
           Accedi per vedere i referti.
         </Alert>
       ) : null}
-      {!reports.loading && reports.error === "unavailable" ? (
+      {(reports.error !== undefined && reports.error !== "unauthorized") ||
+      issue === "unavailable" ? (
         <Alert color="red" role="alert" mb="md">
           Il portale regionale non risponde. Riprova tra poco.
         </Alert>
       ) : null}
-      {fseFailed ? (
+      {data?.fseUnavailable === true ? (
         <Alert color="yellow" role="alert" mb="md" p="xs">
           {fseHint}
         </Alert>
       ) : null}
-      {failures.length > 0 ? (
+      {data !== undefined && data.failures.length > 0 ? (
         <Alert color="yellow" role="alert" mb="md" p="xs">
           Alcune sezioni non sono state caricate:{" "}
-          {failures.map((failure) => failure.kindLabel).join(", ")}
+          {data.failures.map((failure) => failure.kindLabel).join(", ")}
         </Alert>
       ) : null}
-      {reports.data === undefined ? null : (
+      {data === undefined ? null : (
         <DataTable
           striped
           highlightOnHover
           withTableBorder
           {...tableColors}
           {...tableScrollProps}
-          idAccessor={reportId}
-          records={visible}
+          idAccessor="id"
+          records={data.rows}
           columns={columns}
+          fetching={reports.loading}
           noRecordsText="Nessun referto disponibile"
-          sortStatus={{ columnAccessor: sort.key, direction: sort.dir }}
+          totalRecords={data.total}
+          page={page}
+          onPageChange={setPage}
+          recordsPerPage={pageSize}
+          recordsPerPageLabel="Righe per pagina"
+          recordsPerPageOptions={[...pageSizes]}
+          onRecordsPerPageChange={(size) => {
+            setPageSize(pageSizes.find((item) => item === size) ?? 50);
+            setPage(1);
+          }}
+          sortStatus={{
+            columnAccessor: sort.key === "kind" ? "kindLabel" : sort.key,
+            direction: sort.dir,
+          }}
           onSortStatusChange={(status) => {
-            const key = reportSortKeys.find(
-              (item) => item === status.columnAccessor,
-            );
+            const key = sortKeyOf(String(status.columnAccessor));
             if (key !== undefined) {
               sort.toggle(key);
+              setPage(1);
             }
           }}
           onRowClick={({ record }) => {
-            setDetailId(reportId(record));
+            setOpened(record);
           }}
           customRowAttributes={(report) => ({
             tabIndex: 0,
@@ -271,19 +290,19 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
                 event.key === "Enter" &&
                 event.target === event.currentTarget
               ) {
-                setDetailId(reportId(report));
+                setOpened(report);
               }
             },
           })}
           rowStyle={() => rowPointer}
         />
       )}
-      {detail === undefined ? null : (
+      {opened === undefined ? null : (
         <ReportDetailModal
-          key={reportId(detail)}
-          report={detail}
+          key={opened.id}
+          reportRef={opened.ref}
           onClose={() => {
-            setDetailId(undefined);
+            setOpened(undefined);
           }}
           onChanged={reports.reload}
         />

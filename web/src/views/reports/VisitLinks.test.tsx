@@ -1,30 +1,20 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ReportRefBody, RowBody } from "../../api/client";
+import type { LinkedVisitBody, ReportRefBody } from "../../api/client";
 import { render } from "../../test/render";
 import { VisitLinks } from "./VisitLinks";
 
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
-  reload: vi.fn(),
+  post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
 }));
 
-vi.mock("../../data/useHealthData", () => ({
-  useHealthData: () => ({
-    prescriptions: {
-      data: { prescriptions: rows, updated: null },
-      reload: mocks.reload,
-    },
-    appointments: { data: undefined, reload: vi.fn() },
-  }),
-}));
-
 vi.mock("../../api/client", () => ({
-  api: { PUT: mocks.put, DELETE: mocks.del },
+  api: { POST: mocks.post, PUT: mocks.put, DELETE: mocks.del },
 }));
 
 vi.mock("../../lib/openVisit", () => ({
@@ -38,111 +28,140 @@ const reportRef: ReportRefBody = {
   repCode: "r1",
 };
 
-const rows: RowBody[] = [
-  {
-    nre: "0123A",
-    overridden: false,
-    reports: null,
-    fse: {
-      id: "p1",
-      nre: "0123A",
-      description: "Ecografia addome",
-      kind: "visit",
-      status: 3,
-      documentRef: "",
-    },
-  },
-];
+const linked: LinkedVisitBody = { nre: "0123A", title: "Ecografia addome" };
+const free: LinkedVisitBody = { nre: "0456B", title: "Visita cardiologica" };
 
-function renderLinks(nres: readonly string[]): void {
+function renderLinks(visits: readonly LinkedVisitBody[]): {
+  onChanged: () => void;
+} {
+  const onChanged = vi.fn();
   render(
-    <VisitLinks
-      reportRef={reportRef}
-      nres={nres}
-      onLinked={() => undefined}
-      onUnlinked={() => undefined}
-    />,
+    <VisitLinks reportRef={reportRef} visits={visits} onChanged={onChanged} />,
   );
+  return { onChanged };
 }
 
 describe("VisitLinks", () => {
   beforeEach(() => {
     mocks.open.mockReset();
-    mocks.reload.mockReset();
+    mocks.post.mockReset();
     mocks.put.mockReset();
     mocks.del.mockReset();
+    mocks.post.mockResolvedValue({
+      data: { options: [free] },
+      response: { ok: true },
+    });
   });
 
-  it("opens the visit from the title", async () => {
-    renderLinks(["0123A"]);
+  it("shows the linked visits from the row", () => {
+    renderLinks([linked]);
+
+    expect(
+      screen.getByRole("button", { name: "Ecografia addome" }),
+    ).toBeVisible();
+    expect(screen.getByText("0123A")).toBeVisible();
+  });
+
+  it("says when there are no linked visits", () => {
+    renderLinks([]);
+
+    expect(screen.getByText("Nessuna visita collegata.")).toBeVisible();
+  });
+
+  it("opens the visit from the title and from the icon", async () => {
+    renderLinks([linked]);
+
     await userEvent.click(
       screen.getByRole("button", { name: "Ecografia addome" }),
     );
-    expect(mocks.open).toHaveBeenCalledWith("0123A");
-  });
-
-  it("opens the visit from the icon", async () => {
-    renderLinks(["0123A"]);
     await userEvent.click(screen.getByRole("button", { name: "Apri visita" }));
-    expect(mocks.open).toHaveBeenCalledWith("0123A");
-  });
 
-  it("opens a visit that is not loaded", async () => {
-    renderLinks(["0999Z"]);
-    await userEvent.click(screen.getByRole("button", { name: "0999Z" }));
-    expect(mocks.open).toHaveBeenCalledWith("0999Z");
+    expect(mocks.open).toHaveBeenNthCalledWith(1, "0123A");
+    expect(mocks.open).toHaveBeenNthCalledWith(2, "0123A");
   });
 
   it("never puts the NRE in a link", () => {
-    renderLinks(["0123A"]);
+    renderLinks([linked]);
+
     for (const link of screen.queryAllByRole("link")) {
       expect(link.getAttribute("href") ?? "").not.toContain("0123A");
     }
   });
 
-  it("reloads prescriptions after a successful unlink", async () => {
-    mocks.del.mockResolvedValue({
-      response: new Response(null, { status: 200 }),
-    });
-    renderLinks(["0123A"]);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Scollega 0123A" }),
-    );
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not reload prescriptions after a failed unlink", async () => {
-    mocks.del.mockResolvedValue({
-      response: new Response(null, { status: 500 }),
-    });
-    renderLinks(["0123A"]);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Scollega 0123A" }),
-    );
-    expect(mocks.reload).not.toHaveBeenCalled();
-  });
-
-  it("reloads prescriptions after a successful link", async () => {
-    mocks.put.mockResolvedValue({
-      response: new Response(null, { status: 200 }),
-    });
+  it("loads the options from the backend with the report ref", async () => {
     renderLinks([]);
+
+    await waitFor(() => {
+      expect(mocks.post).toHaveBeenCalledWith(
+        "/api/reports/visit-options",
+        expect.objectContaining({ body: { ref: reportRef } }),
+      );
+    });
+  });
+
+  it("links an offered visit and notifies the parent", async () => {
+    mocks.put.mockResolvedValue({ response: { ok: true } });
+    const { onChanged } = renderLinks([]);
+
     await userEvent.click(
       screen.getByRole("combobox", { name: "Collega a visita" }),
     );
-    await userEvent.click(await screen.findByText(/0123A/));
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
+    await userEvent.click(
+      await screen.findByRole("option", {
+        name: "Visita cardiologica · 0456B",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.put).toHaveBeenCalledWith("/api/links", {
+      body: { nre: "0456B", report: reportRef },
+    });
   });
 
-  it("does not reload prescriptions after a failed link", async () => {
-    mocks.put.mockResolvedValue({
-      response: new Response(null, { status: 500 }),
+  it("unlinks a visit and notifies the parent", async () => {
+    mocks.del.mockResolvedValue({ response: { ok: true } });
+    const { onChanged } = renderLinks([linked]);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scollega 0123A" }),
+    );
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1);
     });
-    renderLinks([]);
+    expect(mocks.del).toHaveBeenCalledWith("/api/links", {
+      body: { nre: "0123A", report: reportRef },
+    });
+  });
+
+  it("shows an error and does not notify when unlinking fails", async () => {
+    mocks.del.mockResolvedValue({ response: { ok: false } });
+    const { onChanged } = renderLinks([linked]);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scollega 0123A" }),
+    );
+
+    expect(await screen.findByText("Operazione non riuscita")).toBeVisible();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and does not notify when linking fails", async () => {
+    mocks.put.mockResolvedValue({ response: { ok: false } });
+    const { onChanged } = renderLinks([]);
+
     await userEvent.click(
       screen.getByRole("combobox", { name: "Collega a visita" }),
     );
-    await userEvent.click(await screen.findByText(/0123A/));
-    expect(mocks.reload).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("option", {
+        name: "Visita cardiologica · 0456B",
+      }),
+    );
+
+    expect(await screen.findByText("Operazione non riuscita")).toBeVisible();
+    expect(onChanged).not.toHaveBeenCalled();
   });
 });

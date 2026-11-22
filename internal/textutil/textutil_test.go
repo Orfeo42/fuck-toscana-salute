@@ -59,3 +59,17 @@ func TestContainsFolded(t *testing.T) {
 		assert.True(t, ContainsFolded("Ospedale", "  "))
 	})
 }
+
+func TestJoinNonEmpty(t *testing.T) {
+	t.Run("skips empty parts", func(t *testing.T) {
+		assert.Equal(t, "a, c", JoinNonEmpty(", ", "a", "", "c"))
+	})
+
+	t.Run("all empty gives an empty string", func(t *testing.T) {
+		assert.Equal(t, "", JoinNonEmpty(" ", "", ""))
+	})
+
+	t.Run("no parts gives an empty string", func(t *testing.T) {
+		assert.Equal(t, "", JoinNonEmpty(" "))
+	})
+}

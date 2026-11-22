@@ -155,6 +155,39 @@ func TestRegisterGetReportRow(t *testing.T) {
 		assert.Contains(t, resp.Body.String(), `"refreshing":true`)
 	})
 
+	t.Run("maps every row field", func(t *testing.T) {
+		at := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
+		view := &MockReportsView{RowFunc: func(context.Context, referti.Ref) (reportsview.RowResult, error) {
+			return reportsview.RowResult{Row: reportsview.Row{
+				ID:          "x",
+				Ref:         referti.Ref{Kind: referti.KindLocal, AbstractID: "7"},
+				Kind:        "local",
+				KindLabel:   "Caricato",
+				Title:       "Eco",
+				CustomTitle: "Eco",
+				Date:        at,
+				EditDate:    "2026-03-10",
+				Provider:    "P",
+				Unread:      true,
+				Origin:      reports.OriginLocal,
+				Visits:      []reportsview.LinkedVisit{{NRE: validNRE, Title: "Visita"}},
+				LinkedLabel: "Collegato a 1 visita",
+			}}, nil
+		}}
+		api := newReportsQueryAPI(t, view)
+
+		resp := api.Post("/api/reports/row", map[string]any{"ref": ref})
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		body := resp.Body.String()
+		assert.Contains(t, body, `"kindLabel":"Caricato"`)
+		assert.Contains(t, body, `"customTitle":"Eco"`)
+		assert.Contains(t, body, `"editDate":"2026-03-10"`)
+		assert.Contains(t, body, `"origin":"local"`)
+		assert.Contains(t, body, `"unread":true`)
+		assert.Contains(t, body, `"visits":[{"nre":"`+validNRE+`","title":"Visita"}]`)
+	})
+
 	t.Run("unknown report is 404", func(t *testing.T) {
 		view := &MockReportsView{RowFunc: func(context.Context, referti.Ref) (reportsview.RowResult, error) {
 			return reportsview.RowResult{}, reportsview.ErrNotFound

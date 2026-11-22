@@ -1,8 +1,11 @@
-import { api, type RefreshRequest } from "../api/client";
+import { api, type StartRefreshRequest } from "../api/client";
 
-export type RefreshScope = Pick<RefreshRequest, "all" | "nres">;
+export type StartRefreshScope = Pick<
+  StartRefreshRequest,
+  "all" | "lists" | "reports" | "nres"
+>;
 
-export async function refreshPortals(scope: RefreshScope): Promise<boolean> {
-  const { response } = await api.POST("/api/refresh", { body: scope });
+export async function startRefresh(scope: StartRefreshScope): Promise<boolean> {
+  const { response } = await api.POST("/api/refresh/start", { body: scope });
   return response.ok;
 }

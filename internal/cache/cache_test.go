@@ -470,29 +470,6 @@ func TestWithRefresh(t *testing.T) {
 	})
 }
 
-func TestFetchedAt(t *testing.T) {
-	t.Run("maps subject to time", func(t *testing.T) {
-		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
-			return []store.Record{
-				{Source: source, Subject: testNRE, FetchedAt: testNow},
-				{Source: source, Subject: "0900A0000000002", FetchedAt: testNow.Add(-time.Hour)},
-			}, nil
-		}}
-		got, err := FetchedAt(context.Background(), st, SourceCUPAppointments)
-		require.NoError(t, err)
-		assert.Equal(t, map[string]time.Time{testNRE: testNow, "0900A0000000002": testNow.Add(-time.Hour)}, got)
-		assert.Equal(t, SourceCUPAppointments, st.LatestBySourceCalls()[0].Source)
-	})
-
-	t.Run("store error propagates", func(t *testing.T) {
-		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
-			return nil, errors.New("boom")
-		}}
-		_, err := FetchedAt(context.Background(), st, SourceCUPAppointments)
-		require.Error(t, err)
-	})
-}
-
 func fakeListing() referti.Listing {
 	return referti.Listing{
 		Reports: []referti.Report{{
@@ -614,4 +591,245 @@ func jsonFailure(t *testing.T, payload []byte) []byte {
 	require.NoError(t, json.Unmarshal(payload, &stored))
 	require.Len(t, stored.Failures, 1)
 	return stored.Failures[0]
+}
+
+func TestScopeForcing(t *testing.T) {
+	t.Run("Lists forces lists but not reports or NREs", func(t *testing.T) {
+		ctx := WithRefresh(context.Background(), Scope{Lists: true})
+		assert.True(t, forcedLists(ctx))
+		assert.False(t, forcedReports(ctx))
+		assert.False(t, forced(ctx, testNRE))
+	})
+
+	t.Run("Reports forces reports but not lists", func(t *testing.T) {
+		ctx := WithRefresh(context.Background(), Scope{Reports: true})
+		assert.True(t, forcedReports(ctx))
+		assert.False(t, forcedLists(ctx))
+	})
+
+	t.Run("All forces lists and reports", func(t *testing.T) {
+		ctx := WithRefresh(context.Background(), Scope{All: true})
+		assert.True(t, forcedLists(ctx))
+		assert.True(t, forcedReports(ctx))
+	})
+
+	t.Run("no scope forces nothing", func(t *testing.T) {
+		assert.False(t, forcedLists(context.Background()))
+		assert.False(t, forcedReports(context.Background()))
+	})
+
+	t.Run("Lists scope refetches the CUP list through the source", func(t *testing.T) {
+		st := &MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				return record(t, source, subject, testNow, fakePrescriptions()), nil
+			},
+			PutFunc: func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		src := &MockCUPSource{PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) { return fakePrescriptions(), nil }}
+		_, err := newCUP(src, st).Prescriptions(WithRefresh(context.Background(), Scope{Lists: true}))
+		require.NoError(t, err)
+		assert.Len(t, src.PrescriptionsCalls(), 1)
+	})
+
+	t.Run("Lists scope does not refetch reports", func(t *testing.T) {
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, testNow, toStored(fakeListing())), nil
+		}}
+		src := &MockReportsSource{}
+		reports := NewReports(src, st, DefaultPolicy())
+		reports.now = func() time.Time { return testNow }
+		_, err := reports.List(WithRefresh(context.Background(), Scope{Lists: true}))
+		require.NoError(t, err)
+		assert.Empty(t, src.ListCalls())
+	})
+
+	t.Run("Reports scope refetches the report list", func(t *testing.T) {
+		st := &MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				return record(t, source, subject, testNow, toStored(fakeListing())), nil
+			},
+			PutFunc: func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		src := &MockReportsSource{ListFunc: func(ctx context.Context) (referti.Listing, error) { return fakeListing(), nil }}
+		reports := NewReports(src, st, DefaultPolicy())
+		reports.now = func() time.Time { return testNow }
+		_, err := reports.List(WithRefresh(context.Background(), Scope{Reports: true}))
+		require.NoError(t, err)
+		assert.Len(t, src.ListCalls(), 1)
+	})
+}
+
+func TestCachedReads(t *testing.T) {
+	missing := func() *MockStore {
+		return &MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				return store.Record{}, store.ErrNotFound
+			},
+		}
+	}
+
+	t.Run("CUP prescriptions fresh entry", func(t *testing.T) {
+		at := testNow.Add(-10 * time.Minute)
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, at, fakePrescriptions()), nil
+		}}
+		src := &MockCUPSource{}
+		got, err := newCUP(src, st).CachedPrescriptions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, fakePrescriptions(), got.Value)
+		assert.Equal(t, at, got.FetchedAt)
+		assert.False(t, got.Stale)
+		assert.Len(t, st.LatestCalls(), 1)
+		assert.Equal(t, SourceCUPPrescriptions, st.LatestCalls()[0].Source)
+		assert.Empty(t, src.PrescriptionsCalls())
+	})
+
+	t.Run("CUP prescriptions stale entry", func(t *testing.T) {
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, testNow.Add(-2*time.Hour), fakePrescriptions()), nil
+		}}
+		got, err := newCUP(&MockCUPSource{}, st).CachedPrescriptions(context.Background())
+		require.NoError(t, err)
+		assert.True(t, got.Stale)
+	})
+
+	t.Run("CUP prescriptions missing", func(t *testing.T) {
+		_, err := newCUP(&MockCUPSource{}, missing()).CachedPrescriptions(context.Background())
+		require.ErrorIs(t, err, ErrNotCached)
+	})
+
+	t.Run("CUP prescriptions store error propagates", func(t *testing.T) {
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return store.Record{}, errors.New("boom")
+		}}
+		_, err := newCUP(&MockCUPSource{}, st).CachedPrescriptions(context.Background())
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotCached)
+	})
+
+	t.Run("CUP prescriptions undecodable payload is not cached", func(t *testing.T) {
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return store.Record{Source: source, FetchedAt: testNow, Payload: []byte("{")}, nil
+		}}
+		_, err := newCUP(&MockCUPSource{}, st).CachedPrescriptions(context.Background())
+		require.ErrorIs(t, err, ErrNotCached)
+	})
+
+	t.Run("CUP appointments one batched read keyed by upper-case NRE with stale flags", func(t *testing.T) {
+		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
+			return []store.Record{
+				record(t, source, "0900a0000000001", testNow.Add(-time.Minute), fakeAppointments()),
+				record(t, source, "0900A0000000002", testNow.Add(-2*time.Hour), []cup.Appointment{}),
+			}, nil
+		}}
+		src := &MockCUPSource{}
+		got, err := newCUP(src, st).CachedAppointments(context.Background())
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		assert.Equal(t, fakeAppointments(), got[testNRE].Value)
+		assert.False(t, got[testNRE].Stale)
+		assert.True(t, got["0900A0000000002"].Stale)
+		assert.Equal(t, testNow.Add(-time.Minute), got[testNRE].FetchedAt)
+		assert.Len(t, st.LatestBySourceCalls(), 1)
+		assert.Equal(t, SourceCUPAppointments, st.LatestBySourceCalls()[0].Source)
+		assert.Empty(t, st.LatestCalls())
+		assert.Empty(t, src.AppointmentsCalls())
+	})
+
+	t.Run("CUP appointments absent key when not stored", func(t *testing.T) {
+		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) { return nil, nil }}
+		got, err := newCUP(&MockCUPSource{}, st).CachedAppointments(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("CUP appointments skips undecodable records", func(t *testing.T) {
+		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
+			return []store.Record{
+				{Source: source, Subject: "BAD", FetchedAt: testNow, Payload: []byte("{")},
+				record(t, source, testNRE, testNow, fakeAppointments()),
+			}, nil
+		}}
+		got, err := newCUP(&MockCUPSource{}, st).CachedAppointments(context.Background())
+		require.NoError(t, err)
+		assert.Len(t, got, 1)
+		assert.Contains(t, got, testNRE)
+	})
+
+	t.Run("CUP appointments store error propagates", func(t *testing.T) {
+		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
+			return nil, errors.New("boom")
+		}}
+		_, err := newCUP(&MockCUPSource{}, st).CachedAppointments(context.Background())
+		require.Error(t, err)
+	})
+
+	t.Run("CUP verdicts one batched read with 24h stale rule", func(t *testing.T) {
+		verdict := cup.Verdict{Reason: cup.VerdictHandled, Message: "m", HTTPStatus: 200, Raw: []byte(`{"a":1}`)}
+		st := &MockStore{LatestBySourceFunc: func(ctx context.Context, source string) ([]store.Record, error) {
+			return []store.Record{
+				record(t, source, testNRE, testNow.Add(-2*time.Hour), verdict),
+				record(t, source, "0900A0000000002", testNow.Add(-25*time.Hour), verdict),
+			}, nil
+		}}
+		got, err := newCUP(&MockCUPSource{}, st).CachedVerdicts(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, verdict, got[testNRE].Value)
+		assert.False(t, got[testNRE].Stale)
+		assert.True(t, got["0900A0000000002"].Stale)
+		assert.Len(t, st.LatestBySourceCalls(), 1)
+		assert.Equal(t, SourceCUPVerdict, st.LatestBySourceCalls()[0].Source)
+	})
+
+	t.Run("FSE prescriptions fresh stale and missing", func(t *testing.T) {
+		newFSECached := func(st Store) *FSE {
+			f := NewFSE(&MockFSESource{}, st, DefaultPolicy())
+			f.now = func() time.Time { return testNow }
+			return f
+		}
+		fresh := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, testNow.Add(-time.Minute), fakeFSE()), nil
+		}}
+		got, err := newFSECached(fresh).CachedPrescriptions(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, fakeFSE(), got.Value)
+		assert.False(t, got.Stale)
+		assert.Equal(t, SourceFSEPrescriptions, fresh.LatestCalls()[0].Source)
+
+		stale := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, testNow.Add(-3*time.Hour), fakeFSE()), nil
+		}}
+		got, err = newFSECached(stale).CachedPrescriptions(context.Background())
+		require.NoError(t, err)
+		assert.True(t, got.Stale)
+
+		_, err = newFSECached(missing()).CachedPrescriptions(context.Background())
+		require.ErrorIs(t, err, ErrNotCached)
+	})
+
+	t.Run("reports cached list keeps failures and flags", func(t *testing.T) {
+		want := fakeListing()
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, testNow.Add(-2*time.Hour), toStored(want)), nil
+		}}
+		src := &MockReportsSource{}
+		reports := NewReports(src, st, DefaultPolicy())
+		reports.now = func() time.Time { return testNow }
+		got, err := reports.CachedList(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, want.Reports, got.Value.Reports)
+		require.Len(t, got.Value.Failures, 1)
+		assert.EqualError(t, got.Value.Failures[0].Err, "upstream 502")
+		assert.True(t, got.Stale)
+		assert.Equal(t, testNow.Add(-2*time.Hour), got.FetchedAt)
+		assert.Len(t, st.LatestCalls(), 1)
+		assert.Equal(t, SourceFSEReports, st.LatestCalls()[0].Source)
+		assert.Empty(t, src.ListCalls())
+	})
+
+	t.Run("reports cached list missing", func(t *testing.T) {
+		reports := NewReports(&MockReportsSource{}, missing(), DefaultPolicy())
+		_, err := reports.CachedList(context.Background())
+		require.ErrorIs(t, err, ErrNotCached)
+	})
 }

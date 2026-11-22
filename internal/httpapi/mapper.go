@@ -1,21 +1,13 @@
 package httpapi
 
 import (
-	"errors"
-	"fmt"
-	"slices"
-	"strings"
 	"time"
 
-	"fuck-toscana-salute/internal/agenda"
-	"fuck-toscana-salute/internal/cup"
-	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/reports"
 	"fuck-toscana-salute/internal/session"
-	"fuck-toscana-salute/internal/upstream"
 )
 
 type SessionBody struct {
@@ -63,244 +55,6 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
-type AppointmentsBody struct {
-	Appointments []AppointmentBody       `json:"appointments"`
-	Failed       []FailedBody            `json:"failed"`
-	Unbooked     []string                `json:"unbooked"`
-	Verdicts     []VerdictBody           `json:"verdicts"`
-	Updated      AppointmentsUpdatedBody `json:"updated"`
-}
-
-type VerdictBody struct {
-	NRE     string `json:"nre"`
-	Reason  string `json:"reason" enum:"bookable,handled,expired,other"`
-	Message string `json:"message"`
-}
-
-type AppointmentsUpdatedBody struct {
-	Lists        *time.Time           `json:"lists" nullable:"true"`
-	Appointments map[string]time.Time `json:"appointments"`
-	Verdicts     map[string]time.Time `json:"verdicts"`
-}
-
-type FailedBody struct {
-	NRE    string `json:"nre"`
-	Reason string `json:"reason"`
-}
-
-type AppointmentBody struct {
-	ID        string               `json:"id"`
-	BookingID string               `json:"bookingId,omitempty"`
-	NRE       string               `json:"nre"`
-	Status    string               `json:"status"`
-	At        *time.Time           `json:"at,omitempty"`
-	Unit      UnitBody             `json:"unit"`
-	CUP       *PrescriptionCUPBody `json:"cup,omitempty"`
-	FSE       *PrescriptionFSEBody `json:"fse,omitempty"`
-}
-
-type UnitBody struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Place       string `json:"place,omitempty"`
-	Address     string `json:"address"`
-	PostalCode  string `json:"postalCode,omitempty"`
-	City        string `json:"city"`
-	Province    string `json:"province"`
-}
-
-type PrescriptionCUPBody struct {
-	NRE          string     `json:"nre"`
-	PrescribedOn *time.Time `json:"prescribedOn,omitempty"`
-	Kind         string     `json:"kind"`
-	Status       int        `json:"status"`
-	Items        []string   `json:"items"`
-}
-
-type PrescriptionFSEBody struct {
-	ID              string     `json:"id"`
-	NRE             string     `json:"nre"`
-	Description     string     `json:"description"`
-	Kind            string     `json:"kind"`
-	Status          int        `json:"status"`
-	Date            *time.Time `json:"date,omitempty"`
-	DocumentRef     string     `json:"documentRef"`
-	ExpiresOn       *time.Time `json:"expiresOn,omitempty"`
-	ExpiryEstimated bool       `json:"expiryEstimated,omitempty"`
-}
-
-type PrescriptionsBody struct {
-	Prescriptions []RowBody  `json:"prescriptions"`
-	Updated       *time.Time `json:"updated" nullable:"true"`
-}
-
-type RowBody struct {
-	NRE        string               `json:"nre"`
-	CUP        *PrescriptionCUPBody `json:"cup,omitempty"`
-	FSE        *PrescriptionFSEBody `json:"fse,omitempty"`
-	Overridden bool                 `json:"overridden"`
-	Reports    []ReportRefBody      `json:"reports"`
-}
-
-type ReportRefBody struct {
-	Kind       string `json:"kind"`
-	AbstractID string `json:"abstractId"`
-	DetailID   string `json:"detailId"`
-	RepCode    string `json:"repCode"`
-}
-
-func failureReason(err error) string {
-	var statusErr *upstream.StatusError
-	switch {
-	case errors.Is(err, session.ErrSessionExpired), errors.Is(err, session.ErrNotLoggedIn):
-		return "session_expired"
-	case errors.Is(err, cup.ErrGestioneNotReady):
-		return "gestione_not_ready"
-	case errors.As(err, &statusErr):
-		return fmt.Sprintf("upstream_%d", statusErr.Status)
-	}
-	return "error"
-}
-
-func toAppointmentsBody(result agenda.Result) AppointmentsBody {
-	appointments := make([]AppointmentBody, 0, len(result.Entries))
-	for _, e := range result.Entries {
-		appointments = append(appointments, AppointmentBody{
-			ID:        e.Appointment.ID,
-			BookingID: e.Appointment.BookingID,
-			NRE:       e.NRE,
-			Status:    e.Appointment.Status,
-			At:        timePtr(e.Appointment.At),
-			Unit: UnitBody{
-				Name:        e.Appointment.Unit.Name,
-				Description: e.Appointment.Unit.Description,
-				Place:       e.Appointment.Unit.Place,
-				Address:     e.Appointment.Unit.Address,
-				PostalCode:  e.Appointment.Unit.PostalCode,
-				City:        e.Appointment.Unit.City,
-				Province:    e.Appointment.Unit.Province,
-			},
-			CUP: toPrescriptionCUPBodyPtr(e.CUP),
-			FSE: toPrescriptionFSEBodyPtr(e.FSE),
-		})
-	}
-	failed := make([]FailedBody, 0, len(result.Failed))
-	for _, f := range result.Failed {
-		failed = append(failed, FailedBody{NRE: f.NRE, Reason: failureReason(f.Err)})
-	}
-	unbooked := make([]string, 0, len(result.Unbooked))
-	unbooked = append(unbooked, result.Unbooked...)
-	verdicts := make([]VerdictBody, 0, len(result.Verdicts))
-	for _, nre := range result.Unbooked {
-		v, ok := result.Verdicts[strings.ToUpper(nre)]
-		if !ok {
-			continue
-		}
-		verdicts = append(verdicts, VerdictBody{NRE: nre, Reason: string(v.Reason), Message: v.Message})
-	}
-	return AppointmentsBody{Appointments: appointments, Failed: failed, Unbooked: unbooked, Verdicts: verdicts}
-}
-
-func toPrescriptionsBody(rows []agenda.Row) PrescriptionsBody {
-	prescriptions := make([]RowBody, 0, len(rows))
-	for _, r := range rows {
-		row := RowBody{NRE: r.NRE, Reports: []ReportRefBody{}}
-		row.CUP = toPrescriptionCUPBodyPtr(r.CUP)
-		row.FSE = toPrescriptionFSEBodyPtr(r.FSE)
-		prescriptions = append(prescriptions, row)
-	}
-	return PrescriptionsBody{Prescriptions: prescriptions}
-}
-
-func toPrescriptionCUPBodyPtr(p *cup.Prescription) *PrescriptionCUPBody {
-	if p == nil {
-		return nil
-	}
-	body := toPrescriptionCUPBody(*p)
-	return &body
-}
-
-func toPrescriptionFSEBodyPtr(p *fse.Prescription) *PrescriptionFSEBody {
-	if p == nil {
-		return nil
-	}
-	return &PrescriptionFSEBody{
-		ID:              p.ID,
-		NRE:             p.NRE,
-		Description:     p.Description,
-		Kind:            string(p.Kind),
-		Status:          p.Status,
-		Date:            timePtr(p.Date),
-		DocumentRef:     p.DocumentRef,
-		ExpiresOn:       timePtr(p.ExpiresAt),
-		ExpiryEstimated: p.ExpiryEstimated,
-	}
-}
-
-func toPrescriptionCUPBody(p cup.Prescription) PrescriptionCUPBody {
-	items := make([]string, 0, len(p.Items))
-	items = append(items, p.Items...)
-	return PrescriptionCUPBody{
-		NRE:          p.NRE,
-		PrescribedOn: timePtr(p.PrescribedOn),
-		Kind:         p.Kind,
-		Status:       int(p.Status),
-		Items:        items,
-	}
-}
-
-type mergeStats struct {
-	Overridden int
-	Differing  int
-}
-
-func mergeLocal(rows []RowBody, links []localrecords.Link, overrides []localrecords.Override) mergeStats {
-	sortedLinks := slices.Clone(links)
-	slices.SortFunc(sortedLinks, func(a, b localrecords.Link) int {
-		return strings.Compare(a.Ref.Key(), b.Ref.Key())
-	})
-	refs := make(map[string][]ReportRefBody, len(sortedLinks))
-	for _, l := range sortedLinks {
-		nre := strings.ToUpper(l.NRE)
-		refs[nre] = append(refs[nre], ReportRefBody{
-			Kind:       string(l.Ref.Kind),
-			AbstractID: l.Ref.AbstractID,
-			DetailID:   l.Ref.DetailID,
-			RepCode:    l.Ref.RepCode,
-		})
-	}
-	statuses := make(map[string]int, len(overrides))
-	for _, o := range overrides {
-		statuses[strings.ToUpper(o.NRE)] = o.Status
-	}
-	var stats mergeStats
-	for i := range rows {
-		nre := strings.ToUpper(rows[i].NRE)
-		if linked, ok := refs[nre]; ok {
-			rows[i].Reports = linked
-		}
-		status, ok := statuses[nre]
-		if !ok {
-			continue
-		}
-		rows[i].Overridden = true
-		stats.Overridden++
-		switch {
-		case rows[i].FSE != nil:
-			if rows[i].FSE.Status != status {
-				stats.Differing++
-			}
-			rows[i].FSE.Status = status
-		case rows[i].CUP != nil:
-			if rows[i].CUP.Status != status {
-				stats.Differing++
-			}
-			rows[i].CUP.Status = status
-		}
-	}
-	return stats
-}
-
 func toLocalReportBody(r localrecords.Report, nre string) ReportBody {
 	nres := []string{}
 	if nre != "" {
@@ -317,4 +71,11 @@ func toLocalReportBody(r localrecords.Report, nre string) ReportBody {
 		Title:      r.Meta.Title,
 		NREs:       nres,
 	}
+}
+
+type ReportRefBody struct {
+	Kind       string `json:"kind"`
+	AbstractID string `json:"abstractId"`
+	DetailID   string `json:"detailId"`
+	RepCode    string `json:"repCode"`
 }

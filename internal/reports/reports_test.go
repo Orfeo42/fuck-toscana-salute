@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/referti"
 )
@@ -82,6 +83,68 @@ func TestServiceList(t *testing.T) {
 			LinksFunc: func(ctx context.Context) ([]localrecords.Link, error) { return nil, errBoom },
 		}
 		_, err := New(remote, local).List(t.Context())
+		require.ErrorIs(t, err, errBoom)
+	})
+}
+
+func TestServiceCachedList(t *testing.T) {
+	remoteRef := referti.Ref{Kind: referti.KindLab, AbstractID: "a1", DetailID: "d1", RepCode: "r"}
+	local := func() *MockLocal {
+		return &MockLocal{
+			ListFunc: func(ctx context.Context) ([]localrecords.Report, error) {
+				return []localrecords.Report{{ID: "l1", Meta: localrecords.Meta{Title: "T", Date: day(9)}, CreatedAt: day(10)}}, nil
+			},
+			LinksFunc: func(ctx context.Context) ([]localrecords.Link, error) {
+				return []localrecords.Link{{NRE: "A", Ref: remoteRef}}, nil
+			},
+		}
+	}
+
+	t.Run("merges cached remote with local and links", func(t *testing.T) {
+		remote := &MockRemote{CachedListFunc: func(ctx context.Context) (cache.Entry[referti.Listing], error) {
+			return cache.Entry[referti.Listing]{
+				Value:     referti.Listing{Reports: []referti.Report{{Ref: remoteRef, Date: day(5)}}},
+				FetchedAt: day(11),
+				Stale:     true,
+			}, nil
+		}}
+		got, err := New(remote, local()).CachedList(t.Context())
+		require.NoError(t, err)
+		require.Len(t, got.Listing.Reports, 2)
+		assert.Equal(t, OriginLocal, got.Listing.Reports[0].Origin)
+		assert.Equal(t, []string{"A"}, got.Listing.Reports[1].NREs)
+		assert.Equal(t, day(11), got.FetchedAt)
+		assert.True(t, got.Stale)
+		assert.False(t, got.Missing)
+		assert.Empty(t, remote.ListCalls())
+	})
+
+	t.Run("not cached is missing and keeps local reports", func(t *testing.T) {
+		remote := &MockRemote{CachedListFunc: func(ctx context.Context) (cache.Entry[referti.Listing], error) {
+			return cache.Entry[referti.Listing]{}, cache.ErrNotCached
+		}}
+		got, err := New(remote, local()).CachedList(t.Context())
+		require.NoError(t, err)
+		assert.True(t, got.Missing)
+		require.Len(t, got.Listing.Reports, 1)
+		assert.Equal(t, OriginLocal, got.Listing.Reports[0].Origin)
+		assert.Empty(t, remote.ListCalls())
+	})
+
+	t.Run("remote error is returned", func(t *testing.T) {
+		remote := &MockRemote{CachedListFunc: func(ctx context.Context) (cache.Entry[referti.Listing], error) {
+			return cache.Entry[referti.Listing]{}, errBoom
+		}}
+		_, err := New(remote, local()).CachedList(t.Context())
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("local error is returned", func(t *testing.T) {
+		remote := &MockRemote{CachedListFunc: func(ctx context.Context) (cache.Entry[referti.Listing], error) {
+			return cache.Entry[referti.Listing]{}, nil
+		}}
+		failing := &MockLocal{ListFunc: func(ctx context.Context) ([]localrecords.Report, error) { return nil, errBoom }}
+		_, err := New(remote, failing).CachedList(t.Context())
 		require.ErrorIs(t, err, errBoom)
 	})
 }

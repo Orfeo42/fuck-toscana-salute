@@ -20,17 +20,15 @@ import { useEffect, useState, type JSX } from "react";
 
 import {
   api,
-  type AppointmentBody,
+  type VisitAppointmentBody,
   type CalendarEventBody,
 } from "../../api/client";
 import { IconAction } from "../../components/IconAction";
 import { formatDate, formatTime } from "../../lib/format";
 import { useGoogle } from "../../google/useGoogle";
-import { calendarEventFields } from "./googleCalendar";
 
 interface Props {
-  appointment: AppointmentBody;
-  title: string;
+  appointment: VisitAppointmentBody;
   onClose: () => void;
 }
 
@@ -87,11 +85,7 @@ type Lookup =
   | { state: "none" }
   | { state: "exists"; htmlLink: string };
 
-export function CalendarDialog({
-  appointment,
-  title,
-  onClose,
-}: Props): JSX.Element {
+export function CalendarDialog({ appointment, onClose }: Props): JSX.Element {
   const {
     status,
     error: googleError,
@@ -100,7 +94,7 @@ export function CalendarDialog({
     openSettings,
   } = useGoogle();
   const { at, bookingId } = appointment;
-  const fields = calendarEventFields(appointment, title);
+  const fields = appointment.calendar;
   const hasBooking = bookingId !== undefined && bookingId !== "";
   const configured = status?.configured === true;
   const connected = configured && status.connected;

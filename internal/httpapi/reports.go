@@ -7,19 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/referti"
 )
-
-type reportsOutput struct {
-	Body ReportsBody
-}
-
-type ReportsBody struct {
-	Reports  []ReportBody        `json:"reports"`
-	Failures []ReportFailureBody `json:"failures"`
-	Updated  *time.Time          `json:"updated" nullable:"true"`
-}
 
 type ReportBody struct {
 	Kind       string     `json:"kind"`
@@ -81,45 +70,7 @@ type ReportPDFRequest struct {
 	Position   string `json:"position,omitempty" maxLength:"200"`
 }
 
-func registerReports(api huma.API, reports Reports, fresh Freshness) {
-	huma.Register(api, huma.Operation{
-		OperationID:   "list-reports",
-		Method:        http.MethodGet,
-		Path:          "/api/reports",
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, _ *struct{}) (*reportsOutput, error) {
-		listing, err := reports.List(ctx)
-		if err != nil {
-			return nil, toHTTPError(ctx, "list-reports", err)
-		}
-		body := ReportsBody{
-			Reports:  make([]ReportBody, 0, len(listing.Reports)),
-			Failures: make([]ReportFailureBody, 0, len(listing.Failures)),
-			Updated:  listUpdated(ctx, fresh, cache.SourceFSEReports),
-		}
-		for _, r := range listing.Reports {
-			body.Reports = append(body.Reports, ReportBody{
-				Kind:       string(r.Ref.Kind),
-				KindLabel:  r.Ref.Kind.Label(),
-				AbstractID: r.Ref.AbstractID,
-				DetailID:   r.Ref.DetailID,
-				RepCode:    r.Ref.RepCode,
-				Date:       timePtr(r.Date),
-				UpdatedAt:  timePtr(r.UpdatedAt),
-				Provider:   r.Provider,
-				Unread:     r.Unread,
-				Hidden:     r.Hidden,
-				Origin:     string(r.Origin),
-				Title:      r.Title,
-				NREs:       append(make([]string, 0, len(r.NREs)), r.NREs...),
-			})
-		}
-		for _, f := range listing.Failures {
-			body.Failures = append(body.Failures, ReportFailureBody{Kind: string(f.Kind), KindLabel: f.Kind.Label(), Message: f.Err.Error()})
-		}
-		return &reportsOutput{Body: body}, nil
-	})
-
+func registerReports(api huma.API, reports Reports) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "list-report-documents",
 		Method:        http.MethodPost,

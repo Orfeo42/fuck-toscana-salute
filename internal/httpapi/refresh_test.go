@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/refresh"
 )
 
@@ -119,14 +118,5 @@ func TestRegisterStartRefresh(t *testing.T) {
 		resp := api.Post("/api/refresh/start", testHost, map[string]any{"all": true})
 
 		assert.Equal(t, http.StatusForbidden, resp.Code)
-	})
-
-	t.Run("not implemented is 501", func(t *testing.T) {
-		refresher := &MockRefresher{StartFunc: func(refresh.Scope) error { return notimpl.ErrNotImplemented }}
-		api := newRefreshAPI(t, refresher)
-
-		resp := api.Post("/api/refresh/start", testHost, testOrigin, map[string]any{"all": true})
-
-		assert.Equal(t, http.StatusNotImplemented, resp.Code)
 	})
 }
