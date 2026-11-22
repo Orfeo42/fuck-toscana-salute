@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
+	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/store"
 )
@@ -54,16 +56,8 @@ func (s *Service) Links(ctx context.Context) ([]Link, error) {
 	return links, nil
 }
 
-func validStatus(status int) bool {
-	switch status {
-	case 3, 30, 5, 6, 7, 8, 9, 4:
-		return true
-	}
-	return false
-}
-
 func (s *Service) SetStatus(ctx context.Context, nre string, status int) error {
-	if !validStatus(status) {
+	if !slices.Contains(cup.SelectableStatuses, cup.Status(status)) {
 		return ErrInvalidStatus
 	}
 	o := store.Override{NRE: normalizeNRE(nre), Status: status, UpdatedAt: s.now().UTC()}

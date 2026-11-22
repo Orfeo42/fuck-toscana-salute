@@ -47,7 +47,7 @@ func TestNew(t *testing.T) {
 		store := &MockSessionStore{StatusFunc: func() session.Status { return session.Status{} }}
 		flow := &MockLoginFlow{StatesFunc: func() map[session.Portal]loginflow.State { return nil }}
 		rec := httptest.NewRecorder()
-		New(store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), &MockFacilities{}, "window", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/session", nil))
+		New(store, flow, &MockAgenda{}, &MockDocuments{}, &MockGoogle{}, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), &MockFacilities{}, &MockVisitsView{}, &MockReportsView{}, &MockDrugsView{}, &MockRefresher{}, "window", false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/session", nil))
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 }

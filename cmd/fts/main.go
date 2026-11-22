@@ -18,6 +18,7 @@ import (
 	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/config"
 	"fuck-toscana-salute/internal/cup"
+	"fuck-toscana-salute/internal/drugsview"
 	"fuck-toscana-salute/internal/facilities"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
@@ -27,12 +28,15 @@ import (
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/refresh"
 	"fuck-toscana-salute/internal/reports"
+	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/store"
 	"fuck-toscana-salute/internal/upstream"
 	"fuck-toscana-salute/internal/vault"
 	"fuck-toscana-salute/internal/viewer"
+	"fuck-toscana-salute/internal/visitsview"
 	"fuck-toscana-salute/internal/webui"
 )
 
@@ -63,6 +67,10 @@ type remoteReports struct {
 
 func (r remoteReports) List(ctx context.Context) (referti.Listing, error) {
 	return r.cached.List(ctx)
+}
+
+func (r remoteReports) CachedList(ctx context.Context) (cache.Entry[referti.Listing], error) {
+	return r.cached.CachedList(ctx)
 }
 
 type freshness struct {
@@ -145,6 +153,9 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 		return fmt.Errorf("open facilities: %w", err)
 	}
 	go facilitiesService.Run(ctx, facilitiesTick)
+	reportsService := reports.New(remote, local)
+	refresher := refresh.New(ag, reportsService)
+	go refresher.Run(ctx)
 	mux := http.NewServeMux()
 	api := httpapi.New(
 		sessions,
@@ -152,10 +163,14 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 		ag,
 		documents{Client: fseClient, bookings: cupClient},
 		googleClient,
-		reports.New(remote, local),
+		reportsService,
 		local,
 		freshness{st: st},
 		facilitiesService,
+		visitsview.New(ag, reportsService, local, refresher),
+		reportsview.New(reportsService, ag, refresher),
+		drugsview.New(ag, local, refresher),
+		refresher,
 		cfg.LoginMode,
 		cfg.ViewerAddr != "",
 	)

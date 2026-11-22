@@ -5,6 +5,7 @@ package reports
 
 import (
 	"context"
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/referti"
 	"sync"
@@ -20,6 +21,9 @@ var _ Remote = &MockRemote{}
 //
 //		// make and configure a mocked Remote
 //		mockedRemote := &MockRemote{
+//			CachedListFunc: func(ctx context.Context) (cache.Entry[referti.Listing], error) {
+//				panic("mock out the CachedList method")
+//			},
 //			DocumentsFunc: func(ctx context.Context, ref referti.Ref) ([]referti.Document, error) {
 //				panic("mock out the Documents method")
 //			},
@@ -36,6 +40,9 @@ var _ Remote = &MockRemote{}
 //
 //	}
 type MockRemote struct {
+	// CachedListFunc mocks the CachedList method.
+	CachedListFunc func(ctx context.Context) (cache.Entry[referti.Listing], error)
+
 	// DocumentsFunc mocks the Documents method.
 	DocumentsFunc func(ctx context.Context, ref referti.Ref) ([]referti.Document, error)
 
@@ -47,6 +54,11 @@ type MockRemote struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// CachedList holds details about calls to the CachedList method.
+		CachedList []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 		// Documents holds details about calls to the Documents method.
 		Documents []struct {
 			// Ctx is the ctx argument value.
@@ -69,9 +81,42 @@ type MockRemote struct {
 			Ctx context.Context
 		}
 	}
-	lockDocuments sync.RWMutex
-	lockDownload  sync.RWMutex
-	lockList      sync.RWMutex
+	lockCachedList sync.RWMutex
+	lockDocuments  sync.RWMutex
+	lockDownload   sync.RWMutex
+	lockList       sync.RWMutex
+}
+
+// CachedList calls CachedListFunc.
+func (mock *MockRemote) CachedList(ctx context.Context) (cache.Entry[referti.Listing], error) {
+	if mock.CachedListFunc == nil {
+		panic("MockRemote.CachedListFunc: method is nil but Remote.CachedList was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockCachedList.Lock()
+	mock.calls.CachedList = append(mock.calls.CachedList, callInfo)
+	mock.lockCachedList.Unlock()
+	return mock.CachedListFunc(ctx)
+}
+
+// CachedListCalls gets all the calls that were made to CachedList.
+// Check the length with:
+//
+//	len(mockedRemote.CachedListCalls())
+func (mock *MockRemote) CachedListCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockCachedList.RLock()
+	calls = mock.calls.CachedList
+	mock.lockCachedList.RUnlock()
+	return calls
 }
 
 // Documents calls DocumentsFunc.

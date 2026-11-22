@@ -16,12 +16,16 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"fuck-toscana-salute/internal/cup"
+	"fuck-toscana-salute/internal/drugsview"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/localrecords"
+	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
 	"fuck-toscana-salute/internal/upstream"
+	"fuck-toscana-salute/internal/visitsview"
 )
 
 func statusOf(t *testing.T, err error) int {
@@ -169,6 +173,26 @@ func TestToHTTPError(t *testing.T) {
 	t.Run("empty file is 422", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", localrecords.ErrEmptyFile)
 		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	})
+
+	t.Run("not implemented is 501", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", notimpl.ErrNotImplemented)
+		assert.Equal(t, http.StatusNotImplemented, statusOf(t, err))
+	})
+
+	t.Run("visit not found is 404", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", fmt.Errorf("row: %w", visitsview.ErrNotFound))
+		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
+	})
+
+	t.Run("report not found is 404", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", reportsview.ErrNotFound)
+		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
+	})
+
+	t.Run("drug not found is 404", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", drugsview.ErrNotFound)
+		assert.Equal(t, http.StatusNotFound, statusOf(t, err))
 	})
 
 	t.Run("invalid status is 422", func(t *testing.T) {

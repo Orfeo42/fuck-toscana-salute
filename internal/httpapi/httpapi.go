@@ -78,11 +78,15 @@ func (r *RefreshRequest) Resolve(_ huma.Context, prefix *huma.PathBuffer) []erro
 	return []error{&huma.ErrorDetail{Message: "all or nres is required", Location: prefix.With("all"), Value: r.All}}
 }
 
-func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, fac Facilities, loginMode string, viewer bool) http.Handler {
+func New(store SessionStore, flow LoginFlow, ag Agenda, docs Documents, g Google, reports Reports, local LocalRecords, fresh Freshness, fac Facilities, visits VisitsView, reportsView ReportsView, drugs DrugsView, refresher Refresher, loginMode string, viewer bool) http.Handler {
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("fuck-toscana-salute", "0.1.0"))
 	register(api, store, flow, ag, docs, g, reports, local, fresh, loginMode, viewer)
 	registerFacilities(api, fac)
+	registerVisits(api, visits)
+	registerReportsQuery(api, reportsView)
+	registerDrugs(api, drugs)
+	registerRefresh(api, refresher)
 	return mux
 }
 

@@ -10,8 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
+	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/session"
 )
 
@@ -34,10 +36,14 @@ type CUP interface {
 	Prescriptions(ctx context.Context) ([]cup.Prescription, error)
 	Appointments(ctx context.Context, nre string) ([]cup.Appointment, error)
 	Verdict(ctx context.Context, nre string) (cup.Verdict, error)
+	CachedPrescriptions(ctx context.Context) (cache.Entry[[]cup.Prescription], error)
+	CachedAppointments(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error)
+	CachedVerdicts(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error)
 }
 
 type FSE interface {
 	Prescriptions(ctx context.Context) ([]fse.Prescription, error)
+	CachedPrescriptions(ctx context.Context) (cache.Entry[[]fse.Prescription], error)
 }
 
 type Entry struct {
@@ -291,4 +297,60 @@ func rowDate(r Row) time.Time {
 		date = r.FSE.Date
 	}
 	return date
+}
+
+type VerdictEntry struct {
+	Verdict    cup.Verdict
+	VerifiedAt time.Time
+	Stale      bool
+}
+
+type Lookup struct {
+	Candidate    bool
+	Checked      bool
+	CheckedAt    time.Time
+	Stale        bool
+	Appointments []cup.Appointment
+	Verdict      *VerdictEntry
+}
+
+type ListState struct {
+	At      time.Time
+	Stale   bool
+	Missing bool
+}
+
+type Snapshot struct {
+	Rows    []Row
+	CUPList ListState
+	FSEList ListState
+	Lookups map[string]Lookup
+}
+
+func (a *Agenda) Snapshot(_ context.Context) (Snapshot, error) {
+	return Snapshot{}, notimpl.ErrNotImplemented
+}
+
+func (a *Agenda) Lists(_ context.Context) error {
+	return notimpl.ErrNotImplemented
+}
+
+func (a *Agenda) RefreshNREs(_ context.Context, _ []string) error {
+	return notimpl.ErrNotImplemented
+}
+
+func BestBooking(_ []cup.Appointment) (cup.Appointment, bool) {
+	return cup.Appointment{}, false
+}
+
+func (r Row) Title() string {
+	return ""
+}
+
+func (r Row) PrescribedOn() time.Time {
+	return time.Time{}
+}
+
+func (r Row) IsVisit() bool {
+	return false
 }

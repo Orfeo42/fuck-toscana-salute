@@ -274,6 +274,259 @@
         ],
         "type": "object"
       },
+      "CalendarFieldsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "location",
+          "details"
+        ],
+        "type": "object"
+      },
+      "DrugRowBody": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "nre": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DrugStatusBody"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nre",
+          "title",
+          "status"
+        ],
+        "type": "object"
+      },
+      "DrugRowResponseBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/DrugRowResponseBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "row": {
+            "$ref": "#/components/schemas/DrugRowBody"
+          }
+        },
+        "required": [
+          "row",
+          "refreshing"
+        ],
+        "type": "object"
+      },
+      "DrugStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "booked",
+              "done",
+              "tobook",
+              "pending",
+              "closed",
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "tone"
+        ],
+        "type": "object"
+      },
+      "DrugsQueryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/DrugsQueryBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "excludedStatuses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "focus": {
+            "$ref": "#/components/schemas/FocusBody"
+          },
+          "issue": {
+            "enum": [
+              "none",
+              "login_required",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DrugRowBody"
+            },
+            "type": "array"
+          },
+          "search": {
+            "type": "string"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/StatusOptionBody"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated": {
+            "$ref": "#/components/schemas/UpdatedBody"
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pageSize",
+          "statuses",
+          "excludedStatuses",
+          "search",
+          "refreshing",
+          "updated",
+          "issue"
+        ],
+        "type": "object"
+      },
+      "DrugsQueryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/DrugsQueryRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "dir": {
+            "default": "desc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "type": "string"
+          },
+          "excludeStatuses": {
+            "items": {
+              "enum": [
+                "prescribed",
+                "booked",
+                "taken_in_charge",
+                "suspended",
+                "partially_done",
+                "done",
+                "done_after_cancel",
+                "cancelled",
+                "other"
+              ],
+              "type": "string"
+            },
+            "maxItems": 9,
+            "type": "array"
+          },
+          "focus": {
+            "pattern": "^[0-9A-Za-z]{10,20}$",
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "format": "int64",
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageSize": {
+            "default": 50,
+            "enum": [
+              25,
+              50,
+              100
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "search": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "sort": {
+            "default": "date",
+            "enum": [
+              "date",
+              "name",
+              "status",
+              "nre"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ErrorDetail": {
         "additionalProperties": false,
         "properties": {
@@ -427,6 +680,22 @@
         "required": [
           "nre",
           "reason"
+        ],
+        "type": "object"
+      },
+      "FocusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "nre": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nre",
+          "found"
         ],
         "type": "object"
       },
@@ -662,6 +931,28 @@
         ],
         "type": "object"
       },
+      "KindOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count"
+        ],
+        "type": "object"
+      },
       "LinkRequest": {
         "additionalProperties": false,
         "properties": {
@@ -685,6 +976,58 @@
         "required": [
           "nre",
           "report"
+        ],
+        "type": "object"
+      },
+      "LinkedReportBody": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "remote",
+              "local"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/ReportRefBody"
+          }
+        },
+        "required": [
+          "ref",
+          "label",
+          "provider",
+          "origin",
+          "available"
+        ],
+        "type": "object"
+      },
+      "LinkedVisitBody": {
+        "additionalProperties": false,
+        "properties": {
+          "nre": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nre",
+          "title"
         ],
         "type": "object"
       },
@@ -727,6 +1070,46 @@
         },
         "required": [
           "phase"
+        ],
+        "type": "object"
+      },
+      "ManualStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ManualStatusOptionBody"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "current",
+          "options"
+        ],
+        "type": "object"
+      },
+      "ManualStatusOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "label"
         ],
         "type": "object"
       },
@@ -1087,6 +1470,38 @@
         ],
         "type": "object"
       },
+      "ReportOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "remote",
+              "local"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/ReportRefBody"
+          }
+        },
+        "required": [
+          "ref",
+          "label",
+          "provider",
+          "origin"
+        ],
+        "type": "object"
+      },
       "ReportPDFRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1183,6 +1598,149 @@
         ],
         "type": "object"
       },
+      "ReportRowBody": {
+        "additionalProperties": false,
+        "properties": {
+          "customTitle": {
+            "type": "string"
+          },
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "editDate": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "kindLabel": {
+            "type": "string"
+          },
+          "linkedLabel": {
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "remote",
+              "local"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/ReportRefBody"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "visits": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedVisitBody"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "kind",
+          "kindLabel",
+          "title",
+          "provider",
+          "unread",
+          "hidden",
+          "origin",
+          "visits",
+          "linkedLabel"
+        ],
+        "type": "object"
+      },
+      "ReportRowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportRowRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/ReportRefRequest"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "ReportRowResponseBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportRowResponseBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "row": {
+            "$ref": "#/components/schemas/ReportRowBody"
+          }
+        },
+        "required": [
+          "row",
+          "refreshing"
+        ],
+        "type": "object"
+      },
+      "ReportVisitOptionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportVisitOptionsBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedVisitBody"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "options"
+        ],
+        "type": "object"
+      },
       "ReportsBody": {
         "additionalProperties": false,
         "properties": {
@@ -1228,6 +1786,146 @@
         ],
         "type": "object"
       },
+      "ReportsQueryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportsQueryBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/ReportFailureBody"
+            },
+            "type": "array"
+          },
+          "fseUnavailable": {
+            "type": "boolean"
+          },
+          "issue": {
+            "enum": [
+              "none",
+              "login_required",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/KindOptionBody"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ReportRowBody"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated": {
+            "$ref": "#/components/schemas/UpdatedBody"
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pageSize",
+          "kinds",
+          "failures",
+          "fseUnavailable",
+          "refreshing",
+          "updated",
+          "issue"
+        ],
+        "type": "object"
+      },
+      "ReportsQueryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/ReportsQueryRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "dir": {
+            "default": "desc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "lab",
+              "labtrasf",
+              "ris",
+              "ldo",
+              "ps",
+              "rsa",
+              "rap",
+              "local"
+            ],
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "format": "int64",
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageSize": {
+            "default": 50,
+            "enum": [
+              25,
+              50,
+              100
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "search": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "sort": {
+            "default": "date",
+            "enum": [
+              "date",
+              "kind",
+              "provider"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "RowBody": {
         "additionalProperties": false,
         "properties": {
@@ -1257,6 +1955,28 @@
           "nre",
           "overridden",
           "reports"
+        ],
+        "type": "object"
+      },
+      "RowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/RowRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "nre": {
+            "pattern": "^[0-9A-Za-z]{10,20}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nre"
         ],
         "type": "object"
       },
@@ -1323,6 +2043,97 @@
           "gestioneReady",
           "loginMode",
           "viewer"
+        ],
+        "type": "object"
+      },
+      "StartRefreshBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/StartRefreshBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "refreshing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "refreshing"
+        ],
+        "type": "object"
+      },
+      "StartRefreshRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/StartRefreshRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "lists": {
+            "type": "boolean"
+          },
+          "nres": {
+            "items": {
+              "pattern": "^[0-9A-Za-z]{10,20}$",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "reports": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "StatusOptionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "excluded": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "booked",
+              "done",
+              "tobook",
+              "pending",
+              "closed",
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "tone",
+          "count",
+          "excluded"
         ],
         "type": "object"
       },
@@ -1396,6 +2207,46 @@
         ],
         "type": "object"
       },
+      "UpdatedBody": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "label"
+        ],
+        "type": "object"
+      },
+      "UploadDefaultsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "date",
+          "provider"
+        ],
+        "type": "object"
+      },
       "VerdictBody": {
         "additionalProperties": false,
         "properties": {
@@ -1422,6 +2273,68 @@
         ],
         "type": "object"
       },
+      "VisitAppointmentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "bookingId": {
+            "type": "string"
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/CalendarFieldsBody"
+          },
+          "id": {
+            "type": "string"
+          },
+          "relativeDay": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/VisitUnitBody"
+          },
+          "upcoming": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "upcoming",
+          "unit",
+          "calendar"
+        ],
+        "type": "object"
+      },
+      "VisitCheckedBody": {
+        "additionalProperties": false,
+        "properties": {
+          "appointments": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verdict": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "appointments",
+          "verdict"
+        ],
+        "type": "object"
+      },
       "VisitNRERequest": {
         "additionalProperties": false,
         "properties": {
@@ -1441,6 +2354,193 @@
         },
         "required": [
           "nre"
+        ],
+        "type": "object"
+      },
+      "VisitReportOptionsBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/VisitReportOptionsBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ReportOptionBody"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "options"
+        ],
+        "type": "object"
+      },
+      "VisitRowBody": {
+        "additionalProperties": false,
+        "properties": {
+          "appointment": {
+            "$ref": "#/components/schemas/VisitAppointmentBody"
+          },
+          "appointmentLookup": {
+            "enum": [
+              "none",
+              "checking",
+              "failed",
+              "done"
+            ],
+            "type": "string"
+          },
+          "checkedAt": {
+            "$ref": "#/components/schemas/VisitCheckedBody"
+          },
+          "documentRef": {
+            "type": "string"
+          },
+          "nre": {
+            "type": "string"
+          },
+          "prescribedOn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedReportBody"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VisitStatusBody"
+          },
+          "title": {
+            "type": "string"
+          },
+          "upload": {
+            "$ref": "#/components/schemas/UploadDefaultsBody"
+          }
+        },
+        "required": [
+          "nre",
+          "title",
+          "status",
+          "appointmentLookup",
+          "reports",
+          "checkedAt",
+          "upload",
+          "refreshing"
+        ],
+        "type": "object"
+      },
+      "VisitRowResponseBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/VisitRowResponseBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "issues": {
+            "$ref": "#/components/schemas/VisitsIssuesBody"
+          },
+          "manualStatus": {
+            "$ref": "#/components/schemas/ManualStatusBody"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "row": {
+            "$ref": "#/components/schemas/VisitRowBody"
+          }
+        },
+        "required": [
+          "row",
+          "manualStatus",
+          "refreshing",
+          "issues"
+        ],
+        "type": "object"
+      },
+      "VisitStatusBody": {
+        "additionalProperties": false,
+        "properties": {
+          "canBook": {
+            "type": "boolean"
+          },
+          "code": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expiresOn": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expiryEstimated": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "booked",
+              "official",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "manual": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "booked",
+              "done",
+              "tobook",
+              "pending",
+              "closed",
+              "error"
+            ],
+            "type": "string"
+          },
+          "verifiedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "tone",
+          "kind",
+          "manual",
+          "canBook",
+          "expiryEstimated",
+          "details"
         ],
         "type": "object"
       },
@@ -1479,6 +2579,236 @@
           "nre",
           "status"
         ],
+        "type": "object"
+      },
+      "VisitUnitBody": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "fullAddress": {
+            "type": "string"
+          },
+          "mapsDirectionsUrl": {
+            "type": "string"
+          },
+          "mapsSearchUrl": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "place": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "province": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "displayName",
+          "address",
+          "city",
+          "province",
+          "fullAddress",
+          "mapsSearchUrl",
+          "mapsDirectionsUrl"
+        ],
+        "type": "object"
+      },
+      "VisitsIssuesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "appointments": {
+            "enum": [
+              "none",
+              "login_required",
+              "gestione_required",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "lists": {
+            "enum": [
+              "none",
+              "login_required",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "lists",
+          "appointments"
+        ],
+        "type": "object"
+      },
+      "VisitsQueryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/VisitsQueryBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "excludedStatuses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "focus": {
+            "$ref": "#/components/schemas/FocusBody"
+          },
+          "issues": {
+            "$ref": "#/components/schemas/VisitsIssuesBody"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pageSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "refreshing": {
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/VisitRowBody"
+            },
+            "type": "array"
+          },
+          "search": {
+            "type": "string"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/StatusOptionBody"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated": {
+            "$ref": "#/components/schemas/UpdatedBody"
+          }
+        },
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pageSize",
+          "statuses",
+          "excludedStatuses",
+          "search",
+          "refreshing",
+          "updated",
+          "issues"
+        ],
+        "type": "object"
+      },
+      "VisitsQueryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/VisitsQueryRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "dir": {
+            "default": "desc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "type": "string"
+          },
+          "excludeStatuses": {
+            "items": {
+              "enum": [
+                "booked",
+                "prescribed",
+                "unverified",
+                "handled",
+                "taken_in_charge",
+                "partially_done",
+                "suspended",
+                "done",
+                "done_after_cancel",
+                "cancelled",
+                "expired",
+                "other"
+              ],
+              "type": "string"
+            },
+            "maxItems": 12,
+            "type": "array"
+          },
+          "focus": {
+            "pattern": "^[0-9A-Za-z]{10,20}$",
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "format": "int64",
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pageSize": {
+            "default": 50,
+            "enum": [
+              25,
+              50,
+              100
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "search": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "sort": {
+            "default": "prescribed",
+            "enum": [
+              "prescribed",
+              "title",
+              "status",
+              "appointment",
+              "place",
+              "nre"
+            ],
+            "type": "string"
+          }
+        },
         "type": "object"
       }
     }
@@ -1683,6 +3013,80 @@
                 }
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/drugs/query": {
+      "post": {
+        "operationId": "query-drugs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DrugsQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrugsQueryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/drugs/row": {
+      "post": {
+        "operationId": "get-drug-row",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrugRowResponseBody"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "content": {
@@ -2123,6 +3527,43 @@
         }
       }
     },
+    "/api/refresh/start": {
+      "post": {
+        "operationId": "start-refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartRefreshBody"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
     "/api/reports": {
       "get": {
         "operationId": "list-reports",
@@ -2406,6 +3847,117 @@
         }
       }
     },
+    "/api/reports/query": {
+      "post": {
+        "operationId": "query-reports",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportsQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportsQueryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/reports/row": {
+      "post": {
+        "operationId": "get-report-row",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportRowResponseBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/reports/visit-options": {
+      "post": {
+        "operationId": "report-visit-options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportVisitOptionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
     "/api/session": {
       "get": {
         "operationId": "get-session",
@@ -2415,6 +3967,117 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/visits/query": {
+      "post": {
+        "operationId": "query-visits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitsQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitsQueryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/visits/report-options": {
+      "post": {
+        "operationId": "visit-report-options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitReportOptionsBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/visits/row": {
+      "post": {
+        "operationId": "get-visit-row",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitRowResponseBody"
                 }
               }
             },

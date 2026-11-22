@@ -32,10 +32,23 @@ const (
 	StatusDoneAfterCancel Status = 9
 )
 
+var SelectableStatuses = []Status{
+	StatusPrescribed,
+	StatusBooked,
+	StatusTakenInCharge,
+	StatusSuspended,
+	StatusPartiallyDone,
+	StatusDone,
+	StatusDoneAfterCancel,
+	StatusCancelled,
+}
+
+const KeyOther = "other"
+
 func (s Status) Label() string {
 	switch s {
 	case StatusPrescribed:
-		return "Prescritta"
+		return "Da prenotare"
 	case StatusBooked:
 		return "Prenotata"
 	case StatusCancelled:
@@ -45,13 +58,36 @@ func (s Status) Label() string {
 	case StatusSuspended:
 		return "Sospesa"
 	case StatusPartiallyDone:
-		return "Erogata parziale"
+		return "Erogata in parte"
 	case StatusDone:
 		return "Erogata"
 	case StatusDoneAfterCancel:
 		return "Erogata dopo annullamento"
 	default:
-		return "Sconosciuto"
+		return "Stato " + strconv.Itoa(int(s))
+	}
+}
+
+func (s Status) Key() string {
+	switch s {
+	case StatusPrescribed:
+		return "prescribed"
+	case StatusBooked:
+		return "booked"
+	case StatusCancelled:
+		return "cancelled"
+	case StatusTakenInCharge:
+		return "taken_in_charge"
+	case StatusSuspended:
+		return "suspended"
+	case StatusPartiallyDone:
+		return "partially_done"
+	case StatusDone:
+		return "done"
+	case StatusDoneAfterCancel:
+		return "done_after_cancel"
+	default:
+		return KeyOther
 	}
 }
 

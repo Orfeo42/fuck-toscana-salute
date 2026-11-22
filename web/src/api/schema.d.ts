@@ -84,6 +84,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drugs/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["query-drugs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drugs/row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["get-drug-row"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/facilities/search": {
         parameters: {
             query?: never;
@@ -276,6 +308,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/refresh/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start-refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports": {
         parameters: {
             query?: never;
@@ -356,6 +404,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["query-reports"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["get-report-row"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/visit-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["report-visit-options"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/session": {
         parameters: {
             query?: never;
@@ -366,6 +462,54 @@ export interface paths {
         get: operations["get-session"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/visits/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["query-visits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/visits/report-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["visit-report-options"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/visits/row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["get-visit-row"];
         delete?: never;
         options?: never;
         head?: never;
@@ -479,6 +623,90 @@ export interface components {
             start: string;
             title: string;
         };
+        CalendarFieldsBody: {
+            details: string;
+            location: string;
+            title: string;
+        };
+        DrugRowBody: {
+            /** Format: date-time */
+            date?: string;
+            documentRef?: string;
+            nre: string;
+            status: components["schemas"]["DrugStatusBody"];
+            title: string;
+        };
+        DrugRowResponseBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DrugRowResponseBody.json
+             */
+            readonly $schema?: string;
+            refreshing: boolean;
+            row: components["schemas"]["DrugRowBody"];
+        };
+        DrugStatusBody: {
+            key: string;
+            label: string;
+            /** @enum {string} */
+            tone: "booked" | "done" | "tobook" | "pending" | "closed" | "error";
+        };
+        DrugsQueryBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DrugsQueryBody.json
+             */
+            readonly $schema?: string;
+            excludedStatuses: string[];
+            focus?: components["schemas"]["FocusBody"];
+            /** @enum {string} */
+            issue: "none" | "login_required" | "unavailable";
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageSize: number;
+            refreshing: boolean;
+            rows: components["schemas"]["DrugRowBody"][];
+            search: string;
+            statuses: components["schemas"]["StatusOptionBody"][];
+            /** Format: int64 */
+            total: number;
+            updated: components["schemas"]["UpdatedBody"];
+        };
+        DrugsQueryRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DrugsQueryRequest.json
+             */
+            readonly $schema?: string;
+            /**
+             * @default desc
+             * @enum {string}
+             */
+            dir: "asc" | "desc";
+            excludeStatuses?: ("prescribed" | "booked" | "taken_in_charge" | "suspended" | "partially_done" | "done" | "done_after_cancel" | "cancelled" | "other")[];
+            focus?: string;
+            /**
+             * Format: int64
+             * @default 1
+             */
+            page: number;
+            /**
+             * Format: int64
+             * @default 50
+             * @enum {integer}
+             */
+            pageSize: 25 | 50 | 100;
+            search?: string;
+            /**
+             * @default date
+             * @enum {string}
+             */
+            sort: "date" | "name" | "status" | "nre";
+        };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
             location?: string;
@@ -546,6 +774,10 @@ export interface components {
         FailedBody: {
             nre: string;
             reason: string;
+        };
+        FocusBody: {
+            found: boolean;
+            nre: string;
         };
         GoogleCodeRequest: {
             /**
@@ -625,6 +857,12 @@ export interface components {
             refresh: string;
             tessera?: string;
         };
+        KindOptionBody: {
+            /** Format: int64 */
+            count: number;
+            key: string;
+            label: string;
+        };
         LinkRequest: {
             /**
              * Format: uri
@@ -634,6 +872,20 @@ export interface components {
             readonly $schema?: string;
             nre: string;
             report: components["schemas"]["ReportRefRequest"];
+        };
+        LinkedReportBody: {
+            available: boolean;
+            /** Format: date-time */
+            date?: string;
+            label: string;
+            /** @enum {string} */
+            origin: "remote" | "local";
+            provider: string;
+            ref: components["schemas"]["ReportRefBody"];
+        };
+        LinkedVisitBody: {
+            nre: string;
+            title: string;
         };
         LocalReportIDRequest: {
             /**
@@ -648,6 +900,16 @@ export interface components {
             error?: string;
             /** @enum {string} */
             phase: "idle" | "waiting" | "failed";
+        };
+        ManualStatusBody: {
+            /** Format: int64 */
+            current: number | null;
+            options: components["schemas"]["ManualStatusOptionBody"][];
+        };
+        ManualStatusOptionBody: {
+            /** Format: int64 */
+            code: number;
+            label: string;
         };
         PickerBody: {
             /**
@@ -760,6 +1022,15 @@ export interface components {
             kindLabel: string;
             message: string;
         };
+        ReportOptionBody: {
+            /** Format: date-time */
+            date?: string;
+            label: string;
+            /** @enum {string} */
+            origin: "remote" | "local";
+            provider: string;
+            ref: components["schemas"]["ReportRefBody"];
+        };
         ReportPDFRequest: {
             /**
              * Format: uri
@@ -791,6 +1062,54 @@ export interface components {
             kind: string;
             repCode?: string;
         };
+        ReportRowBody: {
+            customTitle?: string;
+            /** Format: date-time */
+            date?: string;
+            editDate?: string;
+            hidden: boolean;
+            id: string;
+            kind: string;
+            kindLabel: string;
+            linkedLabel: string;
+            /** @enum {string} */
+            origin: "remote" | "local";
+            provider: string;
+            ref: components["schemas"]["ReportRefBody"];
+            title: string;
+            unread: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+            visits: components["schemas"]["LinkedVisitBody"][];
+        };
+        ReportRowRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportRowRequest.json
+             */
+            readonly $schema?: string;
+            ref: components["schemas"]["ReportRefRequest"];
+        };
+        ReportRowResponseBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportRowResponseBody.json
+             */
+            readonly $schema?: string;
+            refreshing: boolean;
+            row: components["schemas"]["ReportRowBody"];
+        };
+        ReportVisitOptionsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportVisitOptionsBody.json
+             */
+            readonly $schema?: string;
+            options: components["schemas"]["LinkedVisitBody"][];
+        };
         ReportsBody: {
             /**
              * Format: uri
@@ -803,12 +1122,75 @@ export interface components {
             /** Format: date-time */
             updated: string | null;
         };
+        ReportsQueryBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportsQueryBody.json
+             */
+            readonly $schema?: string;
+            failures: components["schemas"]["ReportFailureBody"][];
+            fseUnavailable: boolean;
+            /** @enum {string} */
+            issue: "none" | "login_required" | "unavailable";
+            kinds: components["schemas"]["KindOptionBody"][];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageSize: number;
+            refreshing: boolean;
+            rows: components["schemas"]["ReportRowBody"][];
+            /** Format: int64 */
+            total: number;
+            updated: components["schemas"]["UpdatedBody"];
+        };
+        ReportsQueryRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReportsQueryRequest.json
+             */
+            readonly $schema?: string;
+            /**
+             * @default desc
+             * @enum {string}
+             */
+            dir: "asc" | "desc";
+            /** @enum {string} */
+            kind?: "lab" | "labtrasf" | "ris" | "ldo" | "ps" | "rsa" | "rap" | "local";
+            /**
+             * Format: int64
+             * @default 1
+             */
+            page: number;
+            /**
+             * Format: int64
+             * @default 50
+             * @enum {integer}
+             */
+            pageSize: 25 | 50 | 100;
+            search?: string;
+            /**
+             * @default date
+             * @enum {string}
+             */
+            sort: "date" | "kind" | "provider";
+        };
         RowBody: {
             cup?: components["schemas"]["PrescriptionCUPBody"];
             fse?: components["schemas"]["PrescriptionFSEBody"];
             nre: string;
             overridden: boolean;
             reports: components["schemas"]["ReportRefBody"][] | null;
+        };
+        RowRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RowRequest.json
+             */
+            readonly $schema?: string;
+            nre: string;
         };
         SearchFacilitiesRequest: {
             /**
@@ -832,6 +1214,36 @@ export interface components {
             portals: components["schemas"]["PortalBody"][] | null;
             viewer: boolean;
         };
+        StartRefreshBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StartRefreshBody.json
+             */
+            readonly $schema?: string;
+            refreshing: boolean;
+        };
+        StartRefreshRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/StartRefreshRequest.json
+             */
+            readonly $schema?: string;
+            all?: boolean;
+            lists?: boolean;
+            nres?: string[];
+            reports?: boolean;
+        };
+        StatusOptionBody: {
+            /** Format: int64 */
+            count: number;
+            excluded: boolean;
+            key: string;
+            label: string;
+            /** @enum {string} */
+            tone: "booked" | "done" | "tobook" | "pending" | "closed" | "error";
+        };
         UnitBody: {
             address: string;
             city: string;
@@ -854,11 +1266,38 @@ export interface components {
             provider?: string;
             title: string;
         };
+        UpdatedBody: {
+            /** Format: date-time */
+            at: string | null;
+            label: string;
+        };
+        UploadDefaultsBody: {
+            date: string;
+            provider: string;
+            title: string;
+        };
         VerdictBody: {
             message: string;
             nre: string;
             /** @enum {string} */
             reason: "bookable" | "handled" | "expired" | "other";
+        };
+        VisitAppointmentBody: {
+            /** Format: date-time */
+            at?: string;
+            bookingId?: string;
+            calendar: components["schemas"]["CalendarFieldsBody"];
+            id: string;
+            relativeDay?: string;
+            status: string;
+            unit: components["schemas"]["VisitUnitBody"];
+            upcoming: boolean;
+        };
+        VisitCheckedBody: {
+            /** Format: date-time */
+            appointments: string | null;
+            /** Format: date-time */
+            verdict: string | null;
         };
         VisitNRERequest: {
             /**
@@ -868,6 +1307,61 @@ export interface components {
              */
             readonly $schema?: string;
             nre: string;
+        };
+        VisitReportOptionsBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitReportOptionsBody.json
+             */
+            readonly $schema?: string;
+            options: components["schemas"]["ReportOptionBody"][];
+        };
+        VisitRowBody: {
+            appointment?: components["schemas"]["VisitAppointmentBody"];
+            /** @enum {string} */
+            appointmentLookup: "none" | "checking" | "failed" | "done";
+            checkedAt: components["schemas"]["VisitCheckedBody"];
+            documentRef?: string;
+            nre: string;
+            /** Format: date-time */
+            prescribedOn?: string;
+            refreshing: boolean;
+            reports: components["schemas"]["LinkedReportBody"][];
+            status: components["schemas"]["VisitStatusBody"];
+            title: string;
+            upload: components["schemas"]["UploadDefaultsBody"];
+        };
+        VisitRowResponseBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitRowResponseBody.json
+             */
+            readonly $schema?: string;
+            issues: components["schemas"]["VisitsIssuesBody"];
+            manualStatus: components["schemas"]["ManualStatusBody"];
+            refreshing: boolean;
+            row: components["schemas"]["VisitRowBody"];
+        };
+        VisitStatusBody: {
+            canBook: boolean;
+            /** Format: int64 */
+            code?: number;
+            details: string[];
+            /** Format: date-time */
+            expiresOn?: string;
+            expiryEstimated: boolean;
+            key: string;
+            /** @enum {string} */
+            kind: "booked" | "official" | "expired";
+            label: string;
+            manual: boolean;
+            note?: string;
+            /** @enum {string} */
+            tone: "booked" | "done" | "tobook" | "pending" | "closed" | "error";
+            /** Format: date-time */
+            verifiedAt?: string;
         };
         VisitStatusRequest: {
             /**
@@ -882,6 +1376,79 @@ export interface components {
              * @enum {integer}
              */
             status: 3 | 30 | 5 | 6 | 7 | 8 | 9 | 4;
+        };
+        VisitUnitBody: {
+            address: string;
+            city: string;
+            description: string;
+            displayName: string;
+            fullAddress: string;
+            mapsDirectionsUrl: string;
+            mapsSearchUrl: string;
+            name: string;
+            place?: string;
+            postalCode?: string;
+            province: string;
+        };
+        VisitsIssuesBody: {
+            /** @enum {string} */
+            appointments: "none" | "login_required" | "gestione_required" | "unavailable";
+            /** @enum {string} */
+            lists: "none" | "login_required" | "unavailable";
+        };
+        VisitsQueryBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitsQueryBody.json
+             */
+            readonly $schema?: string;
+            excludedStatuses: string[];
+            focus?: components["schemas"]["FocusBody"];
+            issues: components["schemas"]["VisitsIssuesBody"];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            pageSize: number;
+            refreshing: boolean;
+            rows: components["schemas"]["VisitRowBody"][];
+            search: string;
+            statuses: components["schemas"]["StatusOptionBody"][];
+            /** Format: int64 */
+            total: number;
+            updated: components["schemas"]["UpdatedBody"];
+        };
+        VisitsQueryRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/VisitsQueryRequest.json
+             */
+            readonly $schema?: string;
+            /**
+             * @default desc
+             * @enum {string}
+             */
+            dir: "asc" | "desc";
+            excludeStatuses?: ("booked" | "prescribed" | "unverified" | "handled" | "taken_in_charge" | "partially_done" | "suspended" | "done" | "done_after_cancel" | "cancelled" | "expired" | "other")[];
+            focus?: string;
+            /**
+             * Format: int64
+             * @default 1
+             */
+            page: number;
+            /**
+             * Format: int64
+             * @default 50
+             * @enum {integer}
+             */
+            pageSize: 25 | 50 | 100;
+            search?: string;
+            /**
+             * @default prescribed
+             * @enum {string}
+             */
+            sort: "prescribed" | "title" | "status" | "appointment" | "place" | "nre";
         };
     };
     responses: never;
@@ -1040,6 +1607,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "query-drugs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrugsQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DrugsQueryBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-drug-row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DrugRowResponseBody"];
                 };
             };
             /** @description Error */
@@ -1500,6 +2133,39 @@ export interface operations {
             };
         };
     };
+    "start-refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartRefreshBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-reports": {
         parameters: {
             query?: never;
@@ -1732,6 +2398,105 @@ export interface operations {
             };
         };
     };
+    "query-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportsQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportsQueryBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-report-row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportRowResponseBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "report-visit-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVisitOptionsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-session": {
         parameters: {
             query?: never;
@@ -1748,6 +2513,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "query-visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisitsQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisitsQueryBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "visit-report-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisitReportOptionsBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-visit-row": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisitRowResponseBody"];
                 };
             };
             /** @description Error */

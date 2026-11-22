@@ -5,14 +5,18 @@ import (
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
+	"fuck-toscana-salute/internal/drugsview"
 	"fuck-toscana-salute/internal/facilities"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/login"
 	"fuck-toscana-salute/internal/loginflow"
 	"fuck-toscana-salute/internal/referti"
+	"fuck-toscana-salute/internal/refresh"
 	"fuck-toscana-salute/internal/reports"
+	"fuck-toscana-salute/internal/reportsview"
 	"fuck-toscana-salute/internal/session"
+	"fuck-toscana-salute/internal/visitsview"
 )
 
 //go:generate moq -out deps_mock.go . SessionStore:MockSessionStore LoginFlow:MockLoginFlow
@@ -78,4 +82,26 @@ type LocalRecords interface {
 //go:generate moq -out facilities_mock.go . Facilities:MockFacilities
 type Facilities interface {
 	Search(ctx context.Context, query string) ([]facilities.Facility, error)
+}
+
+//go:generate moq -out views_mock.go . VisitsView:MockVisitsView ReportsView:MockReportsView DrugsView:MockDrugsView Refresher:MockRefresher
+type VisitsView interface {
+	Query(ctx context.Context, q visitsview.Query) (visitsview.Page, error)
+	Row(ctx context.Context, nre string) (visitsview.RowResult, error)
+	ReportOptions(ctx context.Context, nre string) ([]visitsview.ReportOption, error)
+}
+
+type ReportsView interface {
+	Query(ctx context.Context, q reportsview.Query) (reportsview.Page, error)
+	Row(ctx context.Context, ref referti.Ref) (reportsview.RowResult, error)
+	VisitOptions(ctx context.Context, ref referti.Ref) ([]reportsview.LinkedVisit, error)
+}
+
+type DrugsView interface {
+	Query(ctx context.Context, q drugsview.Query) (drugsview.Page, error)
+	Row(ctx context.Context, nre string) (drugsview.RowResult, error)
+}
+
+type Refresher interface {
+	Start(scope refresh.Scope) error
 }

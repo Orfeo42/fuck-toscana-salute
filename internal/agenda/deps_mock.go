@@ -5,6 +5,7 @@ package agenda
 
 import (
 	"context"
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
 	"sync"
@@ -23,6 +24,15 @@ var _ CUP = &MockCUP{}
 //			AppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) {
 //				panic("mock out the Appointments method")
 //			},
+//			CachedAppointmentsFunc: func(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error) {
+//				panic("mock out the CachedAppointments method")
+//			},
+//			CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]cup.Prescription], error) {
+//				panic("mock out the CachedPrescriptions method")
+//			},
+//			CachedVerdictsFunc: func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error) {
+//				panic("mock out the CachedVerdicts method")
+//			},
 //			PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) {
 //				panic("mock out the Prescriptions method")
 //			},
@@ -39,6 +49,15 @@ type MockCUP struct {
 	// AppointmentsFunc mocks the Appointments method.
 	AppointmentsFunc func(ctx context.Context, nre string) ([]cup.Appointment, error)
 
+	// CachedAppointmentsFunc mocks the CachedAppointments method.
+	CachedAppointmentsFunc func(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error)
+
+	// CachedPrescriptionsFunc mocks the CachedPrescriptions method.
+	CachedPrescriptionsFunc func(ctx context.Context) (cache.Entry[[]cup.Prescription], error)
+
+	// CachedVerdictsFunc mocks the CachedVerdicts method.
+	CachedVerdictsFunc func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error)
+
 	// PrescriptionsFunc mocks the Prescriptions method.
 	PrescriptionsFunc func(ctx context.Context) ([]cup.Prescription, error)
 
@@ -54,6 +73,21 @@ type MockCUP struct {
 			// Nre is the nre argument value.
 			Nre string
 		}
+		// CachedAppointments holds details about calls to the CachedAppointments method.
+		CachedAppointments []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+		// CachedPrescriptions holds details about calls to the CachedPrescriptions method.
+		CachedPrescriptions []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+		// CachedVerdicts holds details about calls to the CachedVerdicts method.
+		CachedVerdicts []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 		// Prescriptions holds details about calls to the Prescriptions method.
 		Prescriptions []struct {
 			// Ctx is the ctx argument value.
@@ -67,9 +101,12 @@ type MockCUP struct {
 			Nre string
 		}
 	}
-	lockAppointments  sync.RWMutex
-	lockPrescriptions sync.RWMutex
-	lockVerdict       sync.RWMutex
+	lockAppointments        sync.RWMutex
+	lockCachedAppointments  sync.RWMutex
+	lockCachedPrescriptions sync.RWMutex
+	lockCachedVerdicts      sync.RWMutex
+	lockPrescriptions       sync.RWMutex
+	lockVerdict             sync.RWMutex
 }
 
 // Appointments calls AppointmentsFunc.
@@ -105,6 +142,102 @@ func (mock *MockCUP) AppointmentsCalls() []struct {
 	mock.lockAppointments.RLock()
 	calls = mock.calls.Appointments
 	mock.lockAppointments.RUnlock()
+	return calls
+}
+
+// CachedAppointments calls CachedAppointmentsFunc.
+func (mock *MockCUP) CachedAppointments(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error) {
+	if mock.CachedAppointmentsFunc == nil {
+		panic("MockCUP.CachedAppointmentsFunc: method is nil but CUP.CachedAppointments was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockCachedAppointments.Lock()
+	mock.calls.CachedAppointments = append(mock.calls.CachedAppointments, callInfo)
+	mock.lockCachedAppointments.Unlock()
+	return mock.CachedAppointmentsFunc(ctx)
+}
+
+// CachedAppointmentsCalls gets all the calls that were made to CachedAppointments.
+// Check the length with:
+//
+//	len(mockedCUP.CachedAppointmentsCalls())
+func (mock *MockCUP) CachedAppointmentsCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockCachedAppointments.RLock()
+	calls = mock.calls.CachedAppointments
+	mock.lockCachedAppointments.RUnlock()
+	return calls
+}
+
+// CachedPrescriptions calls CachedPrescriptionsFunc.
+func (mock *MockCUP) CachedPrescriptions(ctx context.Context) (cache.Entry[[]cup.Prescription], error) {
+	if mock.CachedPrescriptionsFunc == nil {
+		panic("MockCUP.CachedPrescriptionsFunc: method is nil but CUP.CachedPrescriptions was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockCachedPrescriptions.Lock()
+	mock.calls.CachedPrescriptions = append(mock.calls.CachedPrescriptions, callInfo)
+	mock.lockCachedPrescriptions.Unlock()
+	return mock.CachedPrescriptionsFunc(ctx)
+}
+
+// CachedPrescriptionsCalls gets all the calls that were made to CachedPrescriptions.
+// Check the length with:
+//
+//	len(mockedCUP.CachedPrescriptionsCalls())
+func (mock *MockCUP) CachedPrescriptionsCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockCachedPrescriptions.RLock()
+	calls = mock.calls.CachedPrescriptions
+	mock.lockCachedPrescriptions.RUnlock()
+	return calls
+}
+
+// CachedVerdicts calls CachedVerdictsFunc.
+func (mock *MockCUP) CachedVerdicts(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error) {
+	if mock.CachedVerdictsFunc == nil {
+		panic("MockCUP.CachedVerdictsFunc: method is nil but CUP.CachedVerdicts was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockCachedVerdicts.Lock()
+	mock.calls.CachedVerdicts = append(mock.calls.CachedVerdicts, callInfo)
+	mock.lockCachedVerdicts.Unlock()
+	return mock.CachedVerdictsFunc(ctx)
+}
+
+// CachedVerdictsCalls gets all the calls that were made to CachedVerdicts.
+// Check the length with:
+//
+//	len(mockedCUP.CachedVerdictsCalls())
+func (mock *MockCUP) CachedVerdictsCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockCachedVerdicts.RLock()
+	calls = mock.calls.CachedVerdicts
+	mock.lockCachedVerdicts.RUnlock()
 	return calls
 }
 
@@ -186,6 +319,9 @@ var _ FSE = &MockFSE{}
 //
 //		// make and configure a mocked FSE
 //		mockedFSE := &MockFSE{
+//			CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]fse.Prescription], error) {
+//				panic("mock out the CachedPrescriptions method")
+//			},
 //			PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) {
 //				panic("mock out the Prescriptions method")
 //			},
@@ -196,18 +332,59 @@ var _ FSE = &MockFSE{}
 //
 //	}
 type MockFSE struct {
+	// CachedPrescriptionsFunc mocks the CachedPrescriptions method.
+	CachedPrescriptionsFunc func(ctx context.Context) (cache.Entry[[]fse.Prescription], error)
+
 	// PrescriptionsFunc mocks the Prescriptions method.
 	PrescriptionsFunc func(ctx context.Context) ([]fse.Prescription, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// CachedPrescriptions holds details about calls to the CachedPrescriptions method.
+		CachedPrescriptions []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
 		// Prescriptions holds details about calls to the Prescriptions method.
 		Prescriptions []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
 	}
-	lockPrescriptions sync.RWMutex
+	lockCachedPrescriptions sync.RWMutex
+	lockPrescriptions       sync.RWMutex
+}
+
+// CachedPrescriptions calls CachedPrescriptionsFunc.
+func (mock *MockFSE) CachedPrescriptions(ctx context.Context) (cache.Entry[[]fse.Prescription], error) {
+	if mock.CachedPrescriptionsFunc == nil {
+		panic("MockFSE.CachedPrescriptionsFunc: method is nil but FSE.CachedPrescriptions was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockCachedPrescriptions.Lock()
+	mock.calls.CachedPrescriptions = append(mock.calls.CachedPrescriptions, callInfo)
+	mock.lockCachedPrescriptions.Unlock()
+	return mock.CachedPrescriptionsFunc(ctx)
+}
+
+// CachedPrescriptionsCalls gets all the calls that were made to CachedPrescriptions.
+// Check the length with:
+//
+//	len(mockedFSE.CachedPrescriptionsCalls())
+func (mock *MockFSE) CachedPrescriptionsCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockCachedPrescriptions.RLock()
+	calls = mock.calls.CachedPrescriptions
+	mock.lockCachedPrescriptions.RUnlock()
+	return calls
 }
 
 // Prescriptions calls PrescriptionsFunc.

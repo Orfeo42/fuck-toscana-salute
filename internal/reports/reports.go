@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"time"
 
+	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/localrecords"
+	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 )
 
@@ -31,9 +34,17 @@ type Listing struct {
 	Failures []referti.Failure
 }
 
+type CachedListing struct {
+	Listing   Listing
+	FetchedAt time.Time
+	Stale     bool
+	Missing   bool
+}
+
 //go:generate moq -out deps_mock.go . Remote:MockRemote Local:MockLocal
 type Remote interface {
 	List(ctx context.Context) (referti.Listing, error)
+	CachedList(ctx context.Context) (cache.Entry[referti.Listing], error)
 	Documents(ctx context.Context, ref referti.Ref) ([]referti.Document, error)
 	Download(ctx context.Context, ref referti.Ref, position string) ([]byte, error)
 }
@@ -99,6 +110,10 @@ func (s *Service) List(ctx context.Context) (Listing, error) {
 		slog.Int("local", len(locals)),
 		slog.Int("failures", len(remote.Failures)))
 	return Listing{Reports: reports, Failures: remote.Failures}, nil
+}
+
+func (s *Service) CachedList(_ context.Context) (CachedListing, error) {
+	return CachedListing{}, notimpl.ErrNotImplemented
 }
 
 func nresFor(nres map[string][]string, ref referti.Ref) []string {

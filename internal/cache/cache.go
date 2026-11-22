@@ -10,6 +10,7 @@ import (
 
 	"fuck-toscana-salute/internal/cup"
 	"fuck-toscana-salute/internal/fse"
+	"fuck-toscana-salute/internal/notimpl"
 	"fuck-toscana-salute/internal/referti"
 	"fuck-toscana-salute/internal/store"
 )
@@ -47,8 +48,22 @@ func DefaultPolicy() Policy {
 }
 
 type Scope struct {
-	All  bool
-	NREs []string
+	All     bool
+	Lists   bool
+	Reports bool
+	NREs    []string
+}
+
+type cacheError string
+
+func (e cacheError) Error() string { return string(e) }
+
+const ErrNotCached = cacheError("cache: not cached")
+
+type Entry[T any] struct {
+	Value     T
+	FetchedAt time.Time
+	Stale     bool
 }
 
 type scopeKey struct{}
@@ -183,6 +198,18 @@ func (c *CUP) Verdict(ctx context.Context, nre string) (cup.Verdict, error) {
 	})
 }
 
+func (c *CUP) CachedPrescriptions(_ context.Context) (Entry[[]cup.Prescription], error) {
+	return Entry[[]cup.Prescription]{}, notimpl.ErrNotImplemented
+}
+
+func (c *CUP) CachedAppointments(_ context.Context) (map[string]Entry[[]cup.Appointment], error) {
+	return nil, notimpl.ErrNotImplemented
+}
+
+func (c *CUP) CachedVerdicts(_ context.Context) (map[string]Entry[cup.Verdict], error) {
+	return nil, notimpl.ErrNotImplemented
+}
+
 func stripPatient(raw []byte) []byte {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &top); err != nil {
@@ -226,6 +253,10 @@ func NewFSE(src FSESource, st Store, p Policy) *FSE {
 func (f *FSE) Prescriptions(ctx context.Context) ([]fse.Prescription, error) {
 	q := query{source: SourceFSEPrescriptions, ttl: f.policy.Lists, forced: forced(ctx, "")}
 	return readThrough(ctx, f.st, f.now, q, f.src.Prescriptions)
+}
+
+func (f *FSE) CachedPrescriptions(_ context.Context) (Entry[[]fse.Prescription], error) {
+	return Entry[[]fse.Prescription]{}, notimpl.ErrNotImplemented
 }
 
 //go:generate moq -out reportssource_mock.go . ReportsSource:MockReportsSource
@@ -287,4 +318,8 @@ func (r *Reports) List(ctx context.Context) (referti.Listing, error) {
 		return referti.Listing{}, err
 	}
 	return fromStored(stored), nil
+}
+
+func (r *Reports) CachedList(_ context.Context) (Entry[referti.Listing], error) {
+	return Entry[referti.Listing]{}, notimpl.ErrNotImplemented
 }

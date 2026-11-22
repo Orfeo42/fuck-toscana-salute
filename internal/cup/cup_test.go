@@ -398,15 +398,33 @@ func TestPromemoria(t *testing.T) {
 }
 
 func TestStatusLabel(t *testing.T) {
-	t.Run("prescribed", func(t *testing.T) { assert.Equal(t, "Prescritta", StatusPrescribed.Label()) })
+	t.Run("prescribed", func(t *testing.T) { assert.Equal(t, "Da prenotare", StatusPrescribed.Label()) })
 	t.Run("booked", func(t *testing.T) { assert.Equal(t, "Prenotata", StatusBooked.Label()) })
 	t.Run("cancelled", func(t *testing.T) { assert.Equal(t, "Annullata", StatusCancelled.Label()) })
 	t.Run("taken in charge", func(t *testing.T) { assert.Equal(t, "Presa in carico", StatusTakenInCharge.Label()) })
 	t.Run("suspended", func(t *testing.T) { assert.Equal(t, "Sospesa", StatusSuspended.Label()) })
-	t.Run("partially done", func(t *testing.T) { assert.Equal(t, "Erogata parziale", StatusPartiallyDone.Label()) })
+	t.Run("partially done", func(t *testing.T) { assert.Equal(t, "Erogata in parte", StatusPartiallyDone.Label()) })
 	t.Run("done", func(t *testing.T) { assert.Equal(t, "Erogata", StatusDone.Label()) })
 	t.Run("done after cancel", func(t *testing.T) {
 		assert.Equal(t, "Erogata dopo annullamento", StatusDoneAfterCancel.Label())
 	})
-	t.Run("unknown", func(t *testing.T) { assert.Equal(t, "Sconosciuto", Status(99).Label()) })
+	t.Run("unknown", func(t *testing.T) { assert.Equal(t, "Stato 99", Status(99).Label()) })
+}
+
+func TestStatusKey(t *testing.T) {
+	t.Run("prescribed", func(t *testing.T) { assert.Equal(t, "prescribed", StatusPrescribed.Key()) })
+	t.Run("booked", func(t *testing.T) { assert.Equal(t, "booked", StatusBooked.Key()) })
+	t.Run("cancelled", func(t *testing.T) { assert.Equal(t, "cancelled", StatusCancelled.Key()) })
+	t.Run("taken in charge", func(t *testing.T) { assert.Equal(t, "taken_in_charge", StatusTakenInCharge.Key()) })
+	t.Run("suspended", func(t *testing.T) { assert.Equal(t, "suspended", StatusSuspended.Key()) })
+	t.Run("partially done", func(t *testing.T) { assert.Equal(t, "partially_done", StatusPartiallyDone.Key()) })
+	t.Run("done", func(t *testing.T) { assert.Equal(t, "done", StatusDone.Key()) })
+	t.Run("done after cancel", func(t *testing.T) { assert.Equal(t, "done_after_cancel", StatusDoneAfterCancel.Key()) })
+	t.Run("unknown", func(t *testing.T) { assert.Equal(t, "other", Status(99).Key()) })
+}
+
+func TestSelectableStatuses(t *testing.T) {
+	t.Run("lists the manual statuses in order", func(t *testing.T) {
+		assert.Equal(t, []Status{3, 30, 5, 6, 7, 8, 9, 4}, SelectableStatuses)
+	})
 }
