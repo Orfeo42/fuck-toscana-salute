@@ -1,21 +1,15 @@
-.mantine-Modal-content:not([data-full-screen], .overlay-full),
-.mantine-Drawer-content {
+.mantine-Modal-content:not([data-full-screen], .overlay-full) {
   --modal-content-flex: 0 0 100%;
-  --drawer-flex: 0 0 100%;
 }
 
 @media (min-width: 48em) {
-  .mantine-Modal-content:not([data-full-screen], .overlay-full),
-  .mantine-Drawer-content {
+  .mantine-Modal-content:not([data-full-screen], .overlay-full) {
     --modal-content-flex: 0 0 80vw;
-    --drawer-flex: 0 0 80%;
   }
 }
 
 @media (min-width: 75em) {
-  .mantine-Modal-content:not([data-full-screen], .overlay-full),
-  .mantine-Drawer-content {
+  .mantine-Modal-content:not([data-full-screen], .overlay-full) {
     --modal-content-flex: 0 0 60vw;
-    --drawer-flex: 0 0 60%;
   }
 }

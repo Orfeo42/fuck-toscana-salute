@@ -1,4 +1,5 @@
 import { Badge, Drawer, Group, Stack, Tabs, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 
@@ -19,6 +20,8 @@ interface Props {
   onClose: () => void;
 }
 
+const desktopWidth = 560;
+
 export function DetailDrawer({
   title,
   badge,
@@ -28,10 +31,16 @@ export function DetailDrawer({
   footer,
   onClose,
 }: Props): JSX.Element {
+  const phone = useMediaQuery("(max-width: 48em)");
   const [active, setActive] = useState<string | null>(tabs[0]?.value ?? null);
 
   return (
-    <Drawer.Root opened onClose={onClose} position="right">
+    <Drawer.Root
+      opened
+      onClose={onClose}
+      position="right"
+      size={phone ? "100%" : desktopWidth}
+    >
       <Drawer.Overlay />
       <Drawer.Content>
         <Tabs value={active} onChange={setActive}>
