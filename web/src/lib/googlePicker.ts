@@ -45,6 +45,8 @@ async function loadPicker(): Promise<GooglePickerNamespace> {
   return picker;
 }
 
+const driveRoot = "root";
+
 export async function pickDriveFile(
   credentials: PickerBody,
 ): Promise<PickedFile | null> {
@@ -59,6 +61,8 @@ export async function pickDriveFile(
   return new Promise((resolve) => {
     const view = new picker.DocsView()
       .setMimeTypes(mimeTypes)
+      .setIncludeFolders(true)
+      .setParent(driveRoot)
       .setMode(picker.DocsViewMode.LIST);
     new picker.PickerBuilder()
       .addView(view)

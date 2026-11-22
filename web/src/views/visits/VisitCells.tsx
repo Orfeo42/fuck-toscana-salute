@@ -8,17 +8,16 @@ import {
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
-import { CalendarCheck, Info, MapPin } from "lucide-react";
+import { Info, MapPin } from "lucide-react";
 import { useState, type JSX } from "react";
 
 import type { AppointmentBody, RowBody } from "../../api/client";
-import { IconAction } from "../../components/IconAction";
 import { PdfLink } from "../../components/PdfLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { StopClick } from "../../components/StopClick";
 import { formatCompactDateTime } from "../../lib/format";
 import { BookAction } from "./BookAction";
-import { CalendarDialog } from "./CalendarDialog";
+import { CalendarAction } from "./CalendarAction";
 import { unitName, rowTitle, type EffectiveState } from "./filter";
 import { mapsSearchUrl } from "./mapsUrl";
 import { PromemoriaLink } from "./PromemoriaLink";
@@ -152,7 +151,6 @@ interface ActionsProps {
   state: EffectiveState;
   booking: AppointmentBody | undefined;
   now: Date;
-  packed?: boolean;
 }
 
 export function ActionsCell({
@@ -160,9 +158,7 @@ export function ActionsCell({
   state,
   booking,
   now,
-  packed = false,
 }: ActionsProps): JSX.Element {
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const at = state.kind === "booked" ? state.at : undefined;
   const calendarBooking =
     booking !== undefined &&
@@ -172,57 +168,21 @@ export function ActionsCell({
       : undefined;
   const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
 
-  const promemoria = <PromemoriaLink bookingId={bookingId} />;
-  const calendar =
-    calendarBooking === undefined ? null : (
-      <IconAction
-        label="Aggiungi a Google Calendar"
-        icon={CalendarCheck}
-        onClick={() => {
-          setCalendarOpen(true);
-        }}
-      />
-    );
-  const calendarDialog =
-    calendarBooking !== undefined && calendarOpen ? (
-      <CalendarDialog
-        appointment={calendarBooking}
-        title={rowTitle(row)}
-        onClose={() => {
-          setCalendarOpen(false);
-        }}
-      />
-    ) : null;
-  const pdf = <PdfLink documentRef={row.fse?.documentRef} />;
-  const book =
-    state.kind === "official" && state.canBook ? <BookAction /> : null;
-
-  if (packed) {
-    return (
-      <Group gap="xs" wrap="wrap">
-        {promemoria}
-        {calendar}
-        {calendarDialog}
-        {pdf}
-        {book}
-      </Group>
-    );
-  }
-
   return (
     <Group gap={2} wrap="nowrap">
       <Box w={slotSize} h={slotSize}>
-        {promemoria}
+        <PromemoriaLink bookingId={bookingId} />
       </Box>
       <Box w={slotSize} h={slotSize}>
-        {calendar}
-      </Box>
-      {calendarDialog}
-      <Box w={slotSize} h={slotSize}>
-        {pdf}
+        {calendarBooking === undefined ? null : (
+          <CalendarAction appointment={calendarBooking} title={rowTitle(row)} />
+        )}
       </Box>
       <Box w={slotSize} h={slotSize}>
-        {book}
+        <PdfLink documentRef={row.fse?.documentRef} />
+      </Box>
+      <Box w={slotSize} h={slotSize}>
+        {state.kind === "official" && state.canBook ? <BookAction /> : null}
       </Box>
     </Group>
   );

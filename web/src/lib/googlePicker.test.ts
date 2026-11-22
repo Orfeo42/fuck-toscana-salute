@@ -24,6 +24,14 @@ function installFakes(fake: Fake): void {
       fake.calls.push(`mode:${mode}`);
       return this;
     }
+    setIncludeFolders(include: boolean): this {
+      fake.calls.push(`folders:${String(include)}`);
+      return this;
+    }
+    setParent(parentId: string): this {
+      fake.calls.push(`parent:${parentId}`);
+      return this;
+    }
   }
   class PickerBuilder {
     addView(): this {
@@ -105,6 +113,8 @@ describe("pickDriveFile", () => {
     await expect(result).resolves.toEqual({ id: "f1", name: "referto.pdf" });
     expect(fake.calls).toEqual([
       "mime:application/pdf,image/jpeg,image/png",
+      "folders:true",
+      "parent:root",
       "mode:list",
       "view",
       "token:tok",

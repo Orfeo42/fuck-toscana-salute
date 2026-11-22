@@ -136,11 +136,10 @@ export function ReportDetailModal({
   };
 
   const documents = result?.documents;
-  const singleDocument = documents?.length === 1 ? documents[0] : undefined;
   const summary = [report.provider, report.date ? formatDate(report.date) : ""]
     .filter((part) => part !== "")
     .join(" · ");
-  const openLabel = local ? "Apri documento" : "Apri PDF";
+  const fallbackLabel = local ? "Apri documento" : "Apri PDF";
 
   const documentsTab = (
     <>
@@ -175,17 +174,19 @@ export function ReportDetailModal({
                     </Text>
                   )}
                 </Stack>
-                {documents.length === 1 ? null : (
-                  <IconAction
-                    label={local ? "Apri" : "Apri PDF"}
-                    icon={FileText}
-                    loading={opening === document.position}
-                    disabled={opening !== undefined}
-                    onClick={() => {
-                      void openPdf(document);
-                    }}
-                  />
-                )}
+                <IconAction
+                  label={
+                    document.label === ""
+                      ? fallbackLabel
+                      : `Apri ${document.label}`
+                  }
+                  icon={FileText}
+                  loading={opening === document.position}
+                  disabled={opening !== undefined}
+                  onClick={() => {
+                    void openPdf(document);
+                  }}
+                />
               </Group>
             </Paper>
           )}
@@ -218,20 +219,6 @@ export function ReportDetailModal({
             <Text size="sm" c="dimmed">
               {summary}
             </Text>
-          )
-        }
-        actions={
-          singleDocument === undefined ? undefined : (
-            <IconAction
-              label={openLabel}
-              icon={FileText}
-              tone="primary"
-              loading={opening === singleDocument.position}
-              disabled={opening !== undefined}
-              onClick={() => {
-                void openPdf(singleDocument);
-              }}
-            />
           )
         }
         tabs={[

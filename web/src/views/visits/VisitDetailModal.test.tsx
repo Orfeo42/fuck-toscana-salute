@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -389,7 +389,7 @@ describe("VisitDetailModal layout", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the booked summary with map links", () => {
+  it("shows the booked summary with map links in the Appuntamento section", () => {
     renderModal({ booked: true });
     expect(screen.getByText(/· tra \d+ giorni|· domani|· oggi/)).toBeVisible();
     expect(
@@ -399,6 +399,48 @@ describe("VisitDetailModal layout", () => {
       screen.getByRole("link", { name: "Apri in Google Maps" }),
     ).toHaveAttribute("target", "_blank");
     expect(screen.getAllByText("Unita esempio").length).toBeGreaterThan(0);
+  });
+
+  it("puts the appointment actions in the Appuntamento section", () => {
+    renderModal({ booked: true });
+    const section =
+      screen.getByRole("heading", { name: "Appuntamento" }).parentElement
+        ?.parentElement ?? document.body;
+    const scope = within(section);
+    expect(
+      scope.getByRole("button", { name: "Aggiungi a Google Calendar" }),
+    ).toBeVisible();
+    expect(
+      scope.getByRole("link", { name: "Indicazioni stradali" }),
+    ).toBeVisible();
+    expect(
+      scope.getByRole("link", { name: "Apri in Google Maps" }),
+    ).toBeVisible();
+  });
+
+  it("puts the ricetta action in the Prescrizione tab", async () => {
+    const user = userEvent.setup();
+    const fse = visit().fse;
+    renderModal({
+      row: visit(
+        fse === undefined ? {} : { fse: { ...fse, documentRef: "ref1" } },
+      ),
+    });
+    expect(
+      screen.queryByRole("button", { name: "Apri ricetta (PDF)" }),
+    ).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Prescrizione" }));
+    expect(
+      screen.getByRole("button", { name: "Apri ricetta (PDF)" }),
+    ).toBeVisible();
+  });
+
+  it("keeps only Aggiorna in the header", () => {
+    renderModal({ booked: true });
+    const dialog = screen.getByRole("dialog", { name: "Visita esempio" });
+    expect(
+      within(dialog).getAllByRole("button", { name: "Aggiorna" }),
+    ).toHaveLength(1);
   });
 
   it("shows the NRE copy button on the prescription tab", async () => {

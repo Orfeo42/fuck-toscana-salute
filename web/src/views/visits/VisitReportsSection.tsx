@@ -1,5 +1,4 @@
 import {
-  ActionIcon,
   Group,
   Select,
   Stack,
@@ -8,7 +7,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { FileUp, Unlink, Upload } from "lucide-react";
+import { FileText, FileUp, Unlink, Upload } from "lucide-react";
 import { useState, type JSX } from "react";
 
 import {
@@ -131,7 +130,6 @@ export function VisitReportsSection({
               </Tooltip>
             ) : null}
             <UnstyledButton
-              aria-label={`Apri referto ${reportLabel(report)}`}
               onClick={() => {
                 setOpenReport(report);
               }}
@@ -140,17 +138,20 @@ export function VisitReportsSection({
                 {`${reportLabel(report)} · ${formatDate(report.date)} · ${report.provider}`}
               </Text>
             </UnstyledButton>
-            <Tooltip label="Scollega referto" withArrow openDelay={150}>
-              <ActionIcon
-                variant="subtle"
-                aria-label={`Scollega referto ${reportLabel(report)}`}
-                onClick={() => {
-                  void unlink(report);
-                }}
-              >
-                <Unlink size={16} aria-hidden="true" />
-              </ActionIcon>
-            </Tooltip>
+            <IconAction
+              label={`Apri referto ${reportLabel(report)}`}
+              icon={FileText}
+              onClick={() => {
+                setOpenReport(report);
+              }}
+            />
+            <IconAction
+              label={`Scollega referto ${reportLabel(report)}`}
+              icon={Unlink}
+              onClick={() => {
+                void unlink(report);
+              }}
+            />
           </Group>
         )}
       />

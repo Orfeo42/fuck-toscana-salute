@@ -1,15 +1,27 @@
-import { Stack, Text, Title } from "@mantine/core";
+import { Group, Stack, Text, Title } from "@mantine/core";
 import type { JSX, ReactNode } from "react";
 
 interface SectionProps {
   title: string;
+  actions?: ReactNode;
   children: ReactNode;
 }
 
-export function DetailSection({ title, children }: SectionProps): JSX.Element {
+export function DetailSection({
+  title,
+  actions,
+  children,
+}: SectionProps): JSX.Element {
   return (
     <Stack gap="xs">
-      <Title order={5}>{title}</Title>
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <Title order={5}>{title}</Title>
+        {actions === undefined ? null : (
+          <Group gap={2} wrap="nowrap">
+            {actions}
+          </Group>
+        )}
+      </Group>
       {children}
     </Stack>
   );

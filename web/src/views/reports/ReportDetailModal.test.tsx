@@ -176,30 +176,56 @@ describe("ReportDetailModal", () => {
       expect(screen.getByText("Caricato")).toBeVisible();
     });
 
-    it("has the open button in the header for a single document", async () => {
+    it("has the open button in the document row for a single document", async () => {
       mockDocuments(new Blob(["pdf"]));
       render(local);
 
-      expect(
-        await screen.findByRole("button", { name: "Apri documento" }),
-      ).toBeVisible();
+      const button = await screen.findByRole("button", {
+        name: "Apri Documento",
+      });
+      expect(button).toBeVisible();
+      expect(screen.getAllByRole("button", { name: /^Apri / })).toHaveLength(1);
       expect(screen.getByRole("tab", { name: /Documenti/ })).toHaveTextContent(
         "1",
       );
     });
 
-    it("lists several documents in the tab without a header button", async () => {
-      mockDocumentList(2);
+    it("gives every document its own open button", async () => {
+      mocks.post.mockImplementation((path: string) =>
+        Promise.resolve(
+          path === "/api/reports/documents"
+            ? {
+                data: {
+                  documents: [
+                    { position: "1", label: "Documento 1" },
+                    { position: "2", label: "Documento 2" },
+                  ],
+                },
+                response: { status: 200 },
+              }
+            : {
+                data: new Blob(["pdf"], { type: "application/pdf" }),
+                response: { status: 200 },
+              },
+        ),
+      );
       render(local);
 
       expect(await screen.findByText("Documento 1")).toBeVisible();
-      expect(
-        screen.queryByRole("button", { name: "Apri documento" }),
-      ).toBeNull();
-      expect(screen.getAllByRole("button", { name: "Apri" })).toHaveLength(2);
+      expect(screen.getAllByRole("button", { name: /^Apri / })).toHaveLength(2);
       expect(screen.getByRole("tab", { name: /Documenti/ })).toHaveTextContent(
         "2",
       );
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Apri Documento 2" }),
+      );
+
+      await screen.findByRole("link", { name: "Apri in una nuova scheda" });
+      const pdfCall = mocks.post.mock.calls.find(
+        (call: readonly unknown[]) => call[0] === "/api/reports/pdf",
+      );
+      expect(pdfCall?.[1]).toMatchObject({ body: { position: "2" } });
     });
 
     it("caps long document lists", async () => {
@@ -233,7 +259,7 @@ describe("ReportDetailModal", () => {
     it("has no edit tab for remote reports", async () => {
       mockDocuments(new Blob(["pdf"]));
       render(remote);
-      await screen.findByRole("button", { name: "Apri PDF" });
+      await screen.findByRole("button", { name: "Apri Documento" });
       expect(screen.queryByRole("tab", { name: "Modifica" })).toBeNull();
     });
   });
@@ -244,7 +270,7 @@ describe("ReportDetailModal", () => {
       render(remote);
 
       await userEvent.click(
-        await screen.findByRole("button", { name: "Apri PDF" }),
+        await screen.findByRole("button", { name: "Apri Documento" }),
       );
 
       expect(
@@ -258,7 +284,7 @@ describe("ReportDetailModal", () => {
       render(local);
 
       await userEvent.click(
-        await screen.findByRole("button", { name: "Apri documento" }),
+        await screen.findByRole("button", { name: "Apri Radiografia" }),
       );
 
       const image = await screen.findByRole("img", { name: "Radiografia" });

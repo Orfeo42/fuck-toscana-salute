@@ -1,9 +1,10 @@
-import { Group, Paper, Stack, Text } from "@mantine/core";
+import { Paper, Stack, Text } from "@mantine/core";
 import { MapPinned, Navigation, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
 import type { AppointmentBody, ReportBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
+import { PdfLink } from "../../components/PdfLink";
 import { DetailDrawer, type DetailTab } from "../../components/DetailDrawer";
 import { DetailField, DetailSection } from "../../components/DetailSection";
 import { IconAction } from "../../components/IconAction";
@@ -15,10 +16,12 @@ import {
 } from "../../lib/format";
 import { rowDate, rowTitle, unitName, type EffectiveState } from "./filter";
 import { fullAddress, mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
+import { BookAction } from "./BookAction";
+import { CalendarAction } from "./CalendarAction";
+import { PromemoriaLink } from "./PromemoriaLink";
 import { relativeDay } from "./relativeDay";
 import { linkedReports } from "./reportLinks";
 import { statusDetails } from "./statusDetails";
-import { ActionsCell } from "./VisitCells";
 import { VisitReportsSection } from "./VisitReportsSection";
 import { VisitStatusSection } from "./VisitStatusSection";
 
@@ -52,6 +55,13 @@ export function VisitDetailModal({
   const place = bookedUnit?.place ?? "";
   const address = bookedUnit === undefined ? "" : fullAddress(bookedUnit);
   const at = state.kind === "booked" ? state.at : undefined;
+  const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
+  const calendarBooking =
+    booking !== undefined &&
+    at !== undefined &&
+    new Date(at).getTime() > now.getTime()
+      ? booking
+      : undefined;
   const verifiedAt = state.kind === "booked" ? undefined : state.verifiedAt;
   const updates = [
     appointmentCheckedAt === undefined
@@ -69,7 +79,14 @@ export function VisitDetailModal({
       content: (
         <>
           <Paper withBorder p="sm" radius="md">
-            <DetailSection title="Stato">
+            <DetailSection
+              title="Stato"
+              actions={
+                state.kind === "official" && state.canBook ? (
+                  <BookAction />
+                ) : undefined
+              }
+            >
               <Stack gap={4}>
                 {details.map((detail) => (
                   <Text key={detail} size="sm">
@@ -82,7 +99,36 @@ export function VisitDetailModal({
           </Paper>
           {bookedUnit === undefined ? null : (
             <Paper withBorder p="sm" radius="md">
-              <DetailSection title="Appuntamento">
+              <DetailSection
+                title="Appuntamento"
+                actions={
+                  <>
+                    <PromemoriaLink bookingId={bookingId} />
+                    {calendarBooking === undefined ? null : (
+                      <CalendarAction
+                        appointment={calendarBooking}
+                        title={rowTitle(row)}
+                      />
+                    )}
+                    {bookedUnit.address === "" ? null : (
+                      <>
+                        <IconAction
+                          label="Indicazioni stradali"
+                          icon={Navigation}
+                          href={mapsDirectionsUrl(bookedUnit)}
+                          external
+                        />
+                        <IconAction
+                          label="Apri in Google Maps"
+                          icon={MapPinned}
+                          href={mapsSearchUrl(bookedUnit)}
+                          external
+                        />
+                      </>
+                    )}
+                  </>
+                }
+              >
                 {at === undefined ? null : (
                   <DetailField label="Data e ora">
                     <>
@@ -132,7 +178,10 @@ export function VisitDetailModal({
       label: "Prescrizione",
       content: (
         <Paper withBorder p="sm" radius="md">
-          <DetailSection title="Prescrizione">
+          <DetailSection
+            title="Prescrizione"
+            actions={<PdfLink documentRef={row.fse?.documentRef} />}
+          >
             <DetailField label="Data prescrizione">
               {formatDate(rowDate(row))}
             </DetailField>
@@ -161,44 +210,17 @@ export function VisitDetailModal({
             <Text size="sm">
               {`${formatLongDateTime(at)} · ${relativeDay(at, now)}`}
             </Text>
-            <Group gap={4} wrap="nowrap">
-              <Text size="sm">{unitName(bookedUnit)}</Text>
-              {bookedUnit.address === "" ? null : (
-                <>
-                  <IconAction
-                    label="Indicazioni stradali"
-                    icon={Navigation}
-                    href={mapsDirectionsUrl(bookedUnit)}
-                    external
-                  />
-                  <IconAction
-                    label="Apri in Google Maps"
-                    icon={MapPinned}
-                    href={mapsSearchUrl(bookedUnit)}
-                    external
-                  />
-                </>
-              )}
-            </Group>
+            <Text size="sm">{unitName(bookedUnit)}</Text>
           </>
         )
       }
       actions={
-        <>
-          <ActionsCell
-            row={row}
-            state={state}
-            booking={booking}
-            now={now}
-            packed
-          />
-          <IconAction
-            label="Aggiorna"
-            icon={RefreshCw}
-            loading={refreshing}
-            onClick={onRefresh}
-          />
-        </>
+        <IconAction
+          label="Aggiorna"
+          icon={RefreshCw}
+          loading={refreshing}
+          onClick={onRefresh}
+        />
       }
       tabs={tabs}
       footer={

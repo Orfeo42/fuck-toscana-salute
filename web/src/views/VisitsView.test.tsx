@@ -478,12 +478,6 @@ describe("VisitsView", () => {
     expect(
       within(dialog).getByText("Via A&B 1/c, 50100 Firenze FI"),
     ).toBeVisible();
-    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
-    expect(
-      within(dialog).getByRole("button", {
-        name: "Copia NRE 0900A0000000001",
-      }),
-    ).toBeVisible();
     const directions = within(dialog).getByRole("link", {
       name: "Indicazioni stradali",
     });
@@ -499,6 +493,12 @@ describe("VisitsView", () => {
       "href",
       "https://www.google.com/maps/search/?api=1&query=Via%20A%26B%201%2Fc%2C%2050100%20Firenze%20FI",
     );
+    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
+    expect(
+      within(dialog).getByRole("button", {
+        name: "Copia NRE 0900A0000000001",
+      }),
+    ).toBeVisible();
   });
 
   it("hides the maps links when the unit has no address", async () => {
@@ -637,16 +637,16 @@ describe("VisitsView", () => {
         `Prescritta il ${formatDate("2026-10-15T09:00:00Z")}`,
       ),
     ).toBeVisible();
-    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
-    expect(
-      within(dialog).getByText(formatDate("2026-10-15T09:00:00Z")),
-    ).toBeVisible();
     expect(within(dialog).queryByText("Appuntamento")).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("link", { name: "Apri in Google Maps" }),
     ).not.toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Prenota sul CUP" }),
+    ).toBeVisible();
+    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
+    expect(
+      within(dialog).getByText(formatDate("2026-10-15T09:00:00Z")),
     ).toBeVisible();
   });
 

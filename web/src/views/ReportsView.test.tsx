@@ -459,7 +459,7 @@ describe("ReportsView", () => {
       });
 
       await userEvent.click(
-        within(dialog).getByRole("button", { name: "Apri PDF" }),
+        within(dialog).getByRole("button", { name: "Apri Esame del sangue" }),
       );
 
       await waitFor(() => {
@@ -535,7 +535,7 @@ describe("ReportsView", () => {
 
       await userEvent.click(screen.getByText("Ospedale Esempio"));
       await userEvent.click(
-        await screen.findByRole("button", { name: "Apri PDF" }),
+        await screen.findByRole("button", { name: "Apri Referto" }),
       );
 
       expect(
