@@ -4,7 +4,6 @@ import {
   Button,
   Group,
   Loader,
-  NativeSelect,
   Text,
   TextInput,
   Title,
@@ -21,12 +20,13 @@ import { startRefresh } from "../data/refresh";
 import { formatDate } from "../lib/format";
 import { useSort } from "../lib/useSort";
 import { useViewQuery } from "../lib/useViewQuery";
+import { StatusKeyFilter } from "../components/StatusKeyFilter";
 import { tableScrollProps } from "../components/tableScroll";
 import { tableColors } from "../theme";
 import { ReportDetailModal } from "./reports/ReportDetailModal";
 import { UploadReportDialog } from "./reports/UploadReportDialog";
 
-type ReportKind = NonNullable<ReportsQueryRequest["kind"]>;
+type ReportKind = NonNullable<ReportsQueryRequest["excludeKinds"]>[number];
 type ReportSort = ReportsQueryRequest["sort"];
 type PageSize = ReportsQueryRequest["pageSize"];
 
@@ -44,7 +44,6 @@ const sortKeys: readonly ReportSort[] = ["date", "kind", "provider"];
 const pageSizes: readonly PageSize[] = [25, 50, 100];
 const descFirst: readonly ReportSort[] = ["date"];
 const rowPointer = { cursor: "pointer" };
-const allKinds = "";
 const fseHint =
   "Accedi al Fascicolo Sanitario per vedere anche i referti del portale regionale.";
 
@@ -53,78 +52,11 @@ function sortKeyOf(accessor: string): ReportSort | undefined {
   return sortKeys.find((key) => key === name);
 }
 
-const columns: DataTableColumn<ReportRowBody>[] = [
-  {
-    accessor: "date",
-    title: "Data",
-    sortable: true,
-    noWrap: true,
-    render: (report) => formatDate(report.date),
-  },
-  {
-    accessor: "kindLabel",
-    title: "Tipo",
-    sortable: true,
-    noWrap: true,
-    render: (report) =>
-      report.origin === "local" ? (
-        <Group gap={6} wrap="nowrap">
-          <Tooltip label="Caricato da te" withArrow>
-            <span role="img" aria-label="Caricato da te">
-              <Upload size={16} aria-hidden="true" />
-            </span>
-          </Tooltip>
-          <Text size="sm">{report.title}</Text>
-        </Group>
-      ) : (
-        report.kindLabel
-      ),
-  },
-  {
-    accessor: "provider",
-    title: "Struttura",
-    sortable: true,
-    noWrap: true,
-    width: 320,
-    render: (report) => (
-      <Tooltip label={report.provider} openDelay={300}>
-        <Text truncate="end" size="sm" maw={300}>
-          {report.provider}
-        </Text>
-      </Tooltip>
-    ),
-  },
-  {
-    accessor: "unread",
-    title: "Stato",
-    noWrap: true,
-    render: (report) => (
-      <Group gap={4} wrap="nowrap">
-        {report.unread ? (
-          <Badge size="sm" color="blue">
-            Nuovo
-          </Badge>
-        ) : null}
-        {report.hidden ? (
-          <Badge size="sm" color="gray" variant="light">
-            Oscurato
-          </Badge>
-        ) : null}
-        {report.linkedLabel === "" ? null : (
-          <Tooltip label={report.linkedLabel} withArrow>
-            <span role="img" aria-label={report.linkedLabel}>
-              <Link2 size={16} aria-hidden="true" />
-            </span>
-          </Tooltip>
-        )}
-      </Group>
-    ),
-  },
-];
-
 export function ReportsView(): JSX.Element {
   const [search, setSearch] = useState("");
-  const [kind, setKind] = useState<ReportKind | undefined>(undefined);
+  const [excludeKinds, setExcludeKinds] = useState<ReportKind[] | undefined>(
+    undefined,
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(50);
   const [starting, setStarting] = useState(false);
@@ -139,11 +71,91 @@ export function ReportsView(): JSX.Element {
     page,
     pageSize,
   };
-  if (kind !== undefined) {
-    request.kind = kind;
+  if (excludeKinds !== undefined) {
+    request.excludeKinds = excludeKinds;
   }
   const reports = useViewQuery("/api/reports/query", request);
   const data = reports.data;
+
+  const columns: DataTableColumn<ReportRowBody>[] = [
+    {
+      accessor: "date",
+      title: "Data",
+      sortable: true,
+      noWrap: true,
+      render: (report) => formatDate(report.date),
+    },
+    {
+      accessor: "kindLabel",
+      title: "Tipo",
+      sortable: true,
+      noWrap: true,
+      filtering: (data?.excludedKinds.length ?? 0) > 0,
+      filter: (
+        <StatusKeyFilter
+          options={data?.kinds ?? []}
+          onChange={(keys) => {
+            setExcludeKinds(reportKinds.filter((kind) => keys.includes(kind)));
+            setPage(1);
+          }}
+        />
+      ),
+      render: (report) =>
+        report.origin === "local" ? (
+          <Group gap={6} wrap="nowrap">
+            <Tooltip label="Caricato da te" withArrow>
+              <span role="img" aria-label="Caricato da te">
+                <Upload size={16} aria-hidden="true" />
+              </span>
+            </Tooltip>
+            <Text size="sm">{report.title}</Text>
+          </Group>
+        ) : (
+          report.kindLabel
+        ),
+    },
+    {
+      accessor: "provider",
+      title: "Struttura",
+      sortable: true,
+      noWrap: true,
+      width: 320,
+      render: (report) => (
+        <Tooltip label={report.provider} openDelay={300}>
+          <Text truncate="end" size="sm" maw={300}>
+            {report.provider}
+          </Text>
+        </Tooltip>
+      ),
+    },
+    {
+      accessor: "unread",
+      title: "Stato",
+      noWrap: true,
+      render: (report) => (
+        <Group gap={4} wrap="nowrap">
+          {report.unread ? (
+            <Badge size="sm" color="blue">
+              Nuovo
+            </Badge>
+          ) : null}
+          {report.hidden ? (
+            <Badge size="sm" color="gray" variant="light">
+              Oscurato
+            </Badge>
+          ) : null}
+          {report.linkedLabel === "" ? null : (
+            <Tooltip label={report.linkedLabel} withArrow>
+              <span role="img" aria-label={report.linkedLabel}>
+                <Link2 size={16} aria-hidden="true" />
+              </span>
+            </Tooltip>
+          )}
+        </Group>
+      ),
+    },
+  ];
+
   const refreshing = starting || data?.refreshing === true;
   const issue = reports.error === undefined ? data?.issue : undefined;
 
@@ -173,22 +185,6 @@ export function ReportsView(): JSX.Element {
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value);
-            setPage(1);
-          }}
-        />
-        <NativeSelect
-          label="Tipo"
-          value={kind ?? allKinds}
-          data={[
-            { value: allKinds, label: "Tutti i tipi" },
-            ...(data?.kinds ?? []).map((option) => ({
-              value: option.key,
-              label: `${option.label} (${String(option.count)})`,
-            })),
-          ]}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setKind(reportKinds.find((item) => item === value));
             setPage(1);
           }}
         />

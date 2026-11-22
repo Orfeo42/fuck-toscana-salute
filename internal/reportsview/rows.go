@@ -95,7 +95,7 @@ func containsFold(list []string, value string) bool {
 	return slices.ContainsFunc(list, func(item string) bool { return strings.EqualFold(item, value) })
 }
 
-func kindOptions(rows []Row) []KindOption {
+func kindOptions(rows []Row, excluded map[string]bool) []KindOption {
 	index := map[string]int{}
 	options := make([]KindOption, 0)
 	for _, row := range rows {
@@ -103,7 +103,7 @@ func kindOptions(rows []Row) []KindOption {
 		if !ok {
 			i = len(options)
 			index[row.Kind] = i
-			options = append(options, KindOption{Key: row.Kind, Label: row.KindLabel})
+			options = append(options, KindOption{Key: row.Kind, Label: row.KindLabel, Excluded: excluded[row.Kind]})
 		}
 		options[i].Count++
 	}

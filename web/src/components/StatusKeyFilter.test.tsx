@@ -2,23 +2,20 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { StatusOptionBody } from "../api/client";
 import { render } from "../test/render";
 import { StatusKeyFilter } from "./StatusKeyFilter";
 
-const options: StatusOptionBody[] = [
+const options = [
   {
     key: "booked",
     label: "Prenotata",
-    tone: "booked",
     count: 2,
     excluded: false,
   },
-  { key: "done", label: "Erogata", tone: "done", count: 1, excluded: true },
+  { key: "done", label: "Erogata", count: 1, excluded: true },
   {
     key: "expired",
     label: "Scaduta",
-    tone: "closed",
     count: 3,
     excluded: false,
   },

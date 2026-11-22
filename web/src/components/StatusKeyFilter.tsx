@@ -1,10 +1,15 @@
 import { Button, Checkbox, Group, Stack } from "@mantine/core";
 import type { JSX } from "react";
 
-import type { StatusOptionBody } from "../api/client";
+interface KeyOption {
+  key: string;
+  label: string;
+  count: number;
+  excluded: boolean;
+}
 
 interface Props {
-  options: readonly StatusOptionBody[];
+  options: readonly KeyOption[];
   onChange: (excludedKeys: string[]) => void;
 }
 

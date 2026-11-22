@@ -758,6 +758,7 @@ export interface components {
         KindOptionBody: {
             /** Format: int64 */
             count: number;
+            excluded: boolean;
             key: string;
             label: string;
         };
@@ -971,6 +972,7 @@ export interface components {
              * @example https://example.com/schemas/ReportsQueryBody.json
              */
             readonly $schema?: string;
+            excludedKinds: string[];
             failures: components["schemas"]["ReportFailureBody"][];
             fseUnavailable: boolean;
             /** @enum {string} */
@@ -998,8 +1000,7 @@ export interface components {
              * @enum {string}
              */
             dir: "asc" | "desc";
-            /** @enum {string} */
-            kind?: "lab" | "labtrasf" | "ris" | "ldo" | "ps" | "rsa" | "rap" | "local";
+            excludeKinds?: ("lab" | "labtrasf" | "ris" | "ldo" | "ps" | "rsa" | "rap" | "local")[];
             /**
              * Format: int64
              * @default 1

@@ -109,9 +109,10 @@ function body(overrides: Partial<ReportsQueryBody> = {}): ReportsQueryBody {
     page: 1,
     pageSize: 50,
     kinds: [
-      { key: "lab", label: "Laboratorio", count: 1 },
-      { key: "ris", label: "Radiologia", count: 1 },
+      { key: "lab", label: "Laboratorio", count: 1, excluded: false },
+      { key: "ris", label: "Radiologia", count: 1, excluded: false },
     ],
+    excludedKinds: [],
     failures: [],
     fseUnavailable: false,
     refreshing: false,
@@ -140,6 +141,11 @@ function queryRequests(): unknown[] {
   return mocks.post.mock.calls
     .filter((call) => call[0] === "/api/reports/query")
     .map((call) => (call[1] as { body: unknown }).body);
+}
+
+async function openKindFilter(): Promise<void> {
+  const header = screen.getByRole("button", { name: /^Tipo/ });
+  await userEvent.click(within(header).getByRole("button"));
 }
 
 function bodyRows(): HTMLElement[] {
@@ -222,19 +228,65 @@ describe("ReportsView", () => {
     });
   });
 
-  it("lists the kinds with their counts and sends the selected kind", async () => {
+  it("has no kind dropdown above the table", async () => {
     mockQuery(body());
     render(<ReportsView />);
     await screen.findByText("Clinica Prova");
 
-    await userEvent.selectOptions(
-      screen.getByRole("combobox", { name: "Tipo" }),
-      "Radiologia (1)",
+    expect(screen.queryByRole("combobox", { name: "Tipo" })).toBeNull();
+  });
+
+  it("sends the excluded kinds from the Tipo header filter and resets the page", async () => {
+    mockQuery(body({ total: 120 }));
+    render(<ReportsView />);
+    await screen.findByText("Clinica Prova");
+    await userEvent.click(await screen.findByRole("button", { name: "2" }));
+    await waitFor(() => {
+      expect(queryRequests().at(-1)).toMatchObject({ page: 2 });
+    });
+    await openKindFilter();
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Radiologia (1)" }),
     );
 
     await waitFor(() => {
-      expect(queryRequests().at(-1)).toMatchObject({ kind: "ris", page: 1 });
+      expect(queryRequests().at(-1)).toMatchObject({
+        excludeKinds: ["ris"],
+        page: 1,
+      });
     });
+  });
+
+  it("sends Nessuno as every kind and Tutti as none", async () => {
+    mockQuery(body());
+    render(<ReportsView />);
+    await screen.findByText("Clinica Prova");
+    await openKindFilter();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Nessuno" }),
+    );
+
+    await waitFor(() => {
+      expect(queryRequests().at(-1)).toMatchObject({
+        excludeKinds: ["lab", "ris"],
+      });
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Tutti" }));
+
+    await waitFor(() => {
+      expect(queryRequests().at(-1)).toMatchObject({ excludeKinds: [] });
+    });
+  });
+
+  it("omits excludeKinds until the user changes the filter", async () => {
+    mockQuery(body());
+    render(<ReportsView />);
+    await screen.findByText("Clinica Prova");
+
+    expect(queryRequests()[0]).not.toHaveProperty("excludeKinds");
   });
 
   it("sends the sort column and direction", async () => {

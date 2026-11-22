@@ -793,6 +793,9 @@
             "minimum": 0,
             "type": "integer"
           },
+          "excluded": {
+            "type": "boolean"
+          },
           "key": {
             "type": "string"
           },
@@ -803,7 +806,8 @@
         "required": [
           "key",
           "label",
-          "count"
+          "count",
+          "excluded"
         ],
         "type": "object"
       },
@@ -1464,6 +1468,12 @@
             "readOnly": true,
             "type": "string"
           },
+          "excludedKinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "failures": {
             "items": {
               "$ref": "#/components/schemas/ReportFailureBody"
@@ -1518,6 +1528,7 @@
           "page",
           "pageSize",
           "kinds",
+          "excludedKinds",
           "failures",
           "fseUnavailable",
           "refreshing",
@@ -1546,18 +1557,22 @@
             ],
             "type": "string"
           },
-          "kind": {
-            "enum": [
-              "lab",
-              "labtrasf",
-              "ris",
-              "ldo",
-              "ps",
-              "rsa",
-              "rap",
-              "local"
-            ],
-            "type": "string"
+          "excludeKinds": {
+            "items": {
+              "enum": [
+                "lab",
+                "labtrasf",
+                "ris",
+                "ldo",
+                "ps",
+                "rsa",
+                "rap",
+                "local"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
           },
           "page": {
             "default": 1,

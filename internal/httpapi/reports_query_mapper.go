@@ -11,8 +11,9 @@ func toReportsQueryBody(p reportsview.Page) ReportsQueryBody {
 	}
 	kinds := make([]KindOptionBody, 0, len(p.Kinds))
 	for _, k := range p.Kinds {
-		kinds = append(kinds, KindOptionBody{Key: k.Key, Label: k.Label, Count: k.Count})
+		kinds = append(kinds, KindOptionBody{Key: k.Key, Label: k.Label, Count: k.Count, Excluded: k.Excluded})
 	}
+	excluded := append([]string{}, p.ExcludedKinds...)
 	failures := make([]ReportFailureBody, 0, len(p.Failures))
 	for _, f := range p.Failures {
 		failures = append(failures, ReportFailureBody{Kind: f.Kind, KindLabel: f.KindLabel, Message: f.Message})
@@ -23,6 +24,7 @@ func toReportsQueryBody(p reportsview.Page) ReportsQueryBody {
 		Page:           p.Page,
 		PageSize:       p.PageSize,
 		Kinds:          kinds,
+		ExcludedKinds:  excluded,
 		Failures:       failures,
 		FSEUnavailable: p.FSEUnavailable,
 		Refreshing:     p.Refreshing,

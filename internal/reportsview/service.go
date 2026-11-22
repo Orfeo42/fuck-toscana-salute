@@ -59,7 +59,18 @@ func (s *Service) Query(ctx context.Context, q Query) (Page, error) {
 	all := buildRows(data.cached.Listing.Reports, visitTitles(data.snapshot.Rows))
 	failures, fseUnavailable := splitFailures(data.cached.Listing.Failures)
 
-	visible := filterByKind(searchRows(all, q.Search), q.Kind)
+	excluded := make(map[string]bool, len(q.ExcludeKinds))
+	for _, kind := range q.ExcludeKinds {
+		excluded[kind] = true
+	}
+	kinds := kindOptions(all, excluded)
+	excludedKinds := make([]string, 0, len(kinds))
+	for _, k := range kinds {
+		if k.Excluded {
+			excludedKinds = append(excludedKinds, k.Key)
+		}
+	}
+	visible := excludeKinds(searchRows(all, q.Search), excluded)
 	sortRows(visible, q.Sort, q.Dir)
 	window := listview.Paginate(len(visible), q.Page, q.PageSize)
 
@@ -68,7 +79,8 @@ func (s *Service) Query(ctx context.Context, q Query) (Page, error) {
 		Total:          len(visible),
 		Page:           window.Page,
 		PageSize:       window.PageSize,
-		Kinds:          kindOptions(all),
+		Kinds:          kinds,
+		ExcludedKinds:  excludedKinds,
 		Failures:       failures,
 		FSEUnavailable: fseUnavailable,
 		Refreshing:     data.refreshing(),

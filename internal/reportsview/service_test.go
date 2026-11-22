@@ -151,25 +151,51 @@ func TestQueryKinds(t *testing.T) {
 		}, page.Kinds)
 	})
 
-	t.Run("counts ignore search and kind filters", func(t *testing.T) {
-		page := query(newSetup(radio, lab, lab2), Query{Search: "radio", Kind: "ris"})
+	t.Run("counts ignore search and exclusion", func(t *testing.T) {
+		page := query(newSetup(radio, lab, lab2), Query{Search: "radio", ExcludeKinds: []string{"ris"}})
 
 		assert.Equal(t, []KindOption{
 			{Key: "lab", Label: "Laboratorio analisi", Count: 2},
-			{Key: "ris", Label: "Radiologia", Count: 1},
+			{Key: "ris", Label: "Radiologia", Count: 1, Excluded: true},
 		}, page.Kinds)
 	})
 
-	t.Run("keeps everything for an empty kind", func(t *testing.T) {
+	t.Run("keeps everything for nil exclusions", func(t *testing.T) {
 		page := query(newSetup(lab, radio), Query{})
+
+		assert.Len(t, page.Rows, 2)
+		assert.Empty(t, page.ExcludedKinds)
+		assert.NotNil(t, page.ExcludedKinds)
+	})
+
+	t.Run("keeps everything for empty exclusions", func(t *testing.T) {
+		page := query(newSetup(lab, radio), Query{ExcludeKinds: []string{}})
 
 		assert.Len(t, page.Rows, 2)
 	})
 
-	t.Run("keeps only the chosen kind", func(t *testing.T) {
-		page := query(newSetup(lab, radio), Query{Kind: "ris"})
+	t.Run("excluding one kind hides it and reports it", func(t *testing.T) {
+		page := query(newSetup(lab, radio), Query{ExcludeKinds: []string{"ris"}})
 
-		assert.Equal(t, []string{"radio"}, ids(page.Rows))
+		assert.Equal(t, []string{"lab1"}, ids(page.Rows))
+		assert.Equal(t, 1, page.Total)
+		assert.Equal(t, []string{"ris"}, page.ExcludedKinds)
+	})
+
+	t.Run("excluding every kind leaves no rows", func(t *testing.T) {
+		page := query(newSetup(lab, radio), Query{ExcludeKinds: []string{"lab", "ris"}})
+
+		assert.Empty(t, page.Rows)
+		assert.Equal(t, 0, page.Total)
+		assert.Equal(t, []string{"lab", "ris"}, page.ExcludedKinds)
+		assert.Len(t, page.Kinds, 2)
+	})
+
+	t.Run("unknown kind key is ignored", func(t *testing.T) {
+		page := query(newSetup(lab, radio), Query{ExcludeKinds: []string{"zzz"}})
+
+		assert.Len(t, page.Rows, 2)
+		assert.Empty(t, page.ExcludedKinds)
 	})
 
 	t.Run("no reports gives empty kinds", func(t *testing.T) {

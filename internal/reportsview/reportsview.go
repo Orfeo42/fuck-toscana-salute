@@ -24,18 +24,19 @@ const (
 )
 
 type Query struct {
-	Search   string
-	Kind     string
-	Sort     Sort
-	Dir      listview.Dir
-	Page     int
-	PageSize int
+	Search       string
+	ExcludeKinds []string
+	Sort         Sort
+	Dir          listview.Dir
+	Page         int
+	PageSize     int
 }
 
 type KindOption struct {
-	Key   string
-	Label string
-	Count int
+	Key      string
+	Label    string
+	Count    int
+	Excluded bool
 }
 
 type Failure struct {
@@ -73,6 +74,7 @@ type Page struct {
 	Page           int
 	PageSize       int
 	Kinds          []KindOption
+	ExcludedKinds  []string
 	Failures       []Failure
 	FSEUnavailable bool
 	Refreshing     bool

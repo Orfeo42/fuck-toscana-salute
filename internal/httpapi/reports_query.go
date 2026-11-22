@@ -17,12 +17,12 @@ type reportsQueryInput struct {
 }
 
 type ReportsQueryRequest struct {
-	Search   string `json:"search,omitempty" maxLength:"100"`
-	Kind     string `json:"kind,omitempty" enum:"lab,labtrasf,ris,ldo,ps,rsa,rap,local"`
-	Sort     string `json:"sort,omitempty" enum:"date,kind,provider" default:"date"`
-	Dir      string `json:"dir,omitempty" enum:"asc,desc" default:"desc"`
-	Page     int    `json:"page,omitempty" minimum:"1" maximum:"10000" default:"1"`
-	PageSize int    `json:"pageSize,omitempty" enum:"25,50,100" default:"50"`
+	Search       string   `json:"search,omitempty" maxLength:"100"`
+	ExcludeKinds []string `json:"excludeKinds,omitempty" maxItems:"8" enum:"lab,labtrasf,ris,ldo,ps,rsa,rap,local" nullable:"false"`
+	Sort         string   `json:"sort,omitempty" enum:"date,kind,provider" default:"date"`
+	Dir          string   `json:"dir,omitempty" enum:"asc,desc" default:"desc"`
+	Page         int      `json:"page,omitempty" minimum:"1" maximum:"10000" default:"1"`
+	PageSize     int      `json:"pageSize,omitempty" enum:"25,50,100" default:"50"`
 }
 
 type reportsQueryOutput struct {
@@ -35,6 +35,7 @@ type ReportsQueryBody struct {
 	Page           int                 `json:"page"`
 	PageSize       int                 `json:"pageSize"`
 	Kinds          []KindOptionBody    `json:"kinds" nullable:"false"`
+	ExcludedKinds  []string            `json:"excludedKinds" nullable:"false"`
 	Failures       []ReportFailureBody `json:"failures" nullable:"false"`
 	FSEUnavailable bool                `json:"fseUnavailable"`
 	Refreshing     bool                `json:"refreshing"`
@@ -43,9 +44,10 @@ type ReportsQueryBody struct {
 }
 
 type KindOptionBody struct {
-	Key   string `json:"key"`
-	Label string `json:"label"`
-	Count int    `json:"count" minimum:"0"`
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Count    int    `json:"count" minimum:"0"`
+	Excluded bool   `json:"excluded"`
 }
 
 type ReportRowBody struct {
@@ -116,12 +118,12 @@ func registerReportsQuery(api huma.API, view ReportsView) {
 		DefaultStatus: http.StatusOK,
 	}, func(ctx context.Context, in *reportsQueryInput) (*reportsQueryOutput, error) {
 		page, err := view.Query(ctx, reportsview.Query{
-			Search:   in.Body.Search,
-			Kind:     in.Body.Kind,
-			Sort:     reportsview.Sort(in.Body.Sort),
-			Dir:      listview.Dir(in.Body.Dir),
-			Page:     in.Body.Page,
-			PageSize: in.Body.PageSize,
+			Search:       in.Body.Search,
+			ExcludeKinds: in.Body.ExcludeKinds,
+			Sort:         reportsview.Sort(in.Body.Sort),
+			Dir:          listview.Dir(in.Body.Dir),
+			Page:         in.Body.Page,
+			PageSize:     in.Body.PageSize,
 		})
 		if err != nil {
 			return nil, toHTTPError(ctx, "query-reports", err)

@@ -21,13 +21,10 @@ func searchRows(rows []Row, search string) []Row {
 	return found
 }
 
-func filterByKind(rows []Row, kind string) []Row {
-	if kind == "" {
-		return rows
-	}
+func excludeKinds(rows []Row, excluded map[string]bool) []Row {
 	found := make([]Row, 0, len(rows))
 	for _, row := range rows {
-		if row.Kind == kind {
+		if !excluded[row.Kind] {
 			found = append(found, row)
 		}
 	}

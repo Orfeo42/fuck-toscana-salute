@@ -43,24 +43,24 @@ func TestRegisterQueryReports(t *testing.T) {
 		assert.Equal(t, listview.DirDesc, q.Dir)
 		assert.Equal(t, 1, q.Page)
 		assert.Equal(t, 50, q.PageSize)
-		assert.Empty(t, q.Kind)
+		assert.Empty(t, q.ExcludeKinds)
 	})
 
 	t.Run("passes the filters through", func(t *testing.T) {
 		view := emptyReportsView()
 		api := newReportsQueryAPI(t, view)
 
-		resp := api.Post("/api/reports/query", map[string]any{"search": "rx", "kind": "ris", "sort": "provider", "dir": "asc", "page": 2, "pageSize": 100})
+		resp := api.Post("/api/reports/query", map[string]any{"search": "rx", "excludeKinds": []string{"ris", "lab"}, "sort": "provider", "dir": "asc", "page": 2, "pageSize": 100})
 
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.Equal(t, reportsview.Query{Search: "rx", Kind: "ris", Sort: reportsview.SortProvider, Dir: listview.DirAsc, Page: 2, PageSize: 100}, view.QueryCalls()[0].Q)
+		assert.Equal(t, reportsview.Query{Search: "rx", ExcludeKinds: []string{"ris", "lab"}, Sort: reportsview.SortProvider, Dir: listview.DirAsc, Page: 2, PageSize: 100}, view.QueryCalls()[0].Q)
 	})
 
 	t.Run("unknown kind is rejected", func(t *testing.T) {
 		view := emptyReportsView()
 		api := newReportsQueryAPI(t, view)
 
-		resp := api.Post("/api/reports/query", map[string]any{"kind": "fse"})
+		resp := api.Post("/api/reports/query", map[string]any{"excludeKinds": []string{"fse"}})
 
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
 		assert.Empty(t, view.QueryCalls())
@@ -107,7 +107,8 @@ func TestRegisterQueryReports(t *testing.T) {
 					Visits:      []reportsview.LinkedVisit{{NRE: validNRE, Title: "Visita"}},
 				}},
 				Total:          1,
-				Kinds:          []reportsview.KindOption{{Key: "lab", Label: "Laboratorio analisi", Count: 1}},
+				Kinds:          []reportsview.KindOption{{Key: "lab", Label: "Laboratorio analisi", Count: 1, Excluded: true}},
+				ExcludedKinds:  []string{"lab"},
 				Failures:       []reportsview.Failure{{Kind: "ris", KindLabel: "Radiologia", Message: "boom"}},
 				FSEUnavailable: true,
 				Updated:        listview.Updated{At: at, Label: "Aggiornato alle 10:00"},
@@ -124,6 +125,8 @@ func TestRegisterQueryReports(t *testing.T) {
 		assert.Contains(t, body, `"editDate":"2026-03-10"`)
 		assert.Contains(t, body, `"linkedLabel":"Collegato a 1 visita"`)
 		assert.Contains(t, body, `"issue":"unavailable"`)
+		assert.Contains(t, body, `"excludedKinds":["lab"]`)
+		assert.Contains(t, body, `"excluded":true`)
 		assert.Contains(t, body, `"failures":[{"kind":"ris"`)
 	})
 
@@ -135,6 +138,7 @@ func TestRegisterQueryReports(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.Code)
 		assert.Contains(t, resp.Body.String(), `"rows":[]`)
 		assert.Contains(t, resp.Body.String(), `"kinds":[]`)
+		assert.Contains(t, resp.Body.String(), `"excludedKinds":[]`)
 		assert.Contains(t, resp.Body.String(), `"failures":[]`)
 	})
 }
