@@ -56,6 +56,7 @@ type Google interface {
 	SaveSettings(ctx context.Context, s google.Settings) error
 	Disconnect(ctx context.Context) error
 	AddEvent(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error)
+	LookupEvent(ctx context.Context, key string) (google.EventLookup, error)
 	PickerConfig(ctx context.Context) (google.PickerConfig, error)
 	DownloadFile(ctx context.Context, fileID string) (google.DriveFile, error)
 }

@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/events/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["lookup-calendar-event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/booking": {
         parameters: {
             query?: never;
@@ -404,6 +420,25 @@ export interface components {
             created: boolean;
             htmlLink: string;
         };
+        CalendarEventLookupBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CalendarEventLookupBody.json
+             */
+            readonly $schema?: string;
+            exists: boolean;
+            htmlLink: string;
+        };
+        CalendarEventLookupRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CalendarEventLookupRequest.json
+             */
+            readonly $schema?: string;
+            appointmentId: string;
+        };
         CalendarEventRequest: {
             /**
              * Format: uri
@@ -421,7 +456,9 @@ export interface components {
              * @default 60
              */
             durationMinutes: number;
+            guests?: string[];
             location?: string;
+            regenerate?: boolean;
             /** Format: date-time */
             start: string;
             title: string;
@@ -497,6 +534,7 @@ export interface components {
             calendarId: string;
             clientId: string;
             driveFolderId: string;
+            guests: string[];
             hasSecret: boolean;
             javascriptOrigin: string;
         };
@@ -512,6 +550,7 @@ export interface components {
             clientId: string;
             clientSecret?: string;
             driveFolderId?: string;
+            guests?: string[];
         };
         GoogleStatusBody: {
             /**
@@ -860,6 +899,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarEventBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "lookup-calendar-event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventLookupBody"];
                 };
             };
             /** @description Error */

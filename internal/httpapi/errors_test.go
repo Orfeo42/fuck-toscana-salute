@@ -115,6 +115,13 @@ func TestToHTTPError(t *testing.T) {
 		assert.Contains(t, buf.String(), "shape=empty")
 	})
 
+	t.Run("google guest errors are 422 in italian", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrGuestInvalid)
+		assert.Contains(t, err.Error(), "Indirizzo email dell'invitato non valido")
+		err = toHTTPError(ctx, "op", google.ErrTooManyGuests)
+		assert.Contains(t, err.Error(), "Al massimo 10 invitati")
+	})
+
 	t.Run("google not configured is 409", func(t *testing.T) {
 		err := toHTTPError(ctx, "op", fmt.Errorf("wrap: %w", google.ErrNotConfigured))
 		assert.Equal(t, http.StatusConflict, statusOf(t, err))

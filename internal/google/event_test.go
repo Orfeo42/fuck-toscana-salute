@@ -51,11 +51,16 @@ type fakeGoogle struct {
 	insertPaths  []string
 	uploadMeta   []drive.File
 	uploadMedia  [][]byte
+
+	permissionStatus int
+	permissions      []drive.Permission
+	permissionQuery  []string
+	permissionFiles  []string
 }
 
 func newFakeGoogle(t *testing.T) *fakeGoogle {
 	t.Helper()
-	f := &fakeGoogle{getStatus: http.StatusNotFound, getBody: `{"error":{"code":404,"message":"not found"}}`, insertStatus: http.StatusOK, uploadStatus: http.StatusOK, deleteStatus: http.StatusNoContent, updateStatus: http.StatusOK}
+	f := &fakeGoogle{getStatus: http.StatusNotFound, getBody: `{"error":{"code":404,"message":"not found"}}`, insertStatus: http.StatusOK, uploadStatus: http.StatusOK, deleteStatus: http.StatusNoContent, updateStatus: http.StatusOK, permissionStatus: http.StatusOK}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.handle(t)))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -89,6 +94,20 @@ func (f *fakeGoogle) handle(t *testing.T) http.HandlerFunc {
 			}
 			ev.HtmlLink = "https://calendar.example.test/updated"
 			assert.NoError(t, json.NewEncoder(w).Encode(ev))
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/drive/v3/files/") && strings.HasSuffix(r.URL.Path, "/permissions"):
+			var perm drive.Permission
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&perm))
+			f.permissions = append(f.permissions, perm)
+			f.permissionQuery = append(f.permissionQuery, r.URL.RawQuery)
+			f.permissionFiles = append(f.permissionFiles, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/drive/v3/files/"), "/permissions"))
+			w.WriteHeader(f.permissionStatus)
+			if f.permissionStatus != http.StatusOK {
+				_, err := w.Write([]byte(`{"error":{"code":500,"message":"boom"}}`))
+				assert.NoError(t, err)
+				return
+			}
+			_, err := w.Write([]byte(`{"id":"perm1"}`))
+			assert.NoError(t, err)
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/drive/v3/files/"):
 			f.deletedFiles = append(f.deletedFiles, strings.TrimPrefix(r.URL.Path, "/drive/v3/files/"))
 			w.WriteHeader(f.deleteStatus)
@@ -189,6 +208,179 @@ func TestEventID(t *testing.T) {
 
 	t.Run("differs per key", func(t *testing.T) {
 		assert.NotEqual(t, eventID("APP1"), eventID("APP2"))
+	})
+}
+
+func TestLookupEvent(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("not connected", func(t *testing.T) {
+		store := &MockTokenStore{LoadFunc: func(context.Context) (*oauth2.Token, error) { return nil, nil }}
+		_, err := newTestClient(storedSettings(t, testSettings()), store).LookupEvent(ctx, fakeKey)
+		require.ErrorIs(t, err, ErrNotConnected)
+	})
+
+	t.Run("existing event", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = `{"id":"x","status":"confirmed","htmlLink":"https://calendar.example.test/existing"}`
+
+		got, err := fakeClient(t, f, connectedStore(validToken())).LookupEvent(ctx, fakeKey)
+		require.NoError(t, err)
+		assert.Equal(t, EventLookup{Exists: true, HTMLLink: "https://calendar.example.test/existing"}, got)
+		assert.Empty(t, f.inserts)
+		assert.Empty(t, f.updates)
+	})
+
+	t.Run("missing event", func(t *testing.T) {
+		f := newFakeGoogle(t)
+
+		got, err := fakeClient(t, f, connectedStore(validToken())).LookupEvent(ctx, fakeKey)
+		require.NoError(t, err)
+		assert.Equal(t, EventLookup{}, got)
+	})
+
+	t.Run("cancelled event", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = `{"id":"x","status":"cancelled","htmlLink":"https://calendar.example.test/old"}`
+
+		got, err := fakeClient(t, f, connectedStore(validToken())).LookupEvent(ctx, fakeKey)
+		require.NoError(t, err)
+		assert.Equal(t, EventLookup{}, got)
+	})
+
+	t.Run("401 maps to not connected", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusUnauthorized
+		f.getBody = `{"error":{"code":401,"message":"unauthorized"}}`
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).LookupEvent(ctx, fakeKey)
+		require.ErrorIs(t, err, ErrNotConnected)
+	})
+}
+
+func TestAddEventRegenerate(t *testing.T) {
+	ctx := context.Background()
+	pdf := []byte("%PDF-fake")
+	existingBody := `{"id":"x","status":"confirmed","htmlLink":"https://calendar.example.test/existing","attachments":[` +
+		`{"fileId":"oldnew","title":"2026-03-10-promemoria.pdf","fileUrl":"https://drive.example.test/oldnew"},` +
+		`{"fileId":"oldlegacy","title":"promemoria-2026-03-09.pdf","fileUrl":"https://drive.example.test/oldlegacy"},` +
+		`{"fileId":"other","title":"referto.pdf","fileUrl":"https://drive.example.test/other"}]}`
+
+	t.Run("updates in place and deletes the old promemoria files only", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = existingBody
+		ev := sampleEvent()
+		ev.Regenerate = true
+
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, ev, pdf)
+		require.NoError(t, err)
+		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/updated", Created: true}, got)
+		assert.Empty(t, f.inserts)
+		require.Len(t, f.uploadMeta, 1)
+		require.Len(t, f.updates, 1)
+		require.Len(t, f.updates[0].Attachments, 2)
+		assert.Equal(t, "https://drive.example.test/other", f.updates[0].Attachments[0].FileUrl)
+		assert.Equal(t, "https://drive.example.test/file1", f.updates[0].Attachments[1].FileUrl)
+		assert.ElementsMatch(t, []string{"oldnew", "oldlegacy"}, f.deletedFiles)
+		assert.NotContains(t, f.deletedFiles, "other")
+		assert.NotContains(t, f.deletedFiles, "file1")
+	})
+
+	t.Run("update failure deletes the new file and keeps the old ones", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = existingBody
+		f.updateStatus = http.StatusInternalServerError
+		ev := sampleEvent()
+		ev.Regenerate = true
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, ev, pdf)
+		require.Error(t, err)
+		assert.Equal(t, []string{"file1"}, f.deletedFiles)
+	})
+
+	t.Run("without regenerate an existing event is returned untouched", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = existingBody
+
+		got, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		require.NoError(t, err)
+		assert.Equal(t, EventResult{HTMLLink: "https://calendar.example.test/existing", Created: false}, got)
+		assert.Empty(t, f.uploadMeta)
+		assert.Empty(t, f.updates)
+		assert.Empty(t, f.deletedFiles)
+	})
+}
+
+func TestAddEventGuests(t *testing.T) {
+	ctx := context.Background()
+	pdf := []byte("%PDF-fake")
+	guestEvent := func() Event {
+		ev := sampleEvent()
+		ev.Guests = []string{"guest@example.com", "other@example.com"}
+		return ev
+	}
+
+	t.Run("guests become attendees and no invitation is sent", func(t *testing.T) {
+		f := newFakeGoogle(t)
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, guestEvent(), pdf)
+		require.NoError(t, err)
+		require.Len(t, f.inserts, 1)
+		require.Len(t, f.inserts[0].Attendees, 2)
+		assert.Equal(t, "guest@example.com", f.inserts[0].Attendees[0].Email)
+		assert.Equal(t, "other@example.com", f.inserts[0].Attendees[1].Email)
+		assert.Contains(t, f.insertQuery[0], "sendUpdates=none")
+	})
+
+	t.Run("update carries sendUpdates none", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.getStatus = http.StatusOK
+		f.getBody = `{"id":"x","status":"cancelled"}`
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, guestEvent(), pdf)
+		require.NoError(t, err)
+		require.Len(t, f.updateQuery, 1)
+		assert.Contains(t, f.updateQuery[0], "sendUpdates=none")
+	})
+
+	t.Run("the pdf is shared read-only with each guest without notification", func(t *testing.T) {
+		f := newFakeGoogle(t)
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, guestEvent(), pdf)
+		require.NoError(t, err)
+		require.Len(t, f.permissions, 2)
+		assert.Equal(t, "user", f.permissions[0].Type)
+		assert.Equal(t, "reader", f.permissions[0].Role)
+		assert.Equal(t, "guest@example.com", f.permissions[0].EmailAddress)
+		assert.Equal(t, "other@example.com", f.permissions[1].EmailAddress)
+		assert.Equal(t, []string{"file1", "file1"}, f.permissionFiles)
+		for _, q := range f.permissionQuery {
+			assert.Contains(t, q, "sendNotificationEmail=false")
+		}
+	})
+
+	t.Run("no guests means no permissions and no attendees", func(t *testing.T) {
+		f := newFakeGoogle(t)
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, sampleEvent(), pdf)
+		require.NoError(t, err)
+		assert.Empty(t, f.permissions)
+		assert.Empty(t, f.inserts[0].Attendees)
+	})
+
+	t.Run("permission failure deletes the uploaded file and skips the event", func(t *testing.T) {
+		f := newFakeGoogle(t)
+		f.permissionStatus = http.StatusInternalServerError
+
+		_, err := fakeClient(t, f, connectedStore(validToken())).AddEvent(ctx, guestEvent(), pdf)
+		require.Error(t, err)
+		assert.Equal(t, []string{"file1"}, f.deletedFiles)
+		assert.Empty(t, f.inserts)
 	})
 }
 

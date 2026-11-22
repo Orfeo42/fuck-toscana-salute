@@ -3,6 +3,7 @@ import "@mantine/core/styles.css";
 import { Notifications } from "@mantine/notifications";
 import "@mantine/notifications/styles.css";
 import "mantine-datatable/styles.css";
+import "./overlays.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 

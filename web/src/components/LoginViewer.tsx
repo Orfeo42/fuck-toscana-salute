@@ -36,6 +36,7 @@ export function LoginViewer(): JSX.Element | null {
       closeButtonProps={closeButtonProps}
       fullScreen={small}
       size="100%"
+      classNames={{ content: "overlay-full" }}
     >
       <Stack gap="xs">
         <Text size="sm">{helpText}</Text>

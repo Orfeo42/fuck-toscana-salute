@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { HardDrive } from "lucide-react";
 import { useContext, useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
@@ -171,14 +172,29 @@ function FormBody({
   return (
     <form onSubmit={handleSubmit} noValidate>
       <Stack gap="sm">
-        <FileInput
-          label="File"
-          description="PDF, JPEG o PNG, massimo 20 MB"
-          accept={accept}
-          clearable
-          value={file}
-          onChange={pickFile}
-        />
+        <Group align="flex-end" gap="xs" wrap="nowrap">
+          <FileInput
+            label="File"
+            description="PDF, JPEG o PNG, massimo 20 MB"
+            accept={accept}
+            clearable
+            value={file}
+            onChange={pickFile}
+            style={{ flex: 1 }}
+          />
+          {google?.status?.configured === true && google.status.drive ? (
+            <Button
+              variant="light"
+              disabled={busy}
+              leftSection={<HardDrive size={16} aria-hidden="true" />}
+              onClick={() => {
+                void importFromDrive();
+              }}
+            >
+              Scegli da Google Drive
+            </Button>
+          ) : null}
+        </Group>
         <TextInput
           label="Titolo"
           value={title}
@@ -207,17 +223,6 @@ function FormBody({
           </Text>
         )}
         <Group justify="flex-end">
-          {google?.status?.configured === true && google.status.drive ? (
-            <Button
-              variant="light"
-              disabled={busy}
-              onClick={() => {
-                void importFromDrive();
-              }}
-            >
-              Scegli da Google Drive
-            </Button>
-          ) : null}
           <Button
             type="submit"
             loading={busy}

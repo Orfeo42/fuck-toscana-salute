@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"regexp"
 	"strings"
 
@@ -21,12 +22,15 @@ const (
 	ErrClientIDInvalid      googleError = "google: client id must look like <project number>-<id>.apps.googleusercontent.com"
 	ErrClientSecretRequired googleError = "google: client secret is required"
 	ErrDriveFolderInvalid   googleError = "google: drive folder id is invalid"
+	ErrGuestInvalid         googleError = "google: guest must be a valid email address"
+	ErrTooManyGuests        googleError = "google: at most 10 guests"
 )
 
 const (
 	settingsService = "fuck-toscana-salute"
 	settingsUser    = "google-settings"
 	defaultCalendar = "primary"
+	maxGuests       = 10
 )
 
 var (
@@ -36,12 +40,13 @@ var (
 )
 
 type Settings struct {
-	ClientID      string `json:"clientId"`
-	ClientSecret  string `json:"clientSecret"`
-	CalendarID    string `json:"calendarId"`
-	DriveFolderID string `json:"driveFolderId"`
-	APIKey        string `json:"apiKey"`
-	HasSecret     bool   `json:"-"`
+	ClientID      string   `json:"clientId"`
+	ClientSecret  string   `json:"clientSecret"`
+	CalendarID    string   `json:"calendarId"`
+	DriveFolderID string   `json:"driveFolderId"`
+	APIKey        string   `json:"apiKey"`
+	Guests        []string `json:"guests"`
+	HasSecret     bool     `json:"-"`
 }
 
 func (s Settings) Validate() error {
@@ -60,7 +65,29 @@ func (s Settings) Validate() error {
 	if s.APIKey != "" && !apiKeyPattern.MatchString(s.APIKey) {
 		return ErrAPIKeyInvalid
 	}
-	return nil
+	_, err := ValidateGuests(s.Guests)
+	return err
+}
+
+func ValidateGuests(guests []string) ([]string, error) {
+	var cleaned []string
+	seen := make(map[string]bool, len(guests))
+	for _, g := range guests {
+		g = strings.TrimSpace(g)
+		if g == "" || seen[strings.ToLower(g)] {
+			continue
+		}
+		parsed, err := mail.ParseAddress(g)
+		if err != nil || parsed.Address != g {
+			return nil, ErrGuestInvalid
+		}
+		seen[strings.ToLower(g)] = true
+		cleaned = append(cleaned, g)
+	}
+	if len(cleaned) > maxGuests {
+		return nil, ErrTooManyGuests
+	}
+	return cleaned, nil
 }
 
 func (s Settings) AppID() string {
@@ -98,6 +125,11 @@ func (c *Client) SaveSettings(ctx context.Context, s Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
+	guests, err := ValidateGuests(s.Guests)
+	if err != nil {
+		return err
+	}
+	s.Guests = guests
 
 	data, err := json.Marshal(s)
 	if err != nil {

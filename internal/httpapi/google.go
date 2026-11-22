@@ -53,12 +53,13 @@ type googleSettingsOutput struct {
 }
 
 type GoogleSettingsBody struct {
-	ClientID         string `json:"clientId"`
-	CalendarID       string `json:"calendarId"`
-	DriveFolderID    string `json:"driveFolderId"`
-	APIKey           string `json:"apiKey"`
-	HasSecret        bool   `json:"hasSecret"`
-	JavaScriptOrigin string `json:"javascriptOrigin"`
+	ClientID         string   `json:"clientId"`
+	CalendarID       string   `json:"calendarId"`
+	DriveFolderID    string   `json:"driveFolderId"`
+	APIKey           string   `json:"apiKey"`
+	Guests           []string `json:"guests" nullable:"false"`
+	HasSecret        bool     `json:"hasSecret"`
+	JavaScriptOrigin string   `json:"javascriptOrigin"`
 }
 
 type saveGoogleSettingsInput struct {
@@ -66,11 +67,12 @@ type saveGoogleSettingsInput struct {
 }
 
 type GoogleSettingsRequest struct {
-	ClientID      string `json:"clientId" required:"true" maxLength:"200"`
-	ClientSecret  string `json:"clientSecret,omitempty" maxLength:"200"`
-	CalendarID    string `json:"calendarId,omitempty" maxLength:"200"`
-	DriveFolderID string `json:"driveFolderId,omitempty" maxLength:"100"`
-	APIKey        string `json:"apiKey,omitempty" maxLength:"100"`
+	ClientID      string   `json:"clientId" required:"true" maxLength:"200"`
+	ClientSecret  string   `json:"clientSecret,omitempty" maxLength:"200"`
+	CalendarID    string   `json:"calendarId,omitempty" maxLength:"200"`
+	DriveFolderID string   `json:"driveFolderId,omitempty" maxLength:"100"`
+	APIKey        string   `json:"apiKey,omitempty" maxLength:"100"`
+	Guests        []string `json:"guests,omitempty" maxItems:"10" nullable:"false"`
 }
 
 type createCalendarEventInput struct {
@@ -86,6 +88,25 @@ type CalendarEventRequest struct {
 	Details          string    `json:"details,omitempty" maxLength:"1000"`
 	BookingID        string    `json:"bookingId,omitempty" maxLength:"32" pattern:"^[A-Za-z0-9]+$"`
 	AttachPromemoria *bool     `json:"attachPromemoria,omitempty" default:"true"`
+	Regenerate       bool      `json:"regenerate,omitempty"`
+	Guests           *[]string `json:"guests,omitempty" maxItems:"10" nullable:"false"`
+}
+
+type lookupCalendarEventInput struct {
+	Body CalendarEventLookupRequest
+}
+
+type CalendarEventLookupRequest struct {
+	AppointmentID string `json:"appointmentId" required:"true" minLength:"1" maxLength:"64" pattern:"^[A-Za-z0-9_-]+$"`
+}
+
+type calendarEventLookupOutput struct {
+	Body CalendarEventLookupBody
+}
+
+type CalendarEventLookupBody struct {
+	Exists   bool   `json:"exists"`
+	HTMLLink string `json:"htmlLink"`
 }
 
 type calendarEventOutput struct {
@@ -134,11 +155,16 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 		if err != nil {
 			return nil, toHTTPError(ctx, "get-google-settings", err)
 		}
+		guests := settings.Guests
+		if guests == nil {
+			guests = []string{}
+		}
 		return &googleSettingsOutput{Body: GoogleSettingsBody{
 			ClientID:         settings.ClientID,
 			CalendarID:       settings.CalendarID,
 			DriveFolderID:    settings.DriveFolderID,
 			APIKey:           settings.APIKey,
+			Guests:           guests,
 			HasSecret:        settings.HasSecret,
 			JavaScriptOrigin: in.origin,
 		}}, nil
@@ -157,6 +183,7 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 			CalendarID:    in.Body.CalendarID,
 			DriveFolderID: in.Body.DriveFolderID,
 			APIKey:        in.Body.APIKey,
+			Guests:        in.Body.Guests,
 		})
 		if err != nil {
 			return nil, toHTTPError(ctx, "save-google-settings", err)
@@ -191,17 +218,46 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 				return nil, toHTTPError(ctx, "create-calendar-event", err)
 			}
 		}
+		var guests []string
+		if req.Guests == nil {
+			settings, err := g.Settings(ctx)
+			if err != nil {
+				return nil, toHTTPError(ctx, "create-calendar-event", err)
+			}
+			guests = settings.Guests
+		} else {
+			var err error
+			guests, err = google.ValidateGuests(*req.Guests)
+			if err != nil {
+				return nil, toHTTPError(ctx, "create-calendar-event", err)
+			}
+		}
 		result, err := g.AddEvent(ctx, google.Event{
-			Key:      req.AppointmentID,
-			Title:    req.Title,
-			Start:    req.Start,
-			Duration: time.Duration(req.DurationMinutes) * time.Minute,
-			Location: req.Location,
-			Details:  req.Details,
+			Key:        req.AppointmentID,
+			Title:      req.Title,
+			Start:      req.Start,
+			Duration:   time.Duration(req.DurationMinutes) * time.Minute,
+			Location:   req.Location,
+			Details:    req.Details,
+			Guests:     guests,
+			Regenerate: req.Regenerate,
 		}, pdf)
 		if err != nil {
 			return nil, toHTTPError(ctx, "create-calendar-event", err)
 		}
 		return &calendarEventOutput{Body: CalendarEventBody{HTMLLink: result.HTMLLink, Created: result.Created}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "lookup-calendar-event",
+		Method:        http.MethodPost,
+		Path:          "/api/calendar/events/lookup",
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *lookupCalendarEventInput) (*calendarEventLookupOutput, error) {
+		found, err := g.LookupEvent(ctx, in.Body.AppointmentID)
+		if err != nil {
+			return nil, toHTTPError(ctx, "lookup-calendar-event", err)
+		}
+		return &calendarEventLookupOutput{Body: CalendarEventLookupBody{Exists: found.Exists, HTMLLink: found.HTMLLink}}, nil
 	})
 }

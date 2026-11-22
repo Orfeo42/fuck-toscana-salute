@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -103,6 +104,61 @@ func TestSettingsValidatePicker(t *testing.T) {
 	})
 }
 
+func TestSettingsValidateGuests(t *testing.T) {
+	t.Run("valid guests pass", func(t *testing.T) {
+		s := testSettings()
+		s.Guests = []string{"guest@example.com", "other@example.com"}
+		require.NoError(t, s.Validate())
+	})
+
+	t.Run("invalid email is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.Guests = []string{"not-an-email"}
+		require.ErrorIs(t, s.Validate(), ErrGuestInvalid)
+	})
+
+	t.Run("display name form is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.Guests = []string{"Guest <guest@example.com>"}
+		require.ErrorIs(t, s.Validate(), ErrGuestInvalid)
+	})
+
+	t.Run("eleven guests are rejected", func(t *testing.T) {
+		s := testSettings()
+		for i := range 11 {
+			s.Guests = append(s.Guests, fmt.Sprintf("guest%d@example.com", i))
+		}
+		require.ErrorIs(t, s.Validate(), ErrTooManyGuests)
+	})
+
+	t.Run("ten guests pass", func(t *testing.T) {
+		s := testSettings()
+		for i := range 10 {
+			s.Guests = append(s.Guests, fmt.Sprintf("guest%d@example.com", i))
+		}
+		require.NoError(t, s.Validate())
+	})
+}
+
+func TestValidateGuests(t *testing.T) {
+	t.Run("trims, drops empties and dedupes case-insensitively keeping the first spelling", func(t *testing.T) {
+		got, err := ValidateGuests([]string{"  Guest@Example.com ", "", "guest@example.com", "other@example.com"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Guest@Example.com", "other@example.com"}, got)
+	})
+
+	t.Run("empty input returns nil", func(t *testing.T) {
+		got, err := ValidateGuests(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("invalid entry is rejected", func(t *testing.T) {
+		_, err := ValidateGuests([]string{"nope"})
+		require.ErrorIs(t, err, ErrGuestInvalid)
+	})
+}
+
 func TestSettingsAppID(t *testing.T) {
 	t.Run("is the project number of the client id", func(t *testing.T) {
 		assert.Equal(t, fakeAppID, testSettings().AppID())
@@ -190,6 +246,26 @@ func TestSaveSettings(t *testing.T) {
 		s := testSettings()
 		s.ClientSecret = ""
 		require.ErrorIs(t, newTestClient(emptySettings(), &MockTokenStore{}).SaveSettings(ctx, s), ErrClientSecretRequired)
+	})
+
+	t.Run("guests are trimmed and deduped before storing", func(t *testing.T) {
+		store := emptySettings()
+		s := testSettings()
+		s.Guests = []string{" guest@example.com ", "GUEST@example.com", ""}
+
+		require.NoError(t, newTestClient(store, &MockTokenStore{}).SaveSettings(ctx, s))
+		var saved Settings
+		require.NoError(t, json.Unmarshal([]byte(store.SetCalls()[0].Value), &saved))
+		assert.Equal(t, []string{"guest@example.com"}, saved.Guests)
+	})
+
+	t.Run("invalid guest is rejected and nothing is stored", func(t *testing.T) {
+		store := emptySettings()
+		s := testSettings()
+		s.Guests = []string{"nope"}
+
+		require.ErrorIs(t, newTestClient(store, &MockTokenStore{}).SaveSettings(ctx, s), ErrGuestInvalid)
+		assert.Empty(t, store.SetCalls())
 	})
 
 	t.Run("drive folder id is validated", func(t *testing.T) {

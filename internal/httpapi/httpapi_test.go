@@ -850,15 +850,53 @@ func TestRegisterGoogleDisconnect(t *testing.T) {
 	})
 }
 
+func TestRegisterLookupCalendarEvent(t *testing.T) {
+	t.Run("existing event", func(t *testing.T) {
+		g := &MockGoogle{LookupEventFunc: func(context.Context, string) (google.EventLookup, error) {
+			return google.EventLookup{Exists: true, HTMLLink: "https://calendar.example.test/e"}, nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events/lookup", map[string]any{"appointmentId": "APP1"})
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{"exists":true,"htmlLink":"https://calendar.example.test/e"}`, resp.Body.String())
+		assert.Equal(t, "APP1", g.LookupEventCalls()[0].Key)
+	})
+
+	t.Run("missing event", func(t *testing.T) {
+		g := &MockGoogle{LookupEventFunc: func(context.Context, string) (google.EventLookup, error) { return google.EventLookup{}, nil }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events/lookup", map[string]any{"appointmentId": "APP1"})
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.JSONEq(t, `{"exists":false,"htmlLink":""}`, resp.Body.String())
+	})
+
+	t.Run("not connected is 401", func(t *testing.T) {
+		g := &MockGoogle{LookupEventFunc: func(context.Context, string) (google.EventLookup, error) {
+			return google.EventLookup{}, google.ErrNotConnected
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		assert.Equal(t, http.StatusUnauthorized, api.Post("/api/calendar/events/lookup", map[string]any{"appointmentId": "APP1"}).Code)
+	})
+}
+
 func TestRegisterCreateCalendarEvent(t *testing.T) {
 	const fakeBooking = "ABC123456789"
+	noGuests := func(context.Context) (google.Settings, error) { return google.Settings{}, nil }
 	okEvent := func(context.Context, google.Event, []byte) (google.EventResult, error) {
 		return google.EventResult{HTMLLink: "https://calendar.example.test/e", Created: true}, nil
 	}
 
 	t.Run("attaches the promemoria when booking id is given", func(t *testing.T) {
 		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) { return []byte("%PDF-fake"), nil }}
-		g := &MockGoogle{AddEventFunc: okEvent}
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -886,8 +924,71 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 		assert.True(t, time.Date(2026, 3, 10, 8, 30, 0, 0, time.UTC).Equal(call.Ev.Start))
 	})
 
+	t.Run("regenerate is passed to google", func(t *testing.T) {
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events", map[string]any{
+			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "regenerate": true,
+		})
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.True(t, g.AddEventCalls()[0].Ev.Regenerate)
+	})
+
+	t.Run("missing guests use the settings guests", func(t *testing.T) {
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: func(context.Context) (google.Settings, error) {
+			return google.Settings{Guests: []string{"guest@example.com"}}, nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events", map[string]any{
+			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00",
+		})
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, []string{"guest@example.com"}, g.AddEventCalls()[0].Ev.Guests)
+	})
+
+	t.Run("explicit empty guests mean no guests", func(t *testing.T) {
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events", map[string]any{
+			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "guests": []string{},
+		})
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.Empty(t, g.AddEventCalls()[0].Ev.Guests)
+		assert.Empty(t, g.SettingsCalls())
+	})
+
+	t.Run("explicit guests are cleaned", func(t *testing.T) {
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events", map[string]any{
+			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "guests": []string{" guest@example.com ", "GUEST@example.com"},
+		})
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, []string{"guest@example.com"}, g.AddEventCalls()[0].Ev.Guests)
+	})
+
+	t.Run("invalid guest is 422 and no event is added", func(t *testing.T) {
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/calendar/events", map[string]any{
+			"appointmentId": "APP1", "title": "Visita", "start": "2026-03-10T09:30:00+01:00", "guests": []string{"nope"},
+		})
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Empty(t, g.AddEventCalls())
+	})
+
 	t.Run("duration is taken from the request", func(t *testing.T) {
-		g := &MockGoogle{AddEventFunc: okEvent}
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -900,7 +1001,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 
 	t.Run("attachPromemoria false never fetches the pdf", func(t *testing.T) {
 		docs := &MockDocuments{}
-		g := &MockGoogle{AddEventFunc: okEvent}
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -914,7 +1015,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 
 	t.Run("no booking id never fetches the pdf", func(t *testing.T) {
 		docs := &MockDocuments{}
-		g := &MockGoogle{AddEventFunc: okEvent}
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -927,7 +1028,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 
 	t.Run("promemoria failure skips the event", func(t *testing.T) {
 		docs := &MockDocuments{PromemoriaFunc: func(context.Context, string) ([]byte, error) { return nil, session.ErrNotLoggedIn }}
-		g := &MockGoogle{AddEventFunc: okEvent}
+		g := &MockGoogle{AddEventFunc: okEvent, SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, docs, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -939,7 +1040,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("google not configured is 409", func(t *testing.T) {
-		g := &MockGoogle{AddEventFunc: func(context.Context, google.Event, []byte) (google.EventResult, error) {
+		g := &MockGoogle{SettingsFunc: noGuests, AddEventFunc: func(context.Context, google.Event, []byte) (google.EventResult, error) {
 			return google.EventResult{}, google.ErrNotConfigured
 		}}
 		_, api := humatest.New(t)
@@ -953,7 +1054,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("google not connected is 401", func(t *testing.T) {
-		g := &MockGoogle{AddEventFunc: func(context.Context, google.Event, []byte) (google.EventResult, error) {
+		g := &MockGoogle{SettingsFunc: noGuests, AddEventFunc: func(context.Context, google.Event, []byte) (google.EventResult, error) {
 			return google.EventResult{}, google.ErrNotConnected
 		}}
 		_, api := humatest.New(t)
@@ -967,7 +1068,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("bad appointment id is 422", func(t *testing.T) {
-		g := &MockGoogle{}
+		g := &MockGoogle{SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -979,7 +1080,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("out of range duration is 422", func(t *testing.T) {
-		g := &MockGoogle{}
+		g := &MockGoogle{SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -991,7 +1092,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("bad booking id is 422", func(t *testing.T) {
-		g := &MockGoogle{}
+		g := &MockGoogle{SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -1002,7 +1103,7 @@ func TestRegisterCreateCalendarEvent(t *testing.T) {
 	})
 
 	t.Run("missing title is 422", func(t *testing.T) {
-		g := &MockGoogle{}
+		g := &MockGoogle{SettingsFunc: noGuests}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
@@ -1212,7 +1313,20 @@ func TestRegisterGoogleSettings(t *testing.T) {
 		resp := api.Get("/api/google/settings", "Host: fts.example.test", "X-Forwarded-Proto: https")
 
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","apiKey":"key-abc","hasSecret":true,"javascriptOrigin":"https://fts.example.test"}`, resp.Body.String())
+		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","apiKey":"key-abc","guests":[],"hasSecret":true,"javascriptOrigin":"https://fts.example.test"}`, resp.Body.String())
+	})
+
+	t.Run("returns the guests", func(t *testing.T) {
+		g := &MockGoogle{SettingsFunc: func(context.Context) (google.Settings, error) {
+			return google.Settings{Guests: []string{"guest@example.com"}}, nil
+		}}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Get("/api/google/settings", "Host: localhost")
+
+		require.Equal(t, http.StatusOK, resp.Code)
+		assert.Contains(t, resp.Body.String(), `"guests":["guest@example.com"]`)
 	})
 
 	t.Run("scheme defaults to http", func(t *testing.T) {
@@ -1251,6 +1365,39 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, resp.Code)
 		require.Len(t, g.SaveSettingsCalls(), 1)
 		assert.Equal(t, google.Settings{ClientID: "id.apps.googleusercontent.com", ClientSecret: "s", CalendarID: "cal", DriveFolderID: "folder-1234567", APIKey: "key-abc"}, g.SaveSettingsCalls()[0].S)
+	})
+
+	t.Run("passes the guests to google", func(t *testing.T) {
+		g := &MockGoogle{SaveSettingsFunc: func(context.Context, google.Settings) error { return nil }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Put("/api/google/settings", host, origin, map[string]any{"clientId": "id.apps.googleusercontent.com", "guests": []string{"guest@example.com"}})
+
+		require.Equal(t, http.StatusNoContent, resp.Code)
+		assert.Equal(t, []string{"guest@example.com"}, g.SaveSettingsCalls()[0].S.Guests)
+	})
+
+	t.Run("more than ten guests is rejected by the schema", func(t *testing.T) {
+		g := &MockGoogle{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Put("/api/google/settings", host, origin, map[string]any{"clientId": "id.apps.googleusercontent.com", "guests": make([]string, 11)})
+
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Empty(t, g.SaveSettingsCalls())
+	})
+
+	t.Run("invalid guest error is 422 in italian", func(t *testing.T) {
+		g := &MockGoogle{SaveSettingsFunc: func(context.Context, google.Settings) error { return google.ErrGuestInvalid }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Put("/api/google/settings", host, origin, map[string]any{"clientId": "id.apps.googleusercontent.com", "guests": []string{"nope"}})
+
+		require.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Contains(t, resp.Body.String(), "Indirizzo email dell'invitato non valido")
 	})
 
 	t.Run("validation error is 422 with the message", func(t *testing.T) {

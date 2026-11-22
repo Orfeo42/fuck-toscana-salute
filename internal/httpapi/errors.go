@@ -39,6 +39,12 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	if errors.Is(err, google.ErrClientIDRequired) || errors.Is(err, google.ErrClientIDInvalid) || errors.Is(err, google.ErrClientSecretRequired) || errors.Is(err, google.ErrDriveFolderInvalid) {
 		return huma.Error422UnprocessableEntity(err.Error())
 	}
+	if errors.Is(err, google.ErrGuestInvalid) {
+		return huma.Error422UnprocessableEntity("Indirizzo email dell'invitato non valido")
+	}
+	if errors.Is(err, google.ErrTooManyGuests) {
+		return huma.Error422UnprocessableEntity("Al massimo 10 invitati")
+	}
 	if errors.Is(err, google.ErrNotConfigured) {
 		return huma.Error409Conflict("google_not_configured")
 	}

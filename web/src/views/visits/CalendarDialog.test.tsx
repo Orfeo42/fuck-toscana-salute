@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,10 +9,18 @@ import { render } from "../../test/render";
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
+  get: vi.fn(),
+  lookup: vi.fn(),
 }));
 
 vi.mock("../../api/client", () => ({
-  api: { POST: mocks.post },
+  api: {
+    POST: (path: string, init: object): Promise<unknown> =>
+      path === "/api/calendar/events/lookup"
+        ? (mocks.lookup(path, init) as Promise<unknown>)
+        : (mocks.post(path, init) as Promise<unknown>),
+    GET: mocks.get,
+  },
 }));
 
 function appointment(withBooking = true): AppointmentBody {
@@ -75,9 +83,31 @@ function failWith(status: number, detail: string): void {
   mocks.post.mockResolvedValue({ error: { detail }, response: { status } });
 }
 
+const existingLink = "https://calendar.example.com/existing";
+
+function lookupExists(): void {
+  mocks.lookup.mockResolvedValue({
+    data: { exists: true, htmlLink: existingLink },
+  });
+}
+
+async function findAdd(): Promise<HTMLElement> {
+  const button = await screen.findByRole("button", { name: "Aggiungi" });
+  await waitFor(() => {
+    expect(button).toBeEnabled();
+  });
+  return button;
+}
+
 describe("CalendarDialog", () => {
   beforeEach(() => {
     mocks.post.mockReset();
+    mocks.get.mockReset();
+    mocks.lookup.mockReset();
+    mocks.get.mockResolvedValue({ data: { guests: [] } });
+    mocks.lookup.mockResolvedValue({
+      data: { exists: false, htmlLink: "" },
+    });
   });
 
   it("shows the modal and the the summary", () => {
@@ -113,7 +143,7 @@ describe("CalendarDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(mocks.post).toHaveBeenCalledWith("/api/calendar/events", {
       body: {
@@ -125,6 +155,7 @@ describe("CalendarDialog", () => {
         details: "Prenotazione CUP Regione Toscana",
         bookingId: "ABC123456789",
         attachPromemoria: true,
+        guests: [],
       },
     });
     expect(JSON.stringify(mocks.post.mock.calls[0])).not.toContain(
@@ -142,7 +173,7 @@ describe("CalendarDialog", () => {
     await user.click(
       screen.getByRole("checkbox", { name: "Allega promemoria (PDF)" }),
     );
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(mocks.post.mock.calls[0]?.[1]).toMatchObject({
       body: { attachPromemoria: false },
@@ -156,7 +187,7 @@ describe("CalendarDialog", () => {
     });
     renderDialog({ appt: appointment(false) });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     const body = (mocks.post.mock.calls[0]?.[1] as { body: object }).body;
     expect(body).not.toHaveProperty("bookingId");
@@ -168,7 +199,7 @@ describe("CalendarDialog", () => {
     mocks.post.mockReturnValue(new Promise(() => undefined));
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     const add = screen.getByRole("button", { name: "Aggiungi" });
     expect(add).toBeDisabled();
@@ -183,7 +214,7 @@ describe("CalendarDialog", () => {
     });
     renderDialog({ onClose });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByText(/Aggiunto al calendario/)).toBeVisible();
     const link = screen.getByRole("link", { name: "Apri in Google Calendar" });
@@ -201,7 +232,7 @@ describe("CalendarDialog", () => {
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(
       await screen.findByText(/Già presente nel calendario/),
@@ -224,7 +255,7 @@ describe("CalendarDialog", () => {
     failWith(401, "google_not_connected");
     renderDialog({ refresh });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Accesso a Google scaduto: premi di nuovo Aggiungi",
@@ -237,7 +268,7 @@ describe("CalendarDialog", () => {
     failWith(404, "not found");
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Promemoria non disponibile: riprova senza allegato.",
@@ -250,7 +281,7 @@ describe("CalendarDialog", () => {
     const openSettings = vi.fn();
     renderDialog({ openSettings });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Google non è configurato");
@@ -263,7 +294,7 @@ describe("CalendarDialog", () => {
     failWith(409, "complete the Gestione Prenotazioni login step");
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Serve l'accesso a Gestione Prenotazioni: premi Accedi.",
@@ -275,7 +306,7 @@ describe("CalendarDialog", () => {
     failWith(502, "bad gateway");
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Google o il portale regionale non rispondono. Riprova tra poco.",
@@ -287,7 +318,7 @@ describe("CalendarDialog", () => {
     mocks.post.mockRejectedValue(new Error("network"));
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Google o il portale regionale non rispondono. Riprova tra poco.",
@@ -305,7 +336,7 @@ describe("CalendarDialog", () => {
       signIn,
     });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(signIn).toHaveBeenCalled();
     expect(await screen.findByText(/Aggiunto al calendario/)).toBeVisible();
@@ -320,7 +351,7 @@ describe("CalendarDialog", () => {
       signIn,
     });
 
-    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+    await user.click(await findAdd());
 
     expect(signIn).toHaveBeenCalled();
     expect(mocks.post).not.toHaveBeenCalled();
@@ -341,5 +372,144 @@ describe("CalendarDialog", () => {
     expect(onClose).toHaveBeenCalled();
     expect(openSettings).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Aggiungi" })).toBeDisabled();
+  });
+
+  it("shows the existing event with a link and no Aggiungi", async () => {
+    lookupExists();
+    renderDialog();
+
+    expect(await screen.findByText("Già nel calendario")).toBeVisible();
+    const links = screen.getAllByRole("link", {
+      name: "Apri in Google Calendar",
+    });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", existingLink);
+    }
+    expect(
+      screen.queryByRole("button", { name: "Aggiungi" }),
+    ).not.toBeInTheDocument();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it("regenerates the event with the guests", async () => {
+    const user = userEvent.setup();
+    lookupExists();
+    mocks.get.mockResolvedValue({ data: { guests: ["guest@example.com"] } });
+    mocks.post.mockResolvedValue({
+      data: { created: true, htmlLink: "https://calendar.example.com/e2" },
+    });
+    renderDialog();
+
+    await screen.findByText("Già nel calendario");
+    await screen.findByText("guest@example.com");
+    await user.click(screen.getByRole("button", { name: "Rigenera" }));
+
+    expect(mocks.post.mock.calls[0]?.[1]).toMatchObject({
+      body: { regenerate: true, guests: ["guest@example.com"] },
+    });
+    expect(await screen.findByText(/Aggiunto al calendario/)).toBeVisible();
+  });
+
+  it("does not look up when not connected", async () => {
+    renderDialog({ status: { ...connected, connected: false } });
+
+    expect(
+      await screen.findByRole("button", { name: "Aggiungi" }),
+    ).toBeEnabled();
+    expect(mocks.lookup).not.toHaveBeenCalled();
+  });
+
+  it("refreshes and offers Aggiungi when the lookup returns 401", async () => {
+    const refresh = vi.fn();
+    mocks.lookup.mockResolvedValue({
+      error: { detail: "google_not_connected" },
+      response: { status: 401 },
+    });
+    renderDialog({ refresh });
+
+    expect(await findAdd()).toBeVisible();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("falls back to Aggiungi on another lookup error", async () => {
+    mocks.lookup.mockRejectedValue(new Error("network"));
+    renderDialog();
+
+    expect(await findAdd()).toBeVisible();
+  });
+
+  it("pre-fills the guests from the settings and sends them", async () => {
+    const user = userEvent.setup();
+    mocks.get.mockResolvedValue({ data: { guests: ["guest@example.com"] } });
+    mocks.post.mockResolvedValue({
+      data: { created: true, htmlLink: "https://calendar.example.com/e1" },
+    });
+    renderDialog();
+
+    await screen.findByText("guest@example.com");
+    await user.click(await findAdd());
+
+    const body = (mocks.post.mock.calls[0]?.[1] as { body: object }).body;
+    expect(body).toMatchObject({ guests: ["guest@example.com"] });
+    expect(body).not.toHaveProperty("regenerate");
+  });
+
+  it("sends an empty guest list after removing all", async () => {
+    const user = userEvent.setup();
+    mocks.get.mockResolvedValue({ data: { guests: ["guest@example.com"] } });
+    mocks.post.mockResolvedValue({
+      data: { created: true, htmlLink: "https://calendar.example.com/e1" },
+    });
+    renderDialog();
+
+    await screen.findByText("guest@example.com");
+    await user.click(screen.getByRole("combobox", { name: "Invitati" }));
+    await user.keyboard("{Backspace}");
+    await user.click(await findAdd());
+
+    expect(mocks.post.mock.calls[0]?.[1]).toMatchObject({
+      body: { guests: [] },
+    });
+  });
+
+  it("flags an invalid guest and disables Aggiungi", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await findAdd();
+    await user.type(
+      screen.getByRole("combobox", { name: "Invitati" }),
+      "nonsense{Enter}",
+    );
+
+    expect(await screen.findByText("Email non valida")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Aggiungi" })).toBeDisabled();
+  });
+
+  it("omits guests when the settings fail to load", async () => {
+    const user = userEvent.setup();
+    mocks.get.mockRejectedValue(new Error("network"));
+    mocks.post.mockResolvedValue({
+      data: { created: true, htmlLink: "https://calendar.example.com/e1" },
+    });
+    renderDialog();
+
+    await user.click(await findAdd());
+
+    const body = (mocks.post.mock.calls[0]?.[1] as { body: object }).body;
+    expect(body).not.toHaveProperty("guests");
+  });
+
+  it("shows the server detail on 422", async () => {
+    const user = userEvent.setup();
+    failWith(422, "Indirizzo email dell'invitato non valido");
+    renderDialog();
+
+    await user.click(await findAdd());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Indirizzo email dell'invitato non valido",
+    );
   });
 });

@@ -31,6 +31,9 @@ var _ Google = &MockGoogle{}
 //			ExchangeCodeFunc: func(ctx context.Context, code string, origin string) error {
 //				panic("mock out the ExchangeCode method")
 //			},
+//			LookupEventFunc: func(ctx context.Context, key string) (google.EventLookup, error) {
+//				panic("mock out the LookupEvent method")
+//			},
 //			PickerConfigFunc: func(ctx context.Context) (google.PickerConfig, error) {
 //				panic("mock out the PickerConfig method")
 //			},
@@ -61,6 +64,9 @@ type MockGoogle struct {
 
 	// ExchangeCodeFunc mocks the ExchangeCode method.
 	ExchangeCodeFunc func(ctx context.Context, code string, origin string) error
+
+	// LookupEventFunc mocks the LookupEvent method.
+	LookupEventFunc func(ctx context.Context, key string) (google.EventLookup, error)
 
 	// PickerConfigFunc mocks the PickerConfig method.
 	PickerConfigFunc func(ctx context.Context) (google.PickerConfig, error)
@@ -106,6 +112,13 @@ type MockGoogle struct {
 			// Origin is the origin argument value.
 			Origin string
 		}
+		// LookupEvent holds details about calls to the LookupEvent method.
+		LookupEvent []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Key is the key argument value.
+			Key string
+		}
 		// PickerConfig holds details about calls to the PickerConfig method.
 		PickerConfig []struct {
 			// Ctx is the ctx argument value.
@@ -133,6 +146,7 @@ type MockGoogle struct {
 	lockDisconnect   sync.RWMutex
 	lockDownloadFile sync.RWMutex
 	lockExchangeCode sync.RWMutex
+	lockLookupEvent  sync.RWMutex
 	lockPickerConfig sync.RWMutex
 	lockSaveSettings sync.RWMutex
 	lockSettings     sync.RWMutex
@@ -284,6 +298,42 @@ func (mock *MockGoogle) ExchangeCodeCalls() []struct {
 	mock.lockExchangeCode.RLock()
 	calls = mock.calls.ExchangeCode
 	mock.lockExchangeCode.RUnlock()
+	return calls
+}
+
+// LookupEvent calls LookupEventFunc.
+func (mock *MockGoogle) LookupEvent(ctx context.Context, key string) (google.EventLookup, error) {
+	if mock.LookupEventFunc == nil {
+		panic("MockGoogle.LookupEventFunc: method is nil but Google.LookupEvent was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Key string
+	}{
+		Ctx: ctx,
+		Key: key,
+	}
+	mock.lockLookupEvent.Lock()
+	mock.calls.LookupEvent = append(mock.calls.LookupEvent, callInfo)
+	mock.lockLookupEvent.Unlock()
+	return mock.LookupEventFunc(ctx, key)
+}
+
+// LookupEventCalls gets all the calls that were made to LookupEvent.
+// Check the length with:
+//
+//	len(mockedGoogle.LookupEventCalls())
+func (mock *MockGoogle) LookupEventCalls() []struct {
+	Ctx context.Context
+	Key string
+} {
+	var calls []struct {
+		Ctx context.Context
+		Key string
+	}
+	mock.lockLookupEvent.RLock()
+	calls = mock.calls.LookupEvent
+	mock.lockLookupEvent.RUnlock()
 	return calls
 }
 

@@ -30,17 +30,28 @@ const (
 	eventIDPrefix = "fts"
 	eventIDMax    = 40
 	invalidGrant  = "invalid_grant"
+
+	promemoriaSuffix = "promemoria.pdf"
+	promemoriaPrefix = "promemoria-"
+	sendUpdatesNone  = "none"
 )
 
 var reminderMinutes = []int64{1440, 60}
 
 type Event struct {
-	Key      string
-	Title    string
-	Start    time.Time
-	Duration time.Duration
-	Location string
-	Details  string
+	Key        string
+	Title      string
+	Start      time.Time
+	Duration   time.Duration
+	Location   string
+	Details    string
+	Guests     []string
+	Regenerate bool
+}
+
+type EventLookup struct {
+	Exists   bool
+	HTMLLink string
 }
 
 type EventResult struct {
@@ -80,21 +91,30 @@ func eventID(key string) string {
 	return (eventIDPrefix + strings.ToLower(enc))[:eventIDMax]
 }
 
-func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResult, error) {
+type calendarSession struct {
+	ctx      context.Context
+	settings Settings
+	ts       oauth2.TokenSource
+	cal      *calendar.Service
+}
+
+type uploadedPDF struct {
+	svc        *drive.Service
+	fileID     string
+	attachment *calendar.EventAttachment
+}
+
+func (c *Client) openCalendar(ctx context.Context) (calendarSession, error) {
 	settings, err := c.configured()
 	if err != nil {
-		return EventResult{}, err
+		return calendarSession{}, err
 	}
 	token, err := c.store.Load(ctx)
 	if err != nil {
-		return EventResult{}, fmt.Errorf("google: load token: %w", err)
+		return calendarSession{}, fmt.Errorf("google: load token: %w", err)
 	}
 	if token == nil {
-		return EventResult{}, ErrNotConnected
-	}
-	rome, err := time.LoadLocation(timeZone)
-	if err != nil {
-		return EventResult{}, fmt.Errorf("google: load timezone: %w", err)
+		return calendarSession{}, ErrNotConnected
 	}
 
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
@@ -105,40 +125,136 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 	}
 	cal, err := calendar.NewService(ctx, calOpts...)
 	if err != nil {
-		return EventResult{}, fmt.Errorf("google: calendar service: %w", err)
+		return calendarSession{}, fmt.Errorf("google: calendar service: %w", err)
+	}
+	return calendarSession{ctx: ctx, settings: settings, ts: ts, cal: cal}, nil
+}
+
+func (c *Client) LookupEvent(ctx context.Context, key string) (EventLookup, error) {
+	s, err := c.openCalendar(ctx)
+	if err != nil {
+		return EventLookup{}, err
+	}
+	existing, err := c.getEvent(s.ctx, s.cal, s.settings.CalendarID, eventID(key))
+	if err != nil {
+		return EventLookup{}, c.classify(s.ctx, err)
+	}
+	if existing == nil || existing.Status == statusCancelled {
+		return EventLookup{}, nil
+	}
+	return EventLookup{Exists: true, HTMLLink: existing.HtmlLink}, nil
+}
+
+func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResult, error) {
+	s, err := c.openCalendar(ctx)
+	if err != nil {
+		return EventResult{}, err
+	}
+	ctx = s.ctx
+	rome, err := time.LoadLocation(timeZone)
+	if err != nil {
+		return EventResult{}, fmt.Errorf("google: load timezone: %w", err)
 	}
 
 	id := eventID(ev.Key)
-	existing, err := c.getEvent(ctx, cal, settings.CalendarID, id)
+	existing, err := c.getEvent(ctx, s.cal, s.settings.CalendarID, id)
 	if err != nil {
 		return EventResult{}, c.classify(ctx, err)
 	}
-	if existing != nil && existing.Status != statusCancelled {
+	live := existing != nil && existing.Status != statusCancelled
+	if live && !ev.Regenerate {
 		return EventResult{HTMLLink: existing.HtmlLink}, nil
 	}
 
+	var oldFileIDs []string
 	var attachments []*calendar.EventAttachment
-	var svc *drive.Service
-	var fileID string
+	if live {
+		oldFileIDs, attachments = splitPromemoria(existing.Attachments)
+	}
+
+	var up uploadedPDF
 	if len(pdf) > 0 {
-		svc, err = c.driveService(ctx, ts)
+		up, err = c.uploadPromemoria(s, ev, rome, pdf)
 		if err != nil {
 			return EventResult{}, err
 		}
-		name := ev.Start.In(rome).Format(time.DateOnly) + "-promemoria.pdf"
-		file, err := c.upload(ctx, svc, name, settings.DriveFolderID, pdf)
-		if err != nil {
-			return EventResult{}, c.classify(ctx, err)
-		}
-		fileID = file.Id
-		attachments = []*calendar.EventAttachment{{FileUrl: file.WebViewLink, MimeType: pdfMimeType, Title: name}}
+		attachments = append(attachments, up.attachment)
 	}
 
+	result, err := c.write(ctx, s.cal, s.settings.CalendarID, buildBody(ev, id, rome, attachments), existing != nil)
+	if up.fileID != "" && (err != nil || !result.Created) {
+		c.deleteFile(ctx, up.svc, up.fileID)
+	}
+	if err != nil {
+		return EventResult{}, c.classify(ctx, err)
+	}
+	if result.Created && len(oldFileIDs) > 0 {
+		c.deleteOldPromemoria(s, oldFileIDs)
+	}
+	return result, nil
+}
+
+func (c *Client) uploadPromemoria(s calendarSession, ev Event, rome *time.Location, pdf []byte) (uploadedPDF, error) {
+	svc, err := c.driveService(s.ctx, s.ts)
+	if err != nil {
+		return uploadedPDF{}, err
+	}
+	name := ev.Start.In(rome).Format(time.DateOnly) + "-promemoria.pdf"
+	file, err := c.upload(s.ctx, svc, name, s.settings.DriveFolderID, pdf)
+	if err != nil {
+		return uploadedPDF{}, c.classify(s.ctx, err)
+	}
+	for _, guest := range ev.Guests {
+		perm := &drive.Permission{Type: "user", Role: "reader", EmailAddress: guest}
+		if _, err := svc.Permissions.Create(file.Id, perm).SendNotificationEmail(false).Context(s.ctx).Do(); err != nil {
+			c.deleteFile(s.ctx, svc, file.Id)
+			return uploadedPDF{}, c.classify(s.ctx, err)
+		}
+	}
+	if len(ev.Guests) > 0 {
+		slog.InfoContext(s.ctx, "promemoria shared", slog.Int("guests", len(ev.Guests)))
+	}
+	return uploadedPDF{
+		svc:        svc,
+		fileID:     file.Id,
+		attachment: &calendar.EventAttachment{FileUrl: file.WebViewLink, MimeType: pdfMimeType, Title: name},
+	}, nil
+}
+
+func (c *Client) deleteOldPromemoria(s calendarSession, fileIDs []string) {
+	svc, err := c.driveService(s.ctx, s.ts)
+	if err != nil {
+		slog.WarnContext(s.ctx, "google old promemoria cleanup failed")
+		return
+	}
+	for _, id := range fileIDs {
+		c.deleteFile(s.ctx, svc, id)
+	}
+}
+
+func splitPromemoria(attachments []*calendar.EventAttachment) ([]string, []*calendar.EventAttachment) {
+	var fileIDs []string
+	var kept []*calendar.EventAttachment
+	for _, a := range attachments {
+		if (strings.HasSuffix(a.Title, promemoriaSuffix) || strings.HasPrefix(a.Title, promemoriaPrefix)) && a.FileId != "" {
+			fileIDs = append(fileIDs, a.FileId)
+			continue
+		}
+		kept = append(kept, a)
+	}
+	return fileIDs, kept
+}
+
+func buildBody(ev Event, id string, rome *time.Location, attachments []*calendar.EventAttachment) *calendar.Event {
 	reminders := make([]*calendar.EventReminder, 0, len(reminderMinutes))
 	for _, m := range reminderMinutes {
 		reminders = append(reminders, &calendar.EventReminder{Method: "popup", Minutes: m})
 	}
-	body := &calendar.Event{
+	attendees := make([]*calendar.EventAttendee, 0, len(ev.Guests))
+	for _, g := range ev.Guests {
+		attendees = append(attendees, &calendar.EventAttendee{Email: g})
+	}
+	return &calendar.Event{
 		Id:          id,
 		Status:      statusConfirmed,
 		Summary:     ev.Title,
@@ -148,21 +264,13 @@ func (c *Client) AddEvent(ctx context.Context, ev Event, pdf []byte) (EventResul
 		End:         &calendar.EventDateTime{DateTime: ev.Start.Add(ev.Duration).In(rome).Format(time.RFC3339), TimeZone: timeZone},
 		Reminders:   &calendar.EventReminders{UseDefault: false, Overrides: reminders, ForceSendFields: []string{"UseDefault"}},
 		Attachments: attachments,
+		Attendees:   attendees,
 	}
-
-	result, err := c.write(ctx, cal, settings.CalendarID, body, existing != nil)
-	if fileID != "" && (err != nil || !result.Created) {
-		c.deleteFile(ctx, svc, fileID)
-	}
-	if err != nil {
-		return EventResult{}, c.classify(ctx, err)
-	}
-	return result, nil
 }
 
-func (c *Client) write(ctx context.Context, cal *calendar.Service, calendarID string, body *calendar.Event, cancelled bool) (EventResult, error) {
-	if !cancelled {
-		created, err := cal.Events.Insert(calendarID, body).SupportsAttachments(true).Context(ctx).Do()
+func (c *Client) write(ctx context.Context, cal *calendar.Service, calendarID string, body *calendar.Event, exists bool) (EventResult, error) {
+	if !exists {
+		created, err := cal.Events.Insert(calendarID, body).SupportsAttachments(true).SendUpdates(sendUpdatesNone).Context(ctx).Do()
 		if err == nil {
 			return EventResult{HTMLLink: created.HtmlLink, Created: true}, nil
 		}
@@ -181,7 +289,7 @@ func (c *Client) write(ctx context.Context, cal *calendar.Service, calendarID st
 		}
 	}
 
-	updated, err := cal.Events.Update(calendarID, body.Id, body).SupportsAttachments(true).Context(ctx).Do()
+	updated, err := cal.Events.Update(calendarID, body.Id, body).SupportsAttachments(true).SendUpdates(sendUpdatesNone).Context(ctx).Do()
 	if err != nil {
 		return EventResult{}, err
 	}

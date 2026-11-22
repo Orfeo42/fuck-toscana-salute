@@ -128,6 +128,7 @@ describe("GoogleProvider", () => {
                 apiKey: "",
                 hasSecret: false,
                 javascriptOrigin: "http://localhost:8800",
+                guests: [],
               },
             }
           : { data: { ...status(false, false), clientId: "" } },
@@ -156,6 +157,7 @@ describe("GoogleProvider", () => {
                 apiKey: "",
                 hasSecret: false,
                 javascriptOrigin: "http://localhost:8800",
+                guests: [],
               },
             }
           : { data: { ...status(false, false), clientId: "" } },
