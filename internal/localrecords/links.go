@@ -19,8 +19,11 @@ func (s *Service) Link(ctx context.Context, nre string, ref referti.Ref) error {
 			return err
 		}
 	}
-	if err := s.store.PutLink(ctx, store.Link{NRE: normalizeNRE(nre), ReportKey: ref.Key()}); err != nil {
-		return fmt.Errorf("localrecords: put link: %w", err)
+	normalized := normalizeNRE(nre)
+	link := store.Link{NRE: normalized, ReportKey: ref.Key()}
+	override := store.Override{NRE: normalized, Status: DoneStatus, UpdatedAt: s.now().UTC()}
+	if err := s.store.PutLinkWithOverride(ctx, link, override); err != nil {
+		return fmt.Errorf("localrecords: put link with override: %w", err)
 	}
 	slog.InfoContext(ctx, "report linked", slog.String("kind", string(kind)))
 	return nil

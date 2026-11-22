@@ -43,8 +43,8 @@ var _ Store = &MockStore{}
 //			OverridesFunc: func(ctx context.Context) ([]store.Override, error) {
 //				panic("mock out the Overrides method")
 //			},
-//			PutLinkFunc: func(ctx context.Context, l store.Link) error {
-//				panic("mock out the PutLink method")
+//			PutLinkWithOverrideFunc: func(ctx context.Context, l store.Link, o store.Override) error {
+//				panic("mock out the PutLinkWithOverride method")
 //			},
 //			PutOverrideFunc: func(ctx context.Context, o store.Override) error {
 //				panic("mock out the PutOverride method")
@@ -83,8 +83,8 @@ type MockStore struct {
 	// OverridesFunc mocks the Overrides method.
 	OverridesFunc func(ctx context.Context) ([]store.Override, error)
 
-	// PutLinkFunc mocks the PutLink method.
-	PutLinkFunc func(ctx context.Context, l store.Link) error
+	// PutLinkWithOverrideFunc mocks the PutLinkWithOverride method.
+	PutLinkWithOverrideFunc func(ctx context.Context, l store.Link, o store.Override) error
 
 	// PutOverrideFunc mocks the PutOverride method.
 	PutOverrideFunc func(ctx context.Context, o store.Override) error
@@ -150,12 +150,14 @@ type MockStore struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
-		// PutLink holds details about calls to the PutLink method.
-		PutLink []struct {
+		// PutLinkWithOverride holds details about calls to the PutLinkWithOverride method.
+		PutLinkWithOverride []struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// L is the l argument value.
 			L store.Link
+			// O is the o argument value.
+			O store.Override
 		}
 		// PutOverride holds details about calls to the PutOverride method.
 		PutOverride []struct {
@@ -182,7 +184,7 @@ type MockStore struct {
 	lockLocalReportData       sync.RWMutex
 	lockLocalReports          sync.RWMutex
 	lockOverrides             sync.RWMutex
-	lockPutLink               sync.RWMutex
+	lockPutLinkWithOverride   sync.RWMutex
 	lockPutOverride           sync.RWMutex
 	lockUpdateLocalReportMeta sync.RWMutex
 }
@@ -475,39 +477,43 @@ func (mock *MockStore) OverridesCalls() []struct {
 	return calls
 }
 
-// PutLink calls PutLinkFunc.
-func (mock *MockStore) PutLink(ctx context.Context, l store.Link) error {
-	if mock.PutLinkFunc == nil {
-		panic("MockStore.PutLinkFunc: method is nil but Store.PutLink was just called")
+// PutLinkWithOverride calls PutLinkWithOverrideFunc.
+func (mock *MockStore) PutLinkWithOverride(ctx context.Context, l store.Link, o store.Override) error {
+	if mock.PutLinkWithOverrideFunc == nil {
+		panic("MockStore.PutLinkWithOverrideFunc: method is nil but Store.PutLinkWithOverride was just called")
 	}
 	callInfo := struct {
 		Ctx context.Context
 		L   store.Link
+		O   store.Override
 	}{
 		Ctx: ctx,
 		L:   l,
+		O:   o,
 	}
-	mock.lockPutLink.Lock()
-	mock.calls.PutLink = append(mock.calls.PutLink, callInfo)
-	mock.lockPutLink.Unlock()
-	return mock.PutLinkFunc(ctx, l)
+	mock.lockPutLinkWithOverride.Lock()
+	mock.calls.PutLinkWithOverride = append(mock.calls.PutLinkWithOverride, callInfo)
+	mock.lockPutLinkWithOverride.Unlock()
+	return mock.PutLinkWithOverrideFunc(ctx, l, o)
 }
 
-// PutLinkCalls gets all the calls that were made to PutLink.
+// PutLinkWithOverrideCalls gets all the calls that were made to PutLinkWithOverride.
 // Check the length with:
 //
-//	len(mockedStore.PutLinkCalls())
-func (mock *MockStore) PutLinkCalls() []struct {
+//	len(mockedStore.PutLinkWithOverrideCalls())
+func (mock *MockStore) PutLinkWithOverrideCalls() []struct {
 	Ctx context.Context
 	L   store.Link
+	O   store.Override
 } {
 	var calls []struct {
 		Ctx context.Context
 		L   store.Link
+		O   store.Override
 	}
-	mock.lockPutLink.RLock()
-	calls = mock.calls.PutLink
-	mock.lockPutLink.RUnlock()
+	mock.lockPutLinkWithOverride.RLock()
+	calls = mock.calls.PutLinkWithOverride
+	mock.lockPutLinkWithOverride.RUnlock()
 	return calls
 }
 

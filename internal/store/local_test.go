@@ -153,7 +153,7 @@ func TestDeleteLocalReport(t *testing.T) {
 
 	t.Run("missing report rolls back link delete", func(t *testing.T) {
 		s := openTest(t)
-		require.NoError(t, s.PutLink(ctx, Link{NRE: fakeNRE, ReportKey: "k1"}))
+		putLink(t, s, Link{NRE: fakeNRE, ReportKey: "k1"})
 		err := s.DeleteLocalReport(ctx, "nope", "k1")
 		require.ErrorIs(t, err, ErrNotFound)
 		assert.Equal(t, 1, countTable(t, "report_links"))
@@ -204,23 +204,47 @@ func TestLocalReportData(t *testing.T) {
 	})
 }
 
-func TestPutLink(t *testing.T) {
-	ctx := context.Background()
-	l := Link{NRE: fakeNRE, ReportKey: "k1"}
+func putLink(t *testing.T, s *Store, l Link) {
+	t.Helper()
+	o := Override{NRE: l.NRE, Status: 8, UpdatedAt: time.UnixMilli(1_700_000_000_000)}
+	require.NoError(t, s.PutLinkWithOverride(context.Background(), l, o))
+}
 
-	t.Run("round trip", func(t *testing.T) {
+func TestPutLinkWithOverride(t *testing.T) {
+	ctx := context.Background()
+	at := time.UnixMilli(1_700_000_000_000)
+	l := Link{NRE: fakeNRE, ReportKey: "k1"}
+	o := Override{NRE: fakeNRE, Status: 8, UpdatedAt: at}
+
+	t.Run("writes link and override", func(t *testing.T) {
 		s := openTest(t)
-		require.NoError(t, s.PutLink(ctx, l))
-		got, err := s.Links(ctx)
+		require.NoError(t, s.PutLinkWithOverride(ctx, l, o))
+		links, err := s.Links(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, []Link{l}, got)
+		assert.Equal(t, []Link{l}, links)
+		overrides, err := s.Overrides(ctx)
+		require.NoError(t, err)
+		require.Len(t, overrides, 1)
+		assert.Equal(t, fakeNRE, overrides[0].NRE)
+		assert.Equal(t, 8, overrides[0].Status)
 	})
 
 	t.Run("idempotent", func(t *testing.T) {
 		s := openTest(t)
-		require.NoError(t, s.PutLink(ctx, l))
-		require.NoError(t, s.PutLink(ctx, l))
+		require.NoError(t, s.PutLinkWithOverride(ctx, l, o))
+		require.NoError(t, s.PutLinkWithOverride(ctx, l, o))
 		assert.Equal(t, 1, countTable(t, "report_links"))
+		assert.Equal(t, 1, countTable(t, "visit_overrides"))
+	})
+
+	t.Run("overwrites previous override", func(t *testing.T) {
+		s := openTest(t)
+		require.NoError(t, s.PutOverride(ctx, Override{NRE: fakeNRE, Status: 3, UpdatedAt: at}))
+		require.NoError(t, s.PutLinkWithOverride(ctx, l, o))
+		overrides, err := s.Overrides(ctx)
+		require.NoError(t, err)
+		require.Len(t, overrides, 1)
+		assert.Equal(t, 8, overrides[0].Status)
 	})
 }
 
@@ -231,8 +255,8 @@ func TestDeleteLink(t *testing.T) {
 	t.Run("deletes only that link", func(t *testing.T) {
 		s := openTest(t)
 		other := Link{NRE: fakeNRE2, ReportKey: "k1"}
-		require.NoError(t, s.PutLink(ctx, l))
-		require.NoError(t, s.PutLink(ctx, other))
+		putLink(t, s, l)
+		putLink(t, s, other)
 		require.NoError(t, s.DeleteLink(ctx, l))
 		got, err := s.Links(ctx)
 		require.NoError(t, err)
@@ -257,8 +281,8 @@ func TestLinks(t *testing.T) {
 
 	t.Run("payload swap detected", func(t *testing.T) {
 		s := openTest(t)
-		require.NoError(t, s.PutLink(ctx, Link{NRE: fakeNRE, ReportKey: "k1"}))
-		require.NoError(t, s.PutLink(ctx, Link{NRE: fakeNRE2, ReportKey: "k1"}))
+		putLink(t, s, Link{NRE: fakeNRE, ReportKey: "k1"})
+		putLink(t, s, Link{NRE: fakeNRE2, ReportKey: "k1"})
 		_, err := s.db.ExecContext(ctx, `UPDATE report_links SET payload_enc = (SELECT payload_enc FROM report_links LIMIT 1)`)
 		require.NoError(t, err)
 		_, err = s.Links(ctx)

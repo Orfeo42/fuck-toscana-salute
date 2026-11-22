@@ -79,7 +79,7 @@ type Store interface {
 	DeleteLocalReport(ctx context.Context, id, reportKey string) error
 	LocalReports(ctx context.Context) ([]store.LocalReportMeta, error)
 	LocalReportData(ctx context.Context, id string) (store.LocalReport, error)
-	PutLink(ctx context.Context, l store.Link) error
+	PutLinkWithOverride(ctx context.Context, l store.Link, o store.Override) error
 	DeleteLink(ctx context.Context, l store.Link) error
 	Links(ctx context.Context) ([]store.Link, error)
 	PutOverride(ctx context.Context, o store.Override) error

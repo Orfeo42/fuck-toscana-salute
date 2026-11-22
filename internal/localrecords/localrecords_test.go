@@ -320,13 +320,16 @@ func TestLink(t *testing.T) {
 	})
 
 	t.Run("portal kind stored with upper nre", func(t *testing.T) {
-		var got store.Link
-		st := &MockStore{PutLinkFunc: func(_ context.Context, l store.Link) error {
-			got = l
+		var gotLink store.Link
+		var gotOverride store.Override
+		st := &MockStore{PutLinkWithOverrideFunc: func(_ context.Context, l store.Link, o store.Override) error {
+			gotLink = l
+			gotOverride = o
 			return nil
 		}}
 		require.NoError(t, newService(st).Link(ctx, " "+strings.ToLower(testNRE), labRef))
-		assert.Equal(t, store.Link{NRE: testNRE, ReportKey: labRef.Key()}, got)
+		assert.Equal(t, store.Link{NRE: testNRE, ReportKey: labRef.Key()}, gotLink)
+		assert.Equal(t, store.Override{NRE: testNRE, Status: DoneStatus, UpdatedAt: fixedNow.UTC()}, gotOverride)
 	})
 
 	t.Run("local ref must exist", func(t *testing.T) {
@@ -340,15 +343,15 @@ func TestLink(t *testing.T) {
 			LocalReportsFunc: func(context.Context) ([]store.LocalReportMeta, error) {
 				return []store.LocalReportMeta{{ID: "abc", Meta: metaJSON(t, Report{})}}, nil
 			},
-			PutLinkFunc: func(context.Context, store.Link) error { return nil },
+			PutLinkWithOverrideFunc: func(context.Context, store.Link, store.Override) error { return nil },
 		}
 		require.NoError(t, newService(st).Link(ctx, testNRE, LocalRef("abc")))
-		assert.Len(t, st.PutLinkCalls(), 1)
+		assert.Len(t, st.PutLinkWithOverrideCalls(), 1)
 	})
 
 	t.Run("store error wrapped", func(t *testing.T) {
 		boom := errors.New("boom")
-		st := &MockStore{PutLinkFunc: func(context.Context, store.Link) error { return boom }}
+		st := &MockStore{PutLinkWithOverrideFunc: func(context.Context, store.Link, store.Override) error { return boom }}
 		assert.ErrorIs(t, newService(st).Link(ctx, testNRE, labRef), boom)
 	})
 }

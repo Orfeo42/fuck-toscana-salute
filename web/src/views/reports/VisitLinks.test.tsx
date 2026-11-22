@@ -4,15 +4,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReportRefBody, RowBody } from "../../api/client";
 import { render } from "../../test/render";
-import { WithHealth } from "../../test/WithHealth";
 import { VisitLinks } from "./VisitLinks";
 
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
+  reload: vi.fn(),
+  put: vi.fn(),
+  del: vi.fn(),
+}));
+
+vi.mock("../../data/useHealthData", () => ({
+  useHealthData: () => ({
+    prescriptions: {
+      data: { prescriptions: rows, updated: null },
+      reload: mocks.reload,
+    },
+    appointments: { data: undefined, reload: vi.fn() },
+  }),
 }));
 
 vi.mock("../../api/client", () => ({
-  api: { PUT: vi.fn(), DELETE: vi.fn() },
+  api: { PUT: mocks.put, DELETE: mocks.del },
 }));
 
 vi.mock("../../lib/openVisit", () => ({
@@ -44,20 +56,21 @@ const rows: RowBody[] = [
 
 function renderLinks(nres: readonly string[]): void {
   render(
-    <WithHealth rows={rows}>
-      <VisitLinks
-        reportRef={reportRef}
-        nres={nres}
-        onLinked={() => undefined}
-        onUnlinked={() => undefined}
-      />
-    </WithHealth>,
+    <VisitLinks
+      reportRef={reportRef}
+      nres={nres}
+      onLinked={() => undefined}
+      onUnlinked={() => undefined}
+    />,
   );
 }
 
 describe("VisitLinks", () => {
   beforeEach(() => {
     mocks.open.mockReset();
+    mocks.reload.mockReset();
+    mocks.put.mockReset();
+    mocks.del.mockReset();
   });
 
   it("opens the visit from the title", async () => {
@@ -85,5 +98,51 @@ describe("VisitLinks", () => {
     for (const link of screen.queryAllByRole("link")) {
       expect(link.getAttribute("href") ?? "").not.toContain("0123A");
     }
+  });
+
+  it("reloads prescriptions after a successful unlink", async () => {
+    mocks.del.mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+    });
+    renderLinks(["0123A"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scollega 0123A" }),
+    );
+    expect(mocks.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload prescriptions after a failed unlink", async () => {
+    mocks.del.mockResolvedValue({
+      response: new Response(null, { status: 500 }),
+    });
+    renderLinks(["0123A"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scollega 0123A" }),
+    );
+    expect(mocks.reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads prescriptions after a successful link", async () => {
+    mocks.put.mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+    });
+    renderLinks([]);
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Collega a visita" }),
+    );
+    await userEvent.click(await screen.findByText(/0123A/));
+    expect(mocks.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload prescriptions after a failed link", async () => {
+    mocks.put.mockResolvedValue({
+      response: new Response(null, { status: 500 }),
+    });
+    renderLinks([]);
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Collega a visita" }),
+    );
+    await userEvent.click(await screen.findByText(/0123A/));
+    expect(mocks.reload).not.toHaveBeenCalled();
   });
 });

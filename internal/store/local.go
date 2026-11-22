@@ -390,13 +390,29 @@ func (s *Store) LocalReportData(ctx context.Context, id string) (LocalReport, er
 	return LocalReport{ID: r.ID, Meta: meta, Data: data, CreatedAt: r.CreatedAt.UTC()}, nil
 }
 
-func (s *Store) PutLink(ctx context.Context, l Link) error {
-	row, err := s.sealLink(l)
+func (s *Store) PutLinkWithOverride(ctx context.Context, l Link, o Override) error {
+	linkRow, err := s.sealLink(l)
 	if err != nil {
 		return err
 	}
-	if _, err := sqlx.NamedExecContext(ctx, s.db, insertLinkQuery, row); err != nil {
+	ovRow, err := s.sealOverride(o)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: put link with override begin: %w", err)
+	}
+	defer rollback(ctx, tx)
+
+	if _, err := tx.NamedExecContext(ctx, insertLinkQuery, linkRow); err != nil {
 		return fmt.Errorf("store: put link: %w", err)
+	}
+	if _, err := tx.NamedExecContext(ctx, upsertOverrideQuery, ovRow); err != nil {
+		return fmt.Errorf("store: put override: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: put link with override commit: %w", err)
 	}
 	return nil
 }

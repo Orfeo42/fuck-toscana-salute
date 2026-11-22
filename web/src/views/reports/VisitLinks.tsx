@@ -57,6 +57,7 @@ export function VisitLinks({
         setError(linkFailed);
         return;
       }
+      prescriptions.reload();
       if (link) {
         onLinked(nre);
         return;
