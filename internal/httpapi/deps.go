@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"fuck-toscana-salute/internal/agenda"
+	"fuck-toscana-salute/internal/facilities"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/localrecords"
 	"fuck-toscana-salute/internal/login"
@@ -72,4 +73,9 @@ type LocalRecords interface {
 	SetStatus(ctx context.Context, nre string, status int) error
 	ResetStatus(ctx context.Context, nre string) error
 	Overrides(ctx context.Context) ([]localrecords.Override, error)
+}
+
+//go:generate moq -out facilities_mock.go . Facilities:MockFacilities
+type Facilities interface {
+	Search(ctx context.Context, query string) ([]facilities.Facility, error)
 }

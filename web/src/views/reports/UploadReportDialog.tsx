@@ -8,6 +8,7 @@ import {
   type ImportDriveRequest,
   type ReportBody,
 } from "../../api/client";
+import { FacilityInput } from "../../components/FacilityInput";
 import { IconAction } from "../../components/IconAction";
 import { GoogleContext } from "../../google/useGoogle";
 import { pickDriveFile } from "../../lib/googlePicker";
@@ -240,12 +241,10 @@ function FormBody({
             setDate(event.currentTarget.value);
           }}
         />
-        <TextInput
+        <FacilityInput
           label="Struttura"
           value={provider}
-          onChange={(event) => {
-            setProvider(event.currentTarget.value);
-          }}
+          onChange={setProvider}
         />
         {shownError === undefined ? null : (
           <Text size="sm" c="red" role="alert">

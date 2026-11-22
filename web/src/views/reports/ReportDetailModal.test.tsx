@@ -321,7 +321,9 @@ describe("ReportDetailModal", () => {
         "Ecografia addome",
       );
       expect(screen.getByLabelText("Data")).toHaveValue("2026-10-05");
-      expect(screen.getByLabelText("Struttura")).toHaveValue("Studio Prova");
+      expect(screen.getByRole("combobox", { name: "Struttura" })).toHaveValue(
+        "Studio Prova",
+      );
 
       await userEvent.clear(screen.getByLabelText("Titolo"));
       await userEvent.type(screen.getByLabelText("Titolo"), "Eco controllo");

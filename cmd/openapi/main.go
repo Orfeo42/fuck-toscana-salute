@@ -26,7 +26,7 @@ func main() {
 }
 
 func run(w io.Writer) error {
-	handler := httpapi.New(nil, nil, nil, nil, nil, nil, nil, nil, "window", false)
+	handler := httpapi.New(nil, nil, nil, nil, nil, nil, nil, nil, nil, "window", false)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/openapi.json", nil))
 	if rec.Code != http.StatusOK {

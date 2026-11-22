@@ -355,6 +355,65 @@
         },
         "type": "object"
       },
+      "FacilityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "comune": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provincia": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "ministero",
+              "regione"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "comune",
+          "provincia",
+          "address",
+          "source"
+        ],
+        "type": "object"
+      },
+      "FacilitySearchBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/FacilitySearchBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "facilities": {
+            "items": {
+              "$ref": "#/components/schemas/FacilityBody"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "facilities"
+        ],
+        "type": "object"
+      },
       "FailedBody": {
         "additionalProperties": false,
         "properties": {
@@ -1201,6 +1260,29 @@
         ],
         "type": "object"
       },
+      "SearchFacilitiesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/SearchFacilitiesRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 100,
+            "minLength": 2,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
       "SessionBody": {
         "additionalProperties": false,
         "properties": {
@@ -1601,6 +1683,43 @@
                 }
               }
             }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        }
+      }
+    },
+    "/api/facilities/search": {
+      "post": {
+        "operationId": "search-facilities",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchFacilitiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacilitySearchBody"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "content": {

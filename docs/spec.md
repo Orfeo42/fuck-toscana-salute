@@ -153,6 +153,19 @@ Drive import uses the Google Picker with the existing `drive.file` scope: `POST 
 
 Separate vendor app (`cdn.dromedian.com/zerocode`), own backend at `https://zerocode.sanita.toscana.it/api/*`, own SPID login (likely cookie session, not the `rt` Keycloak). Known paths: `/api/profile`, `/api/memo/<id>` (promemoria PDF), `/api/payment-notice/<id>`, `/api/cube`. Not tested with a real session yet.
 
+## Facilities directory
+
+Offline search of Toscana healthcare facilities for the "Struttura" field of referti. Public open data, stored in clear (no encryption), owned by `internal/facilities`. The user's own facilities (from CUP and FSE data) are merged client-side, not here. Downloaded data is never committed: tests use small fake CSV fixtures.
+
+- Sources, Ministero della Salute (`https://www.dati.salute.gov.it`). File URLs embed the upload month and change, so each is resolved at refresh time from `/page-data/it/dataset/<slug>/page-data.json` (`result.data.allNodeDataset.nodes[0].relationships.field_listafile[].url`, the `.csv` entry, relative URLs prefixed with the base). Slugs: `apparecchiature-sanitarie` (UTF-8, address is `STREET - CAP - Comune (PR)` and is split when it matches), `strutture-di-ricovero-pubbliche-e-equiparate-presenti-nel-territorio-della-asl`, `case-di-cura-accreditate-presenti-nel-territorio-della-asl`, `aziende-ospedaliere-aziende-ospedaliere-universitarie-e-irccs-pubblici-anche-costituiti` (multi-year: only the latest `Anno` of the region is kept), `consultori-familiari-anno-2022`. All but the first are `;`-delimited ISO-8859-1 with space-padded fields; columns are found by normalised header name (lowercase, `_` as space), never by index.
+- Source, Regione Toscana (CKAN `rt-strut-sanitarie` on `dati.toscana.it`): `package_show` resolves the resource whose URL ends in `territorialifeature.csv` (ISO-8859-1, comma-delimited, quoted). Rows with a real past `Data Chiusura` are dropped (`31/12/9999` means open).
+- Toscana filter: region code `090` on the Ministry files; the Regione file is Toscana only. Rows are deduplicated on the structure code within each file; across the Ministry files on (folded name, comune), keeping the row with an address, then on code.
+- Downloads are capped at 20 MB each. A refresh replaces one source (`ministero` or `regione`) in a single transaction, so a failing source keeps its old rows while the other is still updated. The Ministry source is atomic: if any of its five files fails, all old Ministry rows are kept. A failed refresh logs a warning.
+- Cadence: on startup and then daily, a source is refreshed when it has no refresh record or the last one is older than 30 days.
+- Tables: `facilities` (`source`, `code`, `name`, `comune`, `provincia`, `address`, `search_key`, primary key `(source, code)`) and `facilities_meta` (`source`, `refreshed_at`). `search_key` is the lowercase, accent-stripped, whitespace-collapsed `name + " " + comune`, computed in Go (`internal/textutil.Fold`).
+- Endpoint: `POST /api/facilities/search` (`search-facilities`), body `{query}` (2 to 100 characters), response `{facilities: [{name, comune, provincia, address, source}]}` with `source` in `ministero` | `regione`. Every whitespace-separated folded token of the query must be contained in `search_key` (LIKE with escaped wildcards, named parameters). At most 20 results, ordered ministero first, then names starting with the first token, then by name. The log line carries only the result count, never the query.
+- Attribution: Ministero della Salute, open data under IODL 2.0 (case di cura accreditate under CC-BY 4.0), data year 2022; Regione Toscana, CC-BY 4.0, data year 2015.
+
 ## Screens
 
 - Upcoming: appointments sorted by date, each with prescription, place, and promemoria one click away.

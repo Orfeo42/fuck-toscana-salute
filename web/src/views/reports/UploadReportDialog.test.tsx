@@ -91,7 +91,10 @@ function pdf(name = "eco.pdf", size = 10): File {
 }
 
 function sentForm(): FormData {
-  const options: unknown = mocks.post.mock.calls[0]?.[1];
+  const call = mocks.post.mock.calls.find(
+    (candidate: unknown[]) => candidate[0] === "/api/reports/local",
+  );
+  const options: unknown = call?.[1];
   if (
     typeof options === "object" &&
     options !== null &&
@@ -131,24 +134,39 @@ describe("UploadReportDialog", () => {
 
     expect(screen.getByLabelText("Titolo")).toHaveValue("Eco addome");
     expect(screen.getByLabelText("Data")).toHaveValue("2026-10-01");
-    expect(screen.getByLabelText("Struttura")).toHaveValue("Ospedale Esempio");
+    expect(screen.getByRole("combobox", { name: "Struttura" })).toHaveValue(
+      "Ospedale Esempio",
+    );
   });
 
   it("uploads the file with the metadata and the nre as multipart", async () => {
-    mocks.post.mockResolvedValue({ data: created, response: { status: 201 } });
+    mocks.post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/facilities/search"
+          ? { data: { facilities: [] }, response: { status: 200 } }
+          : { data: created, response: { status: 201 } },
+      ),
+    );
     const { onClose, onUploaded } = renderDialog({ nre: "0123A" });
 
     await chooseFile(pdf());
     await userEvent.type(screen.getByLabelText("Titolo"), "Eco");
     await userEvent.type(screen.getByLabelText("Data"), "2026-10-02");
-    await userEvent.type(screen.getByLabelText("Struttura"), "Clinica Prova");
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "Struttura" }),
+      "Clinica Prova",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Carica" }));
 
     await waitFor(() => {
       expect(onUploaded).toHaveBeenCalledWith(created);
     });
     expect(onClose).toHaveBeenCalled();
-    expect(mocks.post.mock.calls[0]?.[0]).toBe("/api/reports/local");
+    expect(
+      mocks.post.mock.calls.some(
+        (call: unknown[]) => call[0] === "/api/reports/local",
+      ),
+    ).toBe(true);
     const form = sentForm();
     const sentFile = form.get("file");
     expect(sentFile instanceof File ? sentFile.name : "").toBe("eco.pdf");

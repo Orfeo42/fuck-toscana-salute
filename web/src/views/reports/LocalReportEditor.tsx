@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
 import { api, type ReportBody } from "../../api/client";
+import { FacilityInput } from "../../components/FacilityInput";
 import { IconAction } from "../../components/IconAction";
 
 interface Props {
@@ -97,12 +98,10 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
             setDate(event.currentTarget.value);
           }}
         />
-        <TextInput
+        <FacilityInput
           label="Struttura"
           value={provider}
-          onChange={(event) => {
-            setProvider(event.currentTarget.value);
-          }}
+          onChange={setProvider}
         />
         {error === undefined ? null : (
           <Text size="sm" c="red" role="alert">

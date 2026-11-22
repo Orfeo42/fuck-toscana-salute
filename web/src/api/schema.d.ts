@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/facilities/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["search-facilities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/google": {
         parameters: {
             query?: never;
@@ -510,6 +526,23 @@ export interface components {
              */
             type: string;
         };
+        FacilityBody: {
+            address: string;
+            comune: string;
+            name: string;
+            provincia: string;
+            /** @enum {string} */
+            source: "ministero" | "regione";
+        };
+        FacilitySearchBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/FacilitySearchBody.json
+             */
+            readonly $schema?: string;
+            facilities: components["schemas"]["FacilityBody"][] | null;
+        };
         FailedBody: {
             nre: string;
             reason: string;
@@ -777,6 +810,15 @@ export interface components {
             overridden: boolean;
             reports: components["schemas"]["ReportRefBody"][] | null;
         };
+        SearchFacilitiesRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SearchFacilitiesRequest.json
+             */
+            readonly $schema?: string;
+            query: string;
+        };
         SessionBody: {
             /**
              * Format: uri
@@ -998,6 +1040,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "search-facilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchFacilitiesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilitySearchBody"];
                 };
             };
             /** @description Error */

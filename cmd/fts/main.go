@@ -18,6 +18,7 @@ import (
 	"fuck-toscana-salute/internal/cache"
 	"fuck-toscana-salute/internal/config"
 	"fuck-toscana-salute/internal/cup"
+	"fuck-toscana-salute/internal/facilities"
 	"fuck-toscana-salute/internal/fse"
 	"fuck-toscana-salute/internal/google"
 	"fuck-toscana-salute/internal/httpapi"
@@ -38,6 +39,7 @@ import (
 const (
 	lookupConcurrency = 4
 	superviseTick     = time.Minute
+	facilitiesTick    = 24 * time.Hour
 	secretService     = "fuck-toscana-salute"
 	sessionUser       = "session"
 	googleUser        = "google"
@@ -138,6 +140,11 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	googleClient := google.New(st, vault.NewTokenVaultWithBackend(st, secretService, googleUser), httpClient)
 	local := localrecords.New(st)
 	remote := remoteReports{Client: refertiClient, cached: cache.NewReports(refertiClient, st, cache.DefaultPolicy())}
+	facilitiesService, err := facilities.New(ctx, st.DB(), httpClient)
+	if err != nil {
+		return fmt.Errorf("open facilities: %w", err)
+	}
+	go facilitiesService.Run(ctx, facilitiesTick)
 	mux := http.NewServeMux()
 	api := httpapi.New(
 		sessions,
@@ -148,6 +155,7 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 		reports.New(remote, local),
 		local,
 		freshness{st: st},
+		facilitiesService,
 		cfg.LoginMode,
 		cfg.ViewerAddr != "",
 	)

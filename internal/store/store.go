@@ -172,6 +172,10 @@ func (s *Store) init(ctx context.Context) error {
 	return nil
 }
 
+func (s *Store) DB() *sqlx.DB {
+	return s.db
+}
+
 func (s *Store) Close() error {
 	return s.db.Close()
 }
