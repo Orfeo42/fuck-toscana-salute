@@ -1,7 +1,7 @@
-import { Box, Button, Group, Stack, Text, TextInput } from "@mantine/core";
+import { Box, Group, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import RFB from "@novnc/novnc";
-import { ClipboardPaste } from "lucide-react";
+import { ClipboardPaste, RefreshCw, Send } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -10,6 +10,8 @@ import {
   type SyntheticEvent,
   type JSX,
 } from "react";
+
+import { IconAction } from "../IconAction";
 
 type Status = "connecting" | "connected" | "disconnected";
 
@@ -127,20 +129,15 @@ export function RemoteViewer(): JSX.Element {
         </Text>
         <Group gap="xs">
           {status === "disconnected" && (
-            <Button size="xs" variant="default" onClick={reconnect}>
-              Riprova
-            </Button>
+            <IconAction label="Riprova" icon={RefreshCw} onClick={reconnect} />
           )}
-          <Button
-            size="xs"
-            variant="default"
-            leftSection={<ClipboardPaste size={14} />}
+          <IconAction
+            label="Incolla"
+            icon={ClipboardPaste}
             onClick={() => {
               void pasteFromDevice();
             }}
-          >
-            Incolla
-          </Button>
+          />
         </Group>
       </Group>
       <Box ref={targetRef} data-testid="remote-target" style={targetStyle} />
@@ -155,7 +152,7 @@ export function RemoteViewer(): JSX.Element {
             }}
             style={{ flex: 1 }}
           />
-          <Button type="submit">Invia</Button>
+          <IconAction label="Invia" icon={Send} tone="primary" type="submit" />
         </Group>
       </form>
     </Stack>

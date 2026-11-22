@@ -1,13 +1,4 @@
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Text,
-} from "@mantine/core";
+import { Alert, Badge, Group, Loader, Paper, Stack, Text } from "@mantine/core";
 import { FileText, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
@@ -18,6 +9,7 @@ import {
   type ReportDocumentBody,
 } from "../../api/client";
 import { CappedList } from "../../components/CappedList";
+import { IconAction } from "../../components/IconAction";
 import { DetailDrawer } from "../../components/DetailDrawer";
 import { ImageViewerModal } from "../../components/ImageViewerModal";
 import { PdfViewerModal } from "../../components/PdfViewerModal";
@@ -184,18 +176,15 @@ export function ReportDetailModal({
                   )}
                 </Stack>
                 {documents.length === 1 ? null : (
-                  <Button
-                    variant="light"
-                    size="compact-sm"
-                    leftSection={<FileText size={16} aria-hidden="true" />}
+                  <IconAction
+                    label={local ? "Apri" : "Apri PDF"}
+                    icon={FileText}
                     loading={opening === document.position}
                     disabled={opening !== undefined}
                     onClick={() => {
                       void openPdf(document);
                     }}
-                  >
-                    {local ? "Apri" : "Apri PDF"}
-                  </Button>
+                  />
                 )}
               </Group>
             </Paper>
@@ -233,17 +222,16 @@ export function ReportDetailModal({
         }
         actions={
           singleDocument === undefined ? undefined : (
-            <Button
-              size="compact-md"
-              leftSection={<FileText size={16} aria-hidden="true" />}
+            <IconAction
+              label={openLabel}
+              icon={FileText}
+              tone="primary"
               loading={opening === singleDocument.position}
               disabled={opening !== undefined}
               onClick={() => {
                 void openPdf(singleDocument);
               }}
-            >
-              {openLabel}
-            </Button>
+            />
           )
         }
         tabs={[

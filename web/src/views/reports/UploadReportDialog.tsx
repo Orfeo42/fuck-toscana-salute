@@ -1,13 +1,5 @@
-import {
-  Button,
-  FileInput,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  TextInput,
-} from "@mantine/core";
-import { HardDrive } from "lucide-react";
+import { FileInput, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { HardDrive, Upload } from "lucide-react";
 import { useContext, useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
@@ -16,6 +8,7 @@ import {
   type ImportDriveRequest,
   type ReportBody,
 } from "../../api/client";
+import { IconAction } from "../../components/IconAction";
 import { GoogleContext } from "../../google/useGoogle";
 import { pickDriveFile } from "../../lib/googlePicker";
 
@@ -183,16 +176,14 @@ function FormBody({
             style={{ flex: 1 }}
           />
           {google?.status?.configured === true && google.status.drive ? (
-            <Button
-              variant="light"
+            <IconAction
+              label="Scegli da Google Drive"
+              icon={HardDrive}
               disabled={busy}
-              leftSection={<HardDrive size={16} aria-hidden="true" />}
               onClick={() => {
                 void importFromDrive();
               }}
-            >
-              Scegli da Google Drive
-            </Button>
+            />
           ) : null}
         </Group>
         <TextInput
@@ -222,14 +213,15 @@ function FormBody({
             {shownError}
           </Text>
         )}
-        <Group justify="flex-end">
-          <Button
+        <Group justify="flex-end" gap="xs">
+          <IconAction
+            label="Carica"
+            icon={Upload}
             type="submit"
+            tone="primary"
             loading={busy}
             disabled={file === null || file.size > maxBytes}
-          >
-            Carica
-          </Button>
+          />
         </Group>
       </Stack>
     </form>

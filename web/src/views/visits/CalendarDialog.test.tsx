@@ -379,13 +379,8 @@ describe("CalendarDialog", () => {
     renderDialog();
 
     expect(await screen.findByText("Già nel calendario")).toBeVisible();
-    const links = screen.getAllByRole("link", {
-      name: "Apri in Google Calendar",
-    });
-    expect(links.length).toBeGreaterThan(0);
-    for (const link of links) {
-      expect(link).toHaveAttribute("href", existingLink);
-    }
+    const link = screen.getByRole("link", { name: "Apri in Google Calendar" });
+    expect(link).toHaveAttribute("href", existingLink);
     expect(
       screen.queryByRole("button", { name: "Aggiungi" }),
     ).not.toBeInTheDocument();
@@ -409,6 +404,15 @@ describe("CalendarDialog", () => {
       body: { regenerate: true, guests: ["guest@example.com"] },
     });
     expect(await screen.findByText(/Aggiunto al calendario/)).toBeVisible();
+  });
+
+  it("renders Aggiungi as an icon button without visible text", async () => {
+    renderDialog();
+
+    const add = await findAdd();
+    expect(add).toHaveAccessibleName("Aggiungi");
+    expect(within(add).queryByText("Aggiungi")).not.toBeInTheDocument();
+    expect(add.querySelector("svg")).not.toBeNull();
   });
 
   it("does not look up when not connected", async () => {

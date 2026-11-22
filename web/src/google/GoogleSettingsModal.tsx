@@ -2,7 +2,6 @@ import {
   Alert,
   Anchor,
   Badge,
-  Button,
   Group,
   List,
   Loader,
@@ -15,6 +14,7 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { Check, LogIn, LogOut, X } from "lucide-react";
 import {
   useEffect,
   useState,
@@ -28,6 +28,7 @@ import {
   type GoogleSettingsRequest,
 } from "../api/client";
 import { CopyButton } from "../components/CopyButton";
+import { IconAction } from "../components/IconAction";
 import { driveFolderId } from "../lib/driveFolder";
 import {
   googleConsoleLinkLabels,
@@ -160,25 +161,23 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
           <Group justify="space-between">
             <Badge color={statusView.color}>{statusView.label}</Badge>
             {status?.configured && !status.connected ? (
-              <Button
-                size="xs"
+              <IconAction
+                label="Accedi con Google"
+                icon={LogIn}
+                tone="primary"
                 onClick={() => {
                   void signIn();
                 }}
-              >
-                Accedi con Google
-              </Button>
+              />
             ) : null}
             {status?.connected ? (
-              <Button
-                size="xs"
-                variant="default"
+              <IconAction
+                label="Scollega"
+                icon={LogOut}
                 onClick={() => {
                   void disconnect();
                 }}
-              >
-                Scollega
-              </Button>
+              />
             ) : null}
           </Group>
           {googleError === undefined ? null : (
@@ -382,17 +381,16 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
             {formError}
           </Text>
         )}
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button
+        <Group justify="flex-end" gap="xs">
+          <IconAction label="Annulla" icon={X} onClick={onClose} />
+          <IconAction
+            label="Salva"
+            icon={Check}
+            tone="primary"
             type="submit"
             loading={saving}
             disabled={guestsError !== undefined}
-          >
-            Salva
-          </Button>
+          />
         </Group>
       </Stack>
     </form>

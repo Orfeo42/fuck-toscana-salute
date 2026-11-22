@@ -152,7 +152,7 @@ interface ActionsProps {
   state: EffectiveState;
   booking: AppointmentBody | undefined;
   now: Date;
-  labelled?: boolean;
+  packed?: boolean;
 }
 
 export function ActionsCell({
@@ -160,7 +160,7 @@ export function ActionsCell({
   state,
   booking,
   now,
-  labelled = false,
+  packed = false,
 }: ActionsProps): JSX.Element {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const at = state.kind === "booked" ? state.at : undefined;
@@ -172,15 +172,12 @@ export function ActionsCell({
       : undefined;
   const bookingId = state.kind === "booked" ? booking?.bookingId : undefined;
 
-  const promemoria = (
-    <PromemoriaLink bookingId={bookingId} labelled={labelled} />
-  );
+  const promemoria = <PromemoriaLink bookingId={bookingId} />;
   const calendar =
     calendarBooking === undefined ? null : (
       <IconAction
         label="Aggiungi a Google Calendar"
         icon={CalendarCheck}
-        labelled={labelled}
         onClick={() => {
           setCalendarOpen(true);
         }}
@@ -196,17 +193,13 @@ export function ActionsCell({
         }}
       />
     ) : null;
-  const pdf = (
-    <PdfLink documentRef={row.fse?.documentRef} labelled={labelled} />
-  );
+  const pdf = <PdfLink documentRef={row.fse?.documentRef} />;
   const book =
-    state.kind === "official" && state.canBook ? (
-      <BookAction labelled={labelled} />
-    ) : null;
+    state.kind === "official" && state.canBook ? <BookAction /> : null;
 
-  if (labelled) {
+  if (packed) {
     return (
-      <Group gap="sm" wrap="wrap">
+      <Group gap="xs" wrap="wrap">
         {promemoria}
         {calendar}
         {calendarDialog}

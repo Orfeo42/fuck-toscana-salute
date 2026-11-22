@@ -1,4 +1,4 @@
-import { Button, Group, Paper, Stack, Text } from "@mantine/core";
+import { Group, Paper, Stack, Text } from "@mantine/core";
 import { MapPinned, Navigation, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
@@ -190,17 +190,14 @@ export function VisitDetailModal({
             state={state}
             booking={booking}
             now={now}
-            labelled
+            packed
           />
-          <Button
-            variant="light"
-            size="xs"
+          <IconAction
+            label="Aggiorna"
+            icon={RefreshCw}
             loading={refreshing}
-            leftSection={<RefreshCw size={14} aria-hidden="true" />}
             onClick={onRefresh}
-          >
-            Aggiorna
-          </Button>
+          />
         </>
       }
       tabs={tabs}

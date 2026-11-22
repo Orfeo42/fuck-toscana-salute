@@ -267,6 +267,17 @@ describe("GoogleSettingsModal", () => {
     expect(screen.getByLabelText("Client ID")).not.toBeVisible();
   });
 
+  it("renders Salva as an icon button without visible text", async () => {
+    mocks.get.mockResolvedValue({ data: savedSettings });
+    renderModal();
+
+    const save = await screen.findByRole("button", { name: "Salva" });
+
+    expect(save).toHaveAttribute("aria-label", "Salva");
+    expect(save).toHaveTextContent("");
+    expect(screen.queryByText("Salva")).toBeNull();
+  });
+
   it("disables Salva for an invalid guest email", async () => {
     const user = userEvent.setup();
     mocks.get.mockResolvedValue({ data: savedSettings });

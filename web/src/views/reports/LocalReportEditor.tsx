@@ -1,16 +1,10 @@
-import {
-  Button,
-  Divider,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Divider, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { Check, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
 import { api, type ReportBody } from "../../api/client";
+import { IconAction } from "../../components/IconAction";
 
 interface Props {
   report: ReportBody;
@@ -115,25 +109,31 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
             {error}
           </Text>
         )}
-        <Button type="submit" loading={busy}>
-          Salva modifiche
-        </Button>
+        <Group justify="flex-end" gap="xs">
+          <IconAction
+            label="Salva modifiche"
+            icon={Check}
+            type="submit"
+            tone="primary"
+            loading={busy}
+          />
+        </Group>
         <Divider mt="md" />
         <Stack gap="xs">
           <Text size="sm" c="dimmed">
             Elimina il referto caricato e i suoi collegamenti.
           </Text>
-          <Button
-            variant="outline"
-            color="red"
-            w="fit-content"
-            disabled={busy}
-            onClick={() => {
-              setConfirming(true);
-            }}
-          >
-            Elimina referto
-          </Button>
+          <Group justify="flex-end" gap="xs">
+            <IconAction
+              label="Elimina referto"
+              icon={Trash2}
+              tone="danger"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(true);
+              }}
+            />
+          </Group>
         </Stack>
       </Stack>
       {confirming ? (
@@ -147,24 +147,23 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
         >
           <Stack gap="sm">
             <Text>Il referto caricato verrà eliminato definitivamente.</Text>
-            <Group justify="flex-end">
-              <Button
-                variant="default"
+            <Group justify="flex-end" gap="xs">
+              <IconAction
+                label="Annulla"
+                icon={X}
                 onClick={() => {
                   setConfirming(false);
                 }}
-              >
-                Annulla
-              </Button>
-              <Button
-                color="red"
+              />
+              <IconAction
+                label="Elimina"
+                icon={Trash2}
+                tone="danger"
                 loading={busy}
                 onClick={() => {
                   void remove();
                 }}
-              >
-                Elimina
-              </Button>
+              />
             </Group>
           </Stack>
         </Modal>

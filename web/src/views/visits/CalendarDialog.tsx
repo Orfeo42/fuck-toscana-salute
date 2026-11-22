@@ -1,7 +1,6 @@
 import {
   Alert,
   Anchor,
-  Button,
   Checkbox,
   Group,
   Modal,
@@ -10,6 +9,13 @@ import {
   TagsInput,
   Text,
 } from "@mantine/core";
+import {
+  CalendarPlus,
+  ExternalLink,
+  RefreshCw,
+  Settings,
+  X,
+} from "lucide-react";
 import { useEffect, useState, type JSX } from "react";
 
 import {
@@ -17,6 +23,7 @@ import {
   type AppointmentBody,
   type CalendarEventBody,
 } from "../../api/client";
+import { IconAction } from "../../components/IconAction";
 import { formatDate, formatTime } from "../../lib/format";
 import { useGoogle } from "../../google/useGoogle";
 import { calendarEventFields } from "./googleCalendar";
@@ -215,9 +222,7 @@ export function CalendarDialog({
   const guestsInvalid = guests.some((guest) => !emailPattern.test(guest));
 
   const configureButton = (
-    <Button variant="default" size="compact-sm" onClick={handleConfigure}>
-      Configura
-    </Button>
+    <IconAction label="Configura" icon={Settings} onClick={handleConfigure} />
   );
 
   return (
@@ -261,15 +266,7 @@ export function CalendarDialog({
           </Group>
         ) : null}
         {existingLink === undefined || result !== undefined ? null : (
-          <Alert color="teal" role="status" title="Già nel calendario">
-            <Anchor
-              href={existingLink}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Apri in Google Calendar
-            </Anchor>
-          </Alert>
+          <Alert color="teal" role="status" title="Già nel calendario" />
         )}
         {status !== undefined && !configured ? (
           <Group gap="xs">
@@ -308,47 +305,41 @@ export function CalendarDialog({
             </Text>
           </Alert>
         )}
-        <Group justify="flex-end">
+        <Group justify="flex-end" gap="xs">
           {result !== undefined ? (
-            <Button onClick={onClose}>Chiudi</Button>
+            <IconAction label="Chiudi" icon={X} onClick={onClose} />
           ) : existingLink !== undefined ? (
             <>
-              <Button
-                component="a"
+              <IconAction
+                label="Apri in Google Calendar"
+                icon={ExternalLink}
                 href={existingLink}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Apri in Google Calendar
-              </Button>
-              <Button
-                variant="default"
+                external
+              />
+              <IconAction
+                label="Rigenera"
+                icon={RefreshCw}
                 disabled={guestsInvalid}
                 loading={busy}
                 onClick={() => {
                   void handleAdd(true);
                 }}
-              >
-                Rigenera
-              </Button>
-              <Button variant="default" onClick={onClose}>
-                Chiudi
-              </Button>
+              />
+              <IconAction label="Chiudi" icon={X} onClick={onClose} />
             </>
           ) : (
             <>
-              <Button variant="default" onClick={onClose}>
-                Annulla
-              </Button>
-              <Button
+              <IconAction label="Annulla" icon={X} onClick={onClose} />
+              <IconAction
+                label="Aggiungi"
+                icon={CalendarPlus}
+                tone="primary"
                 disabled={!configured || checking || guestsInvalid}
                 loading={busy}
                 onClick={() => {
                   void handleAdd(false);
                 }}
-              >
-                Aggiungi
-              </Button>
+              />
             </>
           )}
         </Group>

@@ -9,13 +9,11 @@ import { PdfViewerModal } from "./PdfViewerModal";
 interface Props {
   documentRef: string | undefined;
   label?: string;
-  labelled?: boolean;
 }
 
 export function PdfLink({
   documentRef,
   label = "Apri ricetta (PDF)",
-  labelled = false,
 }: Props): JSX.Element | null {
   const [opened, setOpened] = useState(false);
   if (documentRef === undefined || documentRef === "") {
@@ -26,7 +24,6 @@ export function PdfLink({
       <IconAction
         label={label}
         icon={FileText}
-        labelled={labelled}
         onClick={() => {
           setOpened(true);
         }}

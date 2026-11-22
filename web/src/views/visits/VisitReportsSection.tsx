@@ -1,6 +1,5 @@
 import {
   ActionIcon,
-  Button,
   Group,
   Select,
   Stack,
@@ -9,7 +8,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Unlink, Upload } from "lucide-react";
+import { FileUp, Unlink, Upload } from "lucide-react";
 import { useState, type JSX } from "react";
 
 import {
@@ -19,6 +18,7 @@ import {
   type RowBody,
 } from "../../api/client";
 import { CappedList } from "../../components/CappedList";
+import { IconAction } from "../../components/IconAction";
 import { formatDate } from "../../lib/format";
 import { ReportDetailModal } from "../reports/ReportDetailModal";
 import { UploadReportDialog } from "../reports/UploadReportDialog";
@@ -167,16 +167,15 @@ export function VisitReportsSection({
           }
         }}
       />
-      <Button
-        variant="light"
-        w="fit-content"
-        leftSection={<Upload size={16} aria-hidden="true" />}
-        onClick={() => {
-          setUploading(true);
-        }}
-      >
-        Carica referto
-      </Button>
+      <Group>
+        <IconAction
+          label="Carica referto"
+          icon={FileUp}
+          onClick={() => {
+            setUploading(true);
+          }}
+        />
+      </Group>
       {uploading ? (
         <UploadReportDialog
           opened

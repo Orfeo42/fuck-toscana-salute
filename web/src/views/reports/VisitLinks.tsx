@@ -1,5 +1,5 @@
-import { Group, Select, Stack, Text } from "@mantine/core";
-import { Unlink } from "lucide-react";
+import { Anchor, Group, Select, Stack, Text } from "@mantine/core";
+import { SquareArrowOutUpRight, Unlink } from "lucide-react";
 import { useState } from "react";
 import type { JSX } from "react";
 
@@ -7,6 +7,7 @@ import { api, type ReportRefBody } from "../../api/client";
 import { CappedList } from "../../components/CappedList";
 import { IconAction } from "../../components/IconAction";
 import { useHealthData } from "../../data/useHealthData";
+import { requestOpenVisit } from "../../lib/openVisit";
 import { buildRows, rowTitle } from "../visits/filter";
 
 interface Props {
@@ -77,18 +78,36 @@ export function VisitLinks({
         renderItem={({ nre, row }) => (
           <Group justify="space-between" wrap="nowrap">
             <Stack gap={0}>
-              <Text>{row === undefined ? nre : rowTitle(row)}</Text>
+              <Anchor
+                component="button"
+                type="button"
+                ta="left"
+                onClick={() => {
+                  requestOpenVisit(nre);
+                }}
+              >
+                {row === undefined ? nre : rowTitle(row)}
+              </Anchor>
               <Text size="xs" c="dimmed">
                 {nre}
               </Text>
             </Stack>
-            <IconAction
-              label={`Scollega ${nre}`}
-              icon={Unlink}
-              onClick={() => {
-                void change(nre, false);
-              }}
-            />
+            <Group gap="xs" wrap="nowrap">
+              <IconAction
+                label="Apri visita"
+                icon={SquareArrowOutUpRight}
+                onClick={() => {
+                  requestOpenVisit(nre);
+                }}
+              />
+              <IconAction
+                label={`Scollega ${nre}`}
+                icon={Unlink}
+                onClick={() => {
+                  void change(nre, false);
+                }}
+              />
+            </Group>
           </Group>
         )}
       />

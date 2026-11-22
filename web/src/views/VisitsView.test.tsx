@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -21,6 +22,7 @@ import type {
 import { HealthDataProvider } from "../data/HealthDataProvider";
 import { GoogleContext } from "../google/useGoogle";
 import { formatDate } from "../lib/format";
+import { clearRequestedVisit, requestOpenVisit } from "../lib/openVisit";
 import { SessionContext } from "../session/useSession";
 import { callsTo } from "../test/calls";
 import { VisitsView } from "./VisitsView";
@@ -323,6 +325,10 @@ describe("VisitsView", () => {
     mocks.refreshPortals.mockResolvedValue(true);
     window.location.hash = "";
     mockData([], []);
+  });
+
+  afterEach(() => {
+    clearRequestedVisit();
   });
 
   it("shows the loading state", () => {
@@ -641,7 +647,7 @@ describe("VisitsView", () => {
     ).not.toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "Prenota sul CUP" }),
-    ).toHaveTextContent("Prenota sul CUP");
+    ).toBeVisible();
   });
 
   it("opens the detail modal on row click for a booked row with appointment and maps", async () => {
@@ -669,7 +675,7 @@ describe("VisitsView", () => {
       within(dialog).getByRole("button", {
         name: "Aggiungi a Google Calendar",
       }),
-    ).toHaveTextContent("Aggiungi a Google Calendar");
+    ).toBeVisible();
   });
 
   it("opens the detail modal with Enter on a focused row", async () => {
@@ -1262,6 +1268,50 @@ describe("VisitsView", () => {
     });
     expect(screen.getByRole("searchbox", { name: "Cerca" })).toHaveValue("");
     spy.mockRestore();
+  });
+
+  it("opens the drawer of a requested visit", async () => {
+    renderView();
+    await screen.findByText("Visita esempio");
+
+    act(() => {
+      requestOpenVisit("0900a0000000001");
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Visita esempio" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the drawer of a requested visit hidden by the default filter", async () => {
+    const user = userEvent.setup();
+    renderView();
+    await screen.findByText("Visita esempio");
+    expect(screen.queryByText("Esame chiuso esempio")).not.toBeInTheDocument();
+
+    act(() => {
+      requestOpenVisit("0900A0000000003");
+    });
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Esame chiuso esempio",
+    });
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(dialog).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText("Esame chiuso esempio")).toBeInTheDocument();
+  });
+
+  it("ignores a requested visit that does not exist", async () => {
+    renderView();
+    await screen.findByText("Visita esempio");
+
+    act(() => {
+      requestOpenVisit("0900A0000000999");
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("shows scade il for a valid status 3 prescription", async () => {

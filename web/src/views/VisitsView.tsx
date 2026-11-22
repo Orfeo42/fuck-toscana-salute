@@ -9,7 +9,7 @@ import {
 } from "@mantine/core";
 import { RefreshCw, Search } from "lucide-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 
 import { CopyButton } from "../components/CopyButton";
@@ -17,6 +17,7 @@ import { StopClick } from "../components/StopClick";
 import { StatusColumnFilter } from "../components/StatusColumnFilter";
 import { useHealthData } from "../data/useHealthData";
 import { formatDate, formatUpdated } from "../lib/format";
+import { clearRequestedVisit, useRequestedVisit } from "../lib/openVisit";
 import { tableColors } from "../theme";
 import { focusId, useFocusTarget } from "../lib/useFocusTarget";
 import { useSort } from "../lib/useSort";
@@ -74,6 +75,10 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
   const [excluded, setExcluded] = useState<readonly string[]>(
     defaultExcludedLabels,
   );
+  const requested = useRequestedVisit();
+  const [handledRequest, setHandledRequest] = useState<string | undefined>(
+    undefined,
+  );
   const [search, setSearch] = useState("");
   const [detailNre, setDetailNre] = useState<string | undefined>(undefined);
   const [selectedNres, setSelectedNres] = useState<readonly string[]>([]);
@@ -117,6 +122,29 @@ export function VisitsView({ now }: Props = {}): JSX.Element {
       setSearch("");
     }
   }
+
+  if (requested === undefined && handledRequest !== undefined) {
+    setHandledRequest(undefined);
+  }
+  if (dataReady && requested !== undefined && requested !== handledRequest) {
+    setHandledRequest(requested);
+    const target = data.find((row) => row.nre.toUpperCase() === requested);
+    if (target !== undefined) {
+      const shown = visible.some((row) => row.nre === target.nre);
+      if (!shown) {
+        const label = rowLabel(target, context);
+        setExcluded(excluded.filter((item) => item !== label));
+        setSearch("");
+      }
+      setDetailNre(target.nre);
+    }
+  }
+
+  useEffect(() => {
+    if (dataReady && requested !== undefined) {
+      clearRequestedVisit();
+    }
+  }, [dataReady, requested]);
 
   const columns: DataTableColumn<RowBody>[] = [
     {

@@ -1,10 +1,11 @@
-import { Button, Modal, Stack } from "@mantine/core";
+import { Group, Modal, Stack } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
 import { CopyButton } from "../../components/CopyButton";
 import { DetailField, DetailSection } from "../../components/DetailSection";
+import { IconAction } from "../../components/IconAction";
 import { PdfLink } from "../../components/PdfLink";
 import { StatusBadge } from "../../components/StatusBadge";
 import { formatDate } from "../../lib/format";
@@ -47,16 +48,15 @@ export function DrugDetailModal({
           </DetailField>
         </DetailSection>
         <DetailSection title="Azioni">
-          <PdfLink documentRef={fse.documentRef} labelled />
-          <Button
-            variant="light"
-            w="fit-content"
-            loading={refreshing}
-            leftSection={<RefreshCw size={16} aria-hidden="true" />}
-            onClick={onRefresh}
-          >
-            Aggiorna
-          </Button>
+          <Group gap="xs">
+            <PdfLink documentRef={fse.documentRef} />
+            <IconAction
+              label="Aggiorna"
+              icon={RefreshCw}
+              loading={refreshing}
+              onClick={onRefresh}
+            />
+          </Group>
         </DetailSection>
       </Stack>
     </Modal>

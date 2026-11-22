@@ -57,32 +57,51 @@ describe("IconAction", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Copia");
   });
 
-  it("renders a labelled button with visible text", async () => {
+  it("submits a form as a submit button", async () => {
     const user = userEvent.setup();
-    const onClick = vi.fn();
-    render(<IconAction label="Copia" icon={Copy} onClick={onClick} labelled />);
+    const onSubmit = vi.fn((event: Event) => {
+      event.preventDefault();
+    });
+    render(
+      <form
+        onSubmit={(event) => {
+          onSubmit(event.nativeEvent);
+        }}
+      >
+        <IconAction label="Salva" icon={Copy} type="submit" tone="primary" />
+      </form>,
+    );
 
-    const button = screen.getByRole("button", { name: "Copia" });
-    expect(button).toHaveTextContent("Copia");
-    await user.click(button);
-    expect(onClick).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Salva" }));
+
+    expect(onSubmit).toHaveBeenCalledOnce();
   });
 
-  it("renders a labelled external link with visible text", () => {
+  it("does not call onClick when disabled", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
     render(
       <IconAction
-        label="Apri"
+        label="Elimina"
         icon={Copy}
-        href="https://example.com/"
-        external
-        labelled
+        tone="danger"
+        disabled
+        onClick={onClick}
       />,
     );
 
-    const link = screen.getByRole("link", { name: "Apri" });
-    expect(link).toHaveTextContent("Apri");
-    expect(link).toHaveAttribute("href", "https://example.com/");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    const button = screen.getByRole("button", { name: "Elimina" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("defaults to a plain button type", () => {
+    render(<IconAction label="Copia" icon={Copy} onClick={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Copia" })).toHaveAttribute(
+      "type",
+      "button",
+    );
   });
 });

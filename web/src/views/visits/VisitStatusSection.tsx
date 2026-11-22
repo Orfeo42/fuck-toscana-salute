@@ -1,8 +1,10 @@
-import { Button, Select } from "@mantine/core";
+import { Group, Select } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { RotateCcw } from "lucide-react";
 import type { JSX } from "react";
 
 import { api, type RowBody } from "../../api/client";
+import { IconAction } from "../../components/IconAction";
 import {
   prescriptionStatuses,
   type SelectableStatus,
@@ -84,15 +86,15 @@ export function VisitStatusSection({ row, onChanged }: Props): JSX.Element {
         }}
       />
       {row.overridden ? (
-        <Button
-          variant="light"
-          w="fit-content"
-          onClick={() => {
-            void resetStatus();
-          }}
-        >
-          Usa lo stato di Toscana Salute
-        </Button>
+        <Group>
+          <IconAction
+            label="Usa lo stato di Toscana Salute"
+            icon={RotateCcw}
+            onClick={() => {
+              void resetStatus();
+            }}
+          />
+        </Group>
       ) : null}
     </>
   );
