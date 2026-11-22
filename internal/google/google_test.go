@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ import (
 	"fuck-toscana-salute/internal/vault"
 )
 
-const testRedirect = "http://127.0.0.1:8787/api/google/callback"
+const testClientID = "123456789012-abc.apps.googleusercontent.com"
 
 type tokenServer struct {
 	srv   *httptest.Server
@@ -44,7 +43,7 @@ func newTokenServer(t *testing.T, status int, body string) *tokenServer {
 }
 
 func testSettings() Settings {
-	return Settings{ClientID: "client-id" + clientIDSuffix, ClientSecret: "client-secret", CalendarID: "primary"}
+	return Settings{ClientID: testClientID, ClientSecret: "client-secret", CalendarID: "primary"}
 }
 
 func storedSettings(t *testing.T, s Settings) *MockSettingsStore {
@@ -70,13 +69,6 @@ func newTestClient(settings SettingsStore, tokens TokenStore) *Client {
 	return c
 }
 
-func stateFrom(t *testing.T, authURL string) string {
-	t.Helper()
-	parsed, err := url.Parse(authURL)
-	require.NoError(t, err)
-	return parsed.Query().Get("state")
-}
-
 func TestStatus(t *testing.T) {
 	ctx := context.Background()
 
@@ -90,7 +82,7 @@ func TestStatus(t *testing.T) {
 		store := &MockTokenStore{LoadFunc: func(context.Context) (*oauth2.Token, error) { return nil, nil }}
 		got, err := newTestClient(storedSettings(t, testSettings()), store).Status(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, Status{Configured: true}, got)
+		assert.Equal(t, Status{Configured: true, ClientID: testClientID}, got)
 	})
 
 	t.Run("connected when a token is stored", func(t *testing.T) {
@@ -99,7 +91,14 @@ func TestStatus(t *testing.T) {
 		}}
 		got, err := newTestClient(storedSettings(t, testSettings()), store).Status(ctx)
 		require.NoError(t, err)
-		assert.Equal(t, Status{Configured: true, Connected: true}, got)
+		assert.Equal(t, Status{Configured: true, Connected: true, ClientID: testClientID}, got)
+	})
+
+	t.Run("drive is on when an api key is set", func(t *testing.T) {
+		store := &MockTokenStore{LoadFunc: func(context.Context) (*oauth2.Token, error) { return nil, nil }}
+		got, err := newTestClient(storedSettings(t, pickerSettings()), store).Status(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, Status{Configured: true, ClientID: testClientID, Drive: true}, got)
 	})
 
 	t.Run("store failure is returned", func(t *testing.T) {
@@ -109,90 +108,19 @@ func TestStatus(t *testing.T) {
 	})
 }
 
-func TestAuthURL(t *testing.T) {
+func TestExchangeCode(t *testing.T) {
 	ctx := context.Background()
+	const origin = "http://127.0.0.1:8800"
+	const scopes = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file"
+	const goodBody = `{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600,"scope":"` + scopes + `"}`
 
 	t.Run("not configured", func(t *testing.T) {
-		_, err := newTestClient(emptySettings(), &MockTokenStore{}).AuthURL(ctx, testRedirect)
+		err := newTestClient(emptySettings(), &MockTokenStore{}).ExchangeCode(ctx, "c", origin)
 		require.ErrorIs(t, err, ErrNotConfigured)
 	})
 
-	t.Run("carries state, pkce, offline access, consent, scopes and redirect", func(t *testing.T) {
-		got, err := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{}).AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-
-		parsed, err := url.Parse(got)
-		require.NoError(t, err)
-		q := parsed.Query()
-		assert.NotEmpty(t, q.Get("state"))
-		assert.NotEmpty(t, q.Get("code_challenge"))
-		assert.Equal(t, "S256", q.Get("code_challenge_method"))
-		assert.Equal(t, "offline", q.Get("access_type"))
-		assert.Equal(t, "consent", q.Get("prompt"))
-		assert.Equal(t, "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file", q.Get("scope"))
-		assert.Equal(t, testRedirect, q.Get("redirect_uri"))
-	})
-
-	t.Run("uses the given redirect for each call", func(t *testing.T) {
-		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
-		got, err := c.AuthURL(ctx, "https://example.test/other")
-		require.NoError(t, err)
-		parsed, err := url.Parse(got)
-		require.NoError(t, err)
-		assert.Equal(t, "https://example.test/other", parsed.Query().Get("redirect_uri"))
-		assert.Equal(t, testSettings().ClientID, parsed.Query().Get("client_id"))
-	})
-
-	t.Run("each call gets a fresh state", func(t *testing.T) {
-		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
-		first, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-		second, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-		assert.NotEqual(t, stateFrom(t, first), stateFrom(t, second))
-	})
-
-	t.Run("expired pending states are purged", func(t *testing.T) {
-		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
-		c.now = func() time.Time { return now }
-		_, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-
-		now = now.Add(stateTTL + time.Second)
-		_, err = c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-		assert.Len(t, c.pending, 1)
-	})
-}
-
-func TestExchange(t *testing.T) {
-	ctx := context.Background()
-	const tokenBody = `{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600}`
-
-	t.Run("not configured", func(t *testing.T) {
-		err := newTestClient(emptySettings(), &MockTokenStore{}).Exchange(ctx, "s", "c")
-		require.ErrorIs(t, err, ErrNotConfigured)
-	})
-
-	t.Run("unknown state", func(t *testing.T) {
-		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
-		require.ErrorIs(t, c.Exchange(ctx, "nope", "code"), ErrBadState)
-	})
-
-	t.Run("expired state", func(t *testing.T) {
-		now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-		c := newTestClient(storedSettings(t, testSettings()), &MockTokenStore{})
-		c.now = func() time.Time { return now }
-		authURL, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-
-		now = now.Add(stateTTL)
-		require.ErrorIs(t, c.Exchange(ctx, stateFrom(t, authURL), "code"), ErrBadState)
-	})
-
-	t.Run("saves the token and consumes the state", func(t *testing.T) {
-		ts := newTokenServer(t, http.StatusOK, tokenBody)
+	t.Run("saves the token and sends code and origin without verifier", func(t *testing.T) {
+		ts := newTokenServer(t, http.StatusOK, goodBody)
 		var saved *oauth2.Token
 		store := &MockTokenStore{SaveFunc: func(_ context.Context, token *oauth2.Token) error {
 			saved = token
@@ -200,58 +128,64 @@ func TestExchange(t *testing.T) {
 		}}
 		c := newTestClient(storedSettings(t, testSettings()), store)
 		c.endpoint.TokenURL = ts.srv.URL
-		authURL, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
-		state := stateFrom(t, authURL)
 
-		require.NoError(t, c.Exchange(ctx, state, "auth-code"))
+		require.NoError(t, c.ExchangeCode(ctx, "auth-code", origin))
 		require.NotNil(t, saved)
 		assert.Equal(t, "at", saved.AccessToken)
 		assert.Equal(t, "rt", saved.RefreshToken)
 		require.Len(t, ts.forms, 1)
 		assert.Equal(t, "auth-code", ts.forms[0].Get("code"))
-		assert.NotEmpty(t, ts.forms[0].Get("code_verifier"))
-
-		require.ErrorIs(t, c.Exchange(ctx, state, "auth-code"), ErrBadState)
-		assert.Len(t, store.SaveCalls(), 1)
+		assert.Equal(t, origin, ts.forms[0].Get("redirect_uri"))
+		assert.Empty(t, ts.forms[0].Get("code_verifier"))
 	})
 
-	t.Run("exchange uses the redirect saved for the state", func(t *testing.T) {
-		ts := newTokenServer(t, http.StatusOK, tokenBody)
-		store := &MockTokenStore{SaveFunc: func(context.Context, *oauth2.Token) error { return nil }}
+	t.Run("missing refresh token revokes the grant and saves nothing", func(t *testing.T) {
+		ts := newTokenServer(t, http.StatusOK, `{"access_token":"at","token_type":"Bearer","expires_in":3600,"scope":"`+scopes+`"}`)
+		rev := newTokenServer(t, http.StatusOK, `{}`)
+		store := &MockTokenStore{}
 		c := newTestClient(storedSettings(t, testSettings()), store)
 		c.endpoint.TokenURL = ts.srv.URL
-		authURL, err := c.AuthURL(ctx, "https://example.test/other")
-		require.NoError(t, err)
+		c.revokeURL = rev.srv.URL
 
-		require.NoError(t, c.Exchange(ctx, stateFrom(t, authURL), "auth-code"))
-		require.Len(t, ts.forms, 1)
-		assert.Equal(t, "https://example.test/other", ts.forms[0].Get("redirect_uri"))
+		require.ErrorIs(t, c.ExchangeCode(ctx, "code", origin), ErrNoRefreshToken)
+		require.Len(t, rev.forms, 1)
+		assert.Equal(t, "at", rev.forms[0].Get("token"))
+		assert.Empty(t, store.SaveCalls())
 	})
 
-	t.Run("token endpoint rejection is returned and nothing saved", func(t *testing.T) {
+	t.Run("missing scope revokes the grant and saves nothing", func(t *testing.T) {
+		ts := newTokenServer(t, http.StatusOK, `{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600,"scope":"https://www.googleapis.com/auth/calendar.events"}`)
+		rev := newTokenServer(t, http.StatusOK, `{}`)
+		store := &MockTokenStore{}
+		c := newTestClient(storedSettings(t, testSettings()), store)
+		c.endpoint.TokenURL = ts.srv.URL
+		c.revokeURL = rev.srv.URL
+
+		require.ErrorIs(t, c.ExchangeCode(ctx, "code", origin), ErrScopesMissing)
+		require.Len(t, rev.forms, 1)
+		assert.Equal(t, "rt", rev.forms[0].Get("token"))
+		assert.Empty(t, store.SaveCalls())
+	})
+
+	t.Run("token endpoint rejection is wrapped and nothing saved", func(t *testing.T) {
 		ts := newTokenServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`)
 		store := &MockTokenStore{}
 		c := newTestClient(storedSettings(t, testSettings()), store)
 		c.endpoint.TokenURL = ts.srv.URL
-		authURL, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
 
-		err = c.Exchange(ctx, stateFrom(t, authURL), "bad")
+		err := c.ExchangeCode(ctx, "bad", origin)
 		var retrieveErr *oauth2.RetrieveError
 		require.ErrorAs(t, err, &retrieveErr)
 		assert.Empty(t, store.SaveCalls())
 	})
 
 	t.Run("save failure is returned", func(t *testing.T) {
-		ts := newTokenServer(t, http.StatusOK, tokenBody)
+		ts := newTokenServer(t, http.StatusOK, goodBody)
 		store := &MockTokenStore{SaveFunc: func(context.Context, *oauth2.Token) error { return errors.New("keyring down") }}
 		c := newTestClient(storedSettings(t, testSettings()), store)
 		c.endpoint.TokenURL = ts.srv.URL
-		authURL, err := c.AuthURL(ctx, testRedirect)
-		require.NoError(t, err)
 
-		require.Error(t, c.Exchange(ctx, stateFrom(t, authURL), "code"))
+		require.Error(t, c.ExchangeCode(ctx, "code", origin))
 	})
 }
 

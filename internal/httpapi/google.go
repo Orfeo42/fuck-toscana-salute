@@ -15,37 +15,37 @@ type googleStatusOutput struct {
 }
 
 type GoogleStatusBody struct {
-	Configured bool `json:"configured"`
-	Connected  bool `json:"connected"`
+	Configured bool   `json:"configured"`
+	Connected  bool   `json:"connected"`
+	ClientID   string `json:"clientId"`
+	Drive      bool   `json:"drive"`
 }
 
-type googleConnectOutput struct {
-	Body GoogleConnectBody
+type originInput struct {
+	origin string
 }
 
-type GoogleConnectBody struct {
-	AuthURL string `json:"authUrl"`
-}
-
-type redirectInput struct {
-	redirectURL string
-}
-
-func (i *redirectInput) Resolve(ctx huma.Context) []error {
+func (i *originInput) Resolve(ctx huma.Context) []error {
 	scheme := "http"
 	if ctx.Header("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	i.redirectURL = scheme + "://" + ctx.Host() + google.CallbackPath
+	i.origin = scheme + "://" + ctx.Host()
 	return nil
 }
 
-type googleConnectInput struct {
-	redirectInput
+type googleSettingsInput struct {
+	originInput
 }
 
-type googleSettingsInput struct {
-	redirectInput
+type exchangeGoogleCodeInput struct {
+	originInput
+	RequestedWith string `header:"X-Requested-With" required:"true" enum:"XmlHttpRequest"`
+	Body          GoogleCodeRequest
+}
+
+type GoogleCodeRequest struct {
+	Code string `json:"code" required:"true" minLength:"1" maxLength:"2048"`
 }
 
 type googleSettingsOutput struct {
@@ -53,13 +53,12 @@ type googleSettingsOutput struct {
 }
 
 type GoogleSettingsBody struct {
-	ClientID      string `json:"clientId"`
-	CalendarID    string `json:"calendarId"`
-	DriveFolderID string `json:"driveFolderId"`
-	APIKey        string `json:"apiKey"`
-	AppID         string `json:"appId"`
-	HasSecret     bool   `json:"hasSecret"`
-	RedirectURI   string `json:"redirectUri"`
+	ClientID         string `json:"clientId"`
+	CalendarID       string `json:"calendarId"`
+	DriveFolderID    string `json:"driveFolderId"`
+	APIKey           string `json:"apiKey"`
+	HasSecret        bool   `json:"hasSecret"`
+	JavaScriptOrigin string `json:"javascriptOrigin"`
 }
 
 type saveGoogleSettingsInput struct {
@@ -72,7 +71,6 @@ type GoogleSettingsRequest struct {
 	CalendarID    string `json:"calendarId,omitempty" maxLength:"200"`
 	DriveFolderID string `json:"driveFolderId,omitempty" maxLength:"100"`
 	APIKey        string `json:"apiKey,omitempty" maxLength:"100"`
-	AppID         string `json:"appId,omitempty" maxLength:"30"`
 }
 
 type createCalendarEventInput struct {
@@ -110,20 +108,20 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 		if err != nil {
 			return nil, toHTTPError(ctx, "get-google-status", err)
 		}
-		return &googleStatusOutput{Body: GoogleStatusBody{Configured: status.Configured, Connected: status.Connected}}, nil
+		return &googleStatusOutput{Body: GoogleStatusBody{Configured: status.Configured, Connected: status.Connected, ClientID: status.ClientID, Drive: status.Drive}}, nil
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID:   "start-google-connect",
+		OperationID:   "exchange-google-code",
 		Method:        http.MethodPost,
-		Path:          "/api/google/connect",
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, in *googleConnectInput) (*googleConnectOutput, error) {
-		authURL, err := g.AuthURL(ctx, in.redirectURL)
-		if err != nil {
-			return nil, toHTTPError(ctx, "start-google-connect", err)
+		Path:          "/api/google/code",
+		DefaultStatus: http.StatusNoContent,
+		Middlewares:   sameOrigin(api),
+	}, func(ctx context.Context, in *exchangeGoogleCodeInput) (*emptyOutput, error) {
+		if err := g.ExchangeCode(ctx, in.Body.Code, in.origin); err != nil {
+			return nil, toHTTPError(ctx, "exchange-google-code", err)
 		}
-		return &googleConnectOutput{Body: GoogleConnectBody{AuthURL: authURL}}, nil
+		return &emptyOutput{}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -137,13 +135,12 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 			return nil, toHTTPError(ctx, "get-google-settings", err)
 		}
 		return &googleSettingsOutput{Body: GoogleSettingsBody{
-			ClientID:      settings.ClientID,
-			CalendarID:    settings.CalendarID,
-			DriveFolderID: settings.DriveFolderID,
-			APIKey:        settings.APIKey,
-			AppID:         settings.AppID,
-			HasSecret:     settings.HasSecret,
-			RedirectURI:   in.redirectURL,
+			ClientID:         settings.ClientID,
+			CalendarID:       settings.CalendarID,
+			DriveFolderID:    settings.DriveFolderID,
+			APIKey:           settings.APIKey,
+			HasSecret:        settings.HasSecret,
+			JavaScriptOrigin: in.origin,
 		}}, nil
 	})
 
@@ -160,7 +157,6 @@ func registerGoogle(api huma.API, g Google, docs Documents) {
 			CalendarID:    in.Body.CalendarID,
 			DriveFolderID: in.Body.DriveFolderID,
 			APIKey:        in.Body.APIKey,
-			AppID:         in.Body.AppID,
 		})
 		if err != nil {
 			return nil, toHTTPError(ctx, "save-google-settings", err)

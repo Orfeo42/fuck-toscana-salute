@@ -97,11 +97,16 @@ function renderMenu(openSettings = vi.fn()): void {
   render(
     <GoogleContext
       value={{
-        status: { configured: true, connected: true },
+        status: {
+          configured: true,
+          connected: true,
+          clientId: "123456789012-abc.apps.googleusercontent.com",
+          drive: false,
+        },
         loading: false,
         error: undefined,
         refresh: vi.fn(),
-        connect: vi.fn(),
+        signIn: vi.fn(),
         disconnect: vi.fn(),
         openSettings,
       }}
@@ -248,7 +253,7 @@ describe("SessionMenu", () => {
     await openMenu();
 
     expect(
-      screen.getByRole("menuitem", { name: "Scollega Google Calendar" }),
+      screen.getByRole("menuitem", { name: "Scollega Google" }),
     ).toBeVisible();
   });
 

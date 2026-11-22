@@ -84,7 +84,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/google/connect": {
+    "/api/google/code": {
         parameters: {
             query?: never;
             header?: never;
@@ -93,7 +93,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["start-google-connect"];
+        post: operations["exchange-google-code"];
         delete?: never;
         options?: never;
         head?: never;
@@ -477,14 +477,14 @@ export interface components {
             nre: string;
             reason: string;
         };
-        GoogleConnectBody: {
+        GoogleCodeRequest: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/GoogleConnectBody.json
+             * @example https://example.com/schemas/GoogleCodeRequest.json
              */
             readonly $schema?: string;
-            authUrl: string;
+            code: string;
         };
         GoogleSettingsBody: {
             /**
@@ -494,12 +494,11 @@ export interface components {
              */
             readonly $schema?: string;
             apiKey: string;
-            appId: string;
             calendarId: string;
             clientId: string;
             driveFolderId: string;
             hasSecret: boolean;
-            redirectUri: string;
+            javascriptOrigin: string;
         };
         GoogleSettingsRequest: {
             /**
@@ -509,7 +508,6 @@ export interface components {
              */
             readonly $schema?: string;
             apiKey?: string;
-            appId?: string;
             calendarId?: string;
             clientId: string;
             clientSecret?: string;
@@ -522,8 +520,10 @@ export interface components {
              * @example https://example.com/schemas/GoogleStatusBody.json
              */
             readonly $schema?: string;
+            clientId: string;
             configured: boolean;
             connected: boolean;
+            drive: boolean;
         };
         ImportDriveRequest: {
             /**
@@ -995,23 +995,27 @@ export interface operations {
             };
         };
     };
-    "start-google-connect": {
+    "exchange-google-code": {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Requested-With": "XmlHttpRequest";
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleCodeRequest"];
+            };
+        };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["GoogleConnectBody"];
-                };
+                content?: never;
             };
             /** @description Error */
             default: {

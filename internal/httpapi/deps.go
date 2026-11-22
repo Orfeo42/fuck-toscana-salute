@@ -51,7 +51,7 @@ type Freshness interface {
 //go:generate moq -out google_mock.go . Google:MockGoogle
 type Google interface {
 	Status(ctx context.Context) (google.Status, error)
-	AuthURL(ctx context.Context, redirectURL string) (string, error)
+	ExchangeCode(ctx context.Context, code, origin string) error
 	Settings(ctx context.Context) (google.Settings, error)
 	SaveSettings(ctx context.Context, s google.Settings) error
 	Disconnect(ctx context.Context) error

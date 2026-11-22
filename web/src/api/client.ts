@@ -13,6 +13,7 @@ export type PrescriptionsBody = components["schemas"]["PrescriptionsBody"];
 export type RowBody = components["schemas"]["RowBody"];
 export type PrescriptionCUPBody = components["schemas"]["PrescriptionCUPBody"];
 export type PrescriptionFSEBody = components["schemas"]["PrescriptionFSEBody"];
+export type GoogleCodeRequest = components["schemas"]["GoogleCodeRequest"];
 export type GoogleStatusBody = components["schemas"]["GoogleStatusBody"];
 export type CalendarEventBody = components["schemas"]["CalendarEventBody"];
 export type UnitBody = components["schemas"]["UnitBody"];

@@ -32,13 +32,20 @@ function appointment(withBooking = true): AppointmentBody {
   };
 }
 
-const connected: GoogleStatusBody = { configured: true, connected: true };
+const clientId = "123456789012-abc.apps.googleusercontent.com";
+const connected: GoogleStatusBody = {
+  configured: true,
+  connected: true,
+  clientId,
+  drive: false,
+};
 
 function renderDialog(
   options: {
     status?: GoogleStatusBody;
     appt?: AppointmentBody;
-    connect?: () => Promise<void>;
+    signIn?: () => Promise<boolean>;
+    refresh?: () => void;
     openSettings?: () => void;
     onClose?: () => void;
   } = {},
@@ -49,8 +56,8 @@ function renderDialog(
         status: options.status ?? connected,
         loading: false,
         error: undefined,
-        refresh: vi.fn(),
-        connect: options.connect ?? vi.fn(),
+        refresh: options.refresh ?? vi.fn(),
+        signIn: options.signIn ?? vi.fn().mockResolvedValue(true),
         disconnect: vi.fn(),
         openSettings: options.openSettings ?? vi.fn(),
       }}
@@ -211,21 +218,18 @@ describe("CalendarDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("shows the expired link error with a connect button on 401", async () => {
+  it("refreshes and asks to retry on 401", async () => {
     const user = userEvent.setup();
-    const connect = vi.fn().mockResolvedValue(undefined);
+    const refresh = vi.fn();
     failWith(401, "google_not_connected");
-    renderDialog({ connect });
+    renderDialog({ refresh });
 
     await user.click(screen.getByRole("button", { name: "Aggiungi" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Collegamento Google scaduto: ricollega.",
+      "Accesso a Google scaduto: premi di nuovo Aggiungi",
     );
-    await user.click(
-      screen.getByRole("button", { name: "Collega Google Calendar" }),
-    );
-    expect(connect).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
   });
 
   it("shows the missing promemoria error on 404", async () => {
@@ -290,23 +294,43 @@ describe("CalendarDialog", () => {
     );
   });
 
-  it("offers connect and disables Aggiungi when not connected", async () => {
+  it("signs in before posting the event when not connected", async () => {
     const user = userEvent.setup();
-    const connect = vi.fn().mockResolvedValue(undefined);
-    renderDialog({ status: { configured: true, connected: false }, connect });
+    const signIn = vi.fn().mockResolvedValue(true);
+    mocks.post.mockResolvedValue({
+      data: { created: true, htmlLink: "https://calendar.example.com/e/1" },
+    });
+    renderDialog({
+      status: { ...connected, connected: false },
+      signIn,
+    });
 
-    expect(screen.getByRole("button", { name: "Aggiungi" })).toBeDisabled();
-    await user.click(
-      screen.getByRole("button", { name: "Collega Google Calendar" }),
-    );
-    expect(connect).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+
+    expect(signIn).toHaveBeenCalled();
+    expect(await screen.findByText(/Aggiunto al calendario/)).toBeVisible();
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not post the event when the sign-in fails", async () => {
+    const user = userEvent.setup();
+    const signIn = vi.fn().mockResolvedValue(false);
+    renderDialog({
+      status: { ...connected, connected: false },
+      signIn,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Aggiungi" }));
+
+    expect(signIn).toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 
   it("shows Configura and disables Aggiungi when not configured", async () => {
     const user = userEvent.setup();
     const openSettings = vi.fn();
     renderDialog({
-      status: { configured: false, connected: false },
+      status: { ...connected, configured: false, connected: false },
       openSettings,
     });
 

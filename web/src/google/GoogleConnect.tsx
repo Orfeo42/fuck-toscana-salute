@@ -1,15 +1,12 @@
 import { Button, Group, Menu, Text } from "@mantine/core";
-import { CalendarCheck, CalendarPlus } from "lucide-react";
+import { CalendarCheck, LogIn } from "lucide-react";
 import type { JSX } from "react";
 
 import { useGoogle } from "./useGoogle";
 
 export function GoogleConnect(): JSX.Element | null {
-  const { status, error, connect, disconnect, openSettings } = useGoogle();
+  const { status, error, signIn, disconnect, openSettings } = useGoogle();
 
-  const handleConnect = (): void => {
-    void connect();
-  };
   const handleDisconnect = (): void => {
     void disconnect();
   };
@@ -37,10 +34,12 @@ export function GoogleConnect(): JSX.Element | null {
     return (
       <>
         <Menu.Item
-          leftSection={<CalendarPlus size={16} />}
-          onClick={handleConnect}
+          leftSection={<LogIn size={16} />}
+          onClick={() => {
+            void signIn();
+          }}
         >
-          Collega Google Calendar
+          Accedi con Google
         </Menu.Item>
         {error === undefined ? null : (
           <Text size="xs" c="red" role="alert" px="sm">
@@ -61,7 +60,7 @@ export function GoogleConnect(): JSX.Element | null {
         }
         onClick={handleDisconnect}
       >
-        Scollega Google Calendar
+        Scollega Google
       </Menu.Item>
     </>
   );

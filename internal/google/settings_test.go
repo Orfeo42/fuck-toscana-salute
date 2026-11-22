@@ -14,7 +14,7 @@ import (
 
 const (
 	fakeAPIKey = "AIza" + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-	fakeAppID  = "123456789"
+	fakeAppID  = "123456789012"
 )
 
 func TestSettingsValidate(t *testing.T) {
@@ -28,9 +28,15 @@ func TestSettingsValidate(t *testing.T) {
 		require.ErrorIs(t, s.Validate(), ErrClientIDRequired)
 	})
 
-	t.Run("client id must end with the google suffix", func(t *testing.T) {
+	t.Run("client id without the google suffix is rejected", func(t *testing.T) {
 		s := testSettings()
-		s.ClientID = "client-id"
+		s.ClientID = "123456789012-abc"
+		require.ErrorIs(t, s.Validate(), ErrClientIDInvalid)
+	})
+
+	t.Run("client id without the project number is rejected", func(t *testing.T) {
+		s := testSettings()
+		s.ClientID = "client-id.apps.googleusercontent.com"
 		require.ErrorIs(t, s.Validate(), ErrClientIDInvalid)
 	})
 
@@ -72,10 +78,9 @@ func TestSettingsValidate(t *testing.T) {
 }
 
 func TestSettingsValidatePicker(t *testing.T) {
-	t.Run("api key and app id are optional", func(t *testing.T) {
+	t.Run("api key is optional", func(t *testing.T) {
 		s := testSettings()
 		s.APIKey = ""
-		s.AppID = ""
 		require.NoError(t, s.Validate())
 	})
 
@@ -96,23 +101,15 @@ func TestSettingsValidatePicker(t *testing.T) {
 		s.APIKey = fakeAPIKey + "x"
 		require.ErrorIs(t, s.Validate(), ErrAPIKeyInvalid)
 	})
+}
 
-	t.Run("valid app id passes", func(t *testing.T) {
-		s := testSettings()
-		s.AppID = fakeAppID
-		require.NoError(t, s.Validate())
+func TestSettingsAppID(t *testing.T) {
+	t.Run("is the project number of the client id", func(t *testing.T) {
+		assert.Equal(t, fakeAppID, testSettings().AppID())
 	})
 
-	t.Run("non numeric app id is rejected", func(t *testing.T) {
-		s := testSettings()
-		s.AppID = "project-abc"
-		require.ErrorIs(t, s.Validate(), ErrAppIDInvalid)
-	})
-
-	t.Run("too short app id is rejected", func(t *testing.T) {
-		s := testSettings()
-		s.AppID = "12345"
-		require.ErrorIs(t, s.Validate(), ErrAppIDInvalid)
+	t.Run("is empty without a client id", func(t *testing.T) {
+		assert.Empty(t, Settings{}.AppID())
 	})
 }
 
@@ -141,6 +138,14 @@ func TestSettings(t *testing.T) {
 		assert.Equal(t, stored.ClientID, got.ClientID)
 		assert.Equal(t, stored.CalendarID, got.CalendarID)
 		assert.Equal(t, stored.DriveFolderID, got.DriveFolderID)
+	})
+
+	t.Run("stored json with the legacy app id key still decodes", func(t *testing.T) {
+		raw := `{"clientId":"` + testClientID + `","clientSecret":"s","appId":"123456789"}`
+		store := &MockSettingsStore{GetFunc: func(string, string) (string, error) { return raw, nil }}
+		got, err := newTestClient(store, &MockTokenStore{}).Settings(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, testClientID, got.ClientID)
 	})
 
 	t.Run("store failure is returned", func(t *testing.T) {
@@ -231,7 +236,7 @@ func TestSaveSettings(t *testing.T) {
 	t.Run("client id change deletes the token", func(t *testing.T) {
 		tokens := &MockTokenStore{DeleteFunc: func(context.Context) error { return nil }}
 		s := testSettings()
-		s.ClientID = "other" + clientIDSuffix
+		s.ClientID = "999999999999-other.apps.googleusercontent.com"
 
 		require.NoError(t, newTestClient(storedSettings(t, testSettings()), tokens).SaveSettings(ctx, s))
 		assert.Len(t, tokens.DeleteCalls(), 1)
@@ -247,7 +252,7 @@ func TestSaveSettings(t *testing.T) {
 	t.Run("token delete failure is returned", func(t *testing.T) {
 		tokens := &MockTokenStore{DeleteFunc: func(context.Context) error { return errors.New("keyring down") }}
 		s := testSettings()
-		s.ClientID = "other" + clientIDSuffix
+		s.ClientID = "999999999999-other.apps.googleusercontent.com"
 
 		require.Error(t, newTestClient(storedSettings(t, testSettings()), tokens).SaveSettings(ctx, s))
 	})
@@ -257,7 +262,7 @@ func TestSaveSettings(t *testing.T) {
 		store.SetFunc = func(string, string, string) error { return errors.New("keyring down") }
 		tokens := &MockTokenStore{}
 		s := testSettings()
-		s.ClientID = "other" + clientIDSuffix
+		s.ClientID = "999999999999-other.apps.googleusercontent.com"
 
 		require.Error(t, newTestClient(store, tokens).SaveSettings(ctx, s))
 		assert.Empty(t, tokens.DeleteCalls())

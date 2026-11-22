@@ -65,6 +65,7 @@ func TestHandlerFS(t *testing.T) {
 		assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
 		assert.Equal(t, "strict-origin-when-cross-origin", rec.Header().Get("Referrer-Policy"))
 		assert.Equal(t, csp, rec.Header().Get("Content-Security-Policy"))
+		assert.Equal(t, "default-src 'self'; img-src 'self' data:; script-src 'self' https://apis.google.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/; connect-src 'self' blob: https://accounts.google.com/gsi/; object-src 'self'", rec.Header().Get("Content-Security-Policy"))
 	})
 
 	t.Run("security headers on 503", func(t *testing.T) {

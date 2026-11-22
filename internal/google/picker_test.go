@@ -54,7 +54,6 @@ func newFakeDrive(t *testing.T, mimeType, body string) *fakeDrive {
 func pickerSettings() Settings {
 	s := testSettings()
 	s.APIKey = fakeAPIKey
-	s.AppID = fakeAppID
 	return s
 }
 
@@ -76,13 +75,6 @@ func TestPickerConfig(t *testing.T) {
 	t.Run("missing api key", func(t *testing.T) {
 		s := pickerSettings()
 		s.APIKey = ""
-		_, err := newTestClient(storedSettings(t, s), connectedStore(validToken())).PickerConfig(ctx)
-		require.ErrorIs(t, err, ErrPickerNotConfigured)
-	})
-
-	t.Run("missing app id", func(t *testing.T) {
-		s := pickerSettings()
-		s.AppID = ""
 		_, err := newTestClient(storedSettings(t, s), connectedStore(validToken())).PickerConfig(ctx)
 		require.ErrorIs(t, err, ErrPickerNotConfigured)
 	})

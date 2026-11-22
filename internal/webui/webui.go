@@ -12,7 +12,7 @@ var assets embed.FS
 
 const (
 	notBuiltMessage = `web UI not built: run "just build"`
-	csp             = "default-src 'self'; img-src 'self' data:; script-src 'self' https://apis.google.com; style-src 'self' 'unsafe-inline'; frame-src 'self' https://docs.google.com; object-src 'self'"
+	csp             = "default-src 'self'; img-src 'self' data:; script-src 'self' https://apis.google.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; frame-src 'self' https://docs.google.com https://accounts.google.com/gsi/; connect-src 'self' blob: https://accounts.google.com/gsi/; object-src 'self'"
 )
 
 func Handler() http.Handler {

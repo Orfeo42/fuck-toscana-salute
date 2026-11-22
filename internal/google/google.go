@@ -2,18 +2,18 @@ package google
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/drive/v3"
 )
 
 type googleError string
@@ -21,26 +21,19 @@ type googleError string
 func (e googleError) Error() string { return string(e) }
 
 const (
-	ErrNotConfigured googleError = "google: not configured"
-	ErrNotConnected  googleError = "google: not connected"
-	ErrBadState      googleError = "google: unknown or expired state"
+	ErrNotConfigured  googleError = "google: not configured"
+	ErrNotConnected   googleError = "google: not connected"
+	ErrNoRefreshToken googleError = "google: no refresh token returned, grant reset"
+	ErrScopesMissing  googleError = "google: required scopes not granted"
 )
 
-const (
-	stateBytes = 32
-	stateTTL   = 10 * time.Minute
-	revokeURL  = "https://oauth2.googleapis.com/revoke"
-)
+const revokeURL = "https://oauth2.googleapis.com/revoke"
 
 type Status struct {
 	Configured bool
 	Connected  bool
-}
-
-type pendingAuth struct {
-	verifier    string
-	redirectURL string
-	expiresAt   time.Time
+	ClientID   string
+	Drive      bool
 }
 
 //go:generate moq -out tokenstore_mock.go . TokenStore:MockTokenStore
@@ -59,9 +52,6 @@ type Client struct {
 	calendarEndpoint string
 	driveEndpoint    string
 	revokeURL        string
-
-	mu      sync.Mutex
-	pending map[string]pendingAuth
 }
 
 func New(settings SettingsStore, tokens TokenStore, httpClient *http.Client) *Client {
@@ -72,7 +62,6 @@ func New(settings SettingsStore, tokens TokenStore, httpClient *http.Client) *Cl
 		httpClient: httpClient,
 		now:        time.Now,
 		revokeURL:  revokeURL,
-		pending:    map[string]pendingAuth{},
 	}
 }
 
@@ -88,57 +77,34 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, fmt.Errorf("google: status: %w", err)
 	}
-	return Status{Configured: true, Connected: token != nil}, nil
+	return Status{Configured: true, Connected: token != nil, ClientID: settings.ClientID, Drive: settings.APIKey != ""}, nil
 }
 
-func (c *Client) AuthURL(_ context.Context, redirectURL string) (string, error) {
-	settings, err := c.configured()
-	if err != nil {
-		return "", err
-	}
-
-	raw := make([]byte, stateBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("google: random state: %w", err)
-	}
-	state := base64.RawURLEncoding.EncodeToString(raw)
-	verifier := oauth2.GenerateVerifier()
-
-	now := c.now()
-	c.mu.Lock()
-	for key, p := range c.pending {
-		if !now.Before(p.expiresAt) {
-			delete(c.pending, key)
-		}
-	}
-	c.pending[state] = pendingAuth{verifier: verifier, redirectURL: redirectURL, expiresAt: now.Add(stateTTL)}
-	c.mu.Unlock()
-
-	return c.oauthConfig(settings, redirectURL).AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce, oauth2.S256ChallengeOption(verifier)), nil
-}
-
-func (c *Client) Exchange(ctx context.Context, state, code string) error {
+func (c *Client) ExchangeCode(ctx context.Context, code, origin string) error {
 	settings, err := c.configured()
 	if err != nil {
 		return err
 	}
 
-	c.mu.Lock()
-	p, ok := c.pending[state]
-	delete(c.pending, state)
-	c.mu.Unlock()
-	if !ok || !c.now().Before(p.expiresAt) {
-		return ErrBadState
-	}
-
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
-	token, err := c.oauthConfig(settings, p.redirectURL).Exchange(ctx, code, oauth2.VerifierOption(p.verifier))
+	token, err := c.oauthConfig(settings, origin).Exchange(ctx, code)
 	if err != nil {
 		return fmt.Errorf("google: exchange: %w", err)
+	}
+	if token.RefreshToken == "" {
+		c.revoke(ctx, token)
+		return ErrNoRefreshToken
+	}
+	raw, ok := token.Extra("scope").(string)
+	granted := strings.Fields(raw)
+	if !ok || !slices.Contains(granted, calendar.CalendarEventsScope) || !slices.Contains(granted, drive.DriveFileScope) {
+		c.revoke(ctx, token)
+		return ErrScopesMissing
 	}
 	if err := c.store.Save(ctx, token); err != nil {
 		return fmt.Errorf("google: save token: %w", err)
 	}
+	slog.InfoContext(ctx, "google connected")
 	return nil
 }
 

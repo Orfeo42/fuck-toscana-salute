@@ -22,14 +22,14 @@ var _ Google = &MockGoogle{}
 //			AddEventFunc: func(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error) {
 //				panic("mock out the AddEvent method")
 //			},
-//			AuthURLFunc: func(ctx context.Context, redirectURL string) (string, error) {
-//				panic("mock out the AuthURL method")
-//			},
 //			DisconnectFunc: func(ctx context.Context) error {
 //				panic("mock out the Disconnect method")
 //			},
 //			DownloadFileFunc: func(ctx context.Context, fileID string) (google.DriveFile, error) {
 //				panic("mock out the DownloadFile method")
+//			},
+//			ExchangeCodeFunc: func(ctx context.Context, code string, origin string) error {
+//				panic("mock out the ExchangeCode method")
 //			},
 //			PickerConfigFunc: func(ctx context.Context) (google.PickerConfig, error) {
 //				panic("mock out the PickerConfig method")
@@ -53,14 +53,14 @@ type MockGoogle struct {
 	// AddEventFunc mocks the AddEvent method.
 	AddEventFunc func(ctx context.Context, ev google.Event, pdf []byte) (google.EventResult, error)
 
-	// AuthURLFunc mocks the AuthURL method.
-	AuthURLFunc func(ctx context.Context, redirectURL string) (string, error)
-
 	// DisconnectFunc mocks the Disconnect method.
 	DisconnectFunc func(ctx context.Context) error
 
 	// DownloadFileFunc mocks the DownloadFile method.
 	DownloadFileFunc func(ctx context.Context, fileID string) (google.DriveFile, error)
+
+	// ExchangeCodeFunc mocks the ExchangeCode method.
+	ExchangeCodeFunc func(ctx context.Context, code string, origin string) error
 
 	// PickerConfigFunc mocks the PickerConfig method.
 	PickerConfigFunc func(ctx context.Context) (google.PickerConfig, error)
@@ -85,13 +85,6 @@ type MockGoogle struct {
 			// Pdf is the pdf argument value.
 			Pdf []byte
 		}
-		// AuthURL holds details about calls to the AuthURL method.
-		AuthURL []struct {
-			// Ctx is the ctx argument value.
-			Ctx context.Context
-			// RedirectURL is the redirectURL argument value.
-			RedirectURL string
-		}
 		// Disconnect holds details about calls to the Disconnect method.
 		Disconnect []struct {
 			// Ctx is the ctx argument value.
@@ -103,6 +96,15 @@ type MockGoogle struct {
 			Ctx context.Context
 			// FileID is the fileID argument value.
 			FileID string
+		}
+		// ExchangeCode holds details about calls to the ExchangeCode method.
+		ExchangeCode []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Code is the code argument value.
+			Code string
+			// Origin is the origin argument value.
+			Origin string
 		}
 		// PickerConfig holds details about calls to the PickerConfig method.
 		PickerConfig []struct {
@@ -128,9 +130,9 @@ type MockGoogle struct {
 		}
 	}
 	lockAddEvent     sync.RWMutex
-	lockAuthURL      sync.RWMutex
 	lockDisconnect   sync.RWMutex
 	lockDownloadFile sync.RWMutex
+	lockExchangeCode sync.RWMutex
 	lockPickerConfig sync.RWMutex
 	lockSaveSettings sync.RWMutex
 	lockSettings     sync.RWMutex
@@ -174,42 +176,6 @@ func (mock *MockGoogle) AddEventCalls() []struct {
 	mock.lockAddEvent.RLock()
 	calls = mock.calls.AddEvent
 	mock.lockAddEvent.RUnlock()
-	return calls
-}
-
-// AuthURL calls AuthURLFunc.
-func (mock *MockGoogle) AuthURL(ctx context.Context, redirectURL string) (string, error) {
-	if mock.AuthURLFunc == nil {
-		panic("MockGoogle.AuthURLFunc: method is nil but Google.AuthURL was just called")
-	}
-	callInfo := struct {
-		Ctx         context.Context
-		RedirectURL string
-	}{
-		Ctx:         ctx,
-		RedirectURL: redirectURL,
-	}
-	mock.lockAuthURL.Lock()
-	mock.calls.AuthURL = append(mock.calls.AuthURL, callInfo)
-	mock.lockAuthURL.Unlock()
-	return mock.AuthURLFunc(ctx, redirectURL)
-}
-
-// AuthURLCalls gets all the calls that were made to AuthURL.
-// Check the length with:
-//
-//	len(mockedGoogle.AuthURLCalls())
-func (mock *MockGoogle) AuthURLCalls() []struct {
-	Ctx         context.Context
-	RedirectURL string
-} {
-	var calls []struct {
-		Ctx         context.Context
-		RedirectURL string
-	}
-	mock.lockAuthURL.RLock()
-	calls = mock.calls.AuthURL
-	mock.lockAuthURL.RUnlock()
 	return calls
 }
 
@@ -278,6 +244,46 @@ func (mock *MockGoogle) DownloadFileCalls() []struct {
 	mock.lockDownloadFile.RLock()
 	calls = mock.calls.DownloadFile
 	mock.lockDownloadFile.RUnlock()
+	return calls
+}
+
+// ExchangeCode calls ExchangeCodeFunc.
+func (mock *MockGoogle) ExchangeCode(ctx context.Context, code string, origin string) error {
+	if mock.ExchangeCodeFunc == nil {
+		panic("MockGoogle.ExchangeCodeFunc: method is nil but Google.ExchangeCode was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		Code   string
+		Origin string
+	}{
+		Ctx:    ctx,
+		Code:   code,
+		Origin: origin,
+	}
+	mock.lockExchangeCode.Lock()
+	mock.calls.ExchangeCode = append(mock.calls.ExchangeCode, callInfo)
+	mock.lockExchangeCode.Unlock()
+	return mock.ExchangeCodeFunc(ctx, code, origin)
+}
+
+// ExchangeCodeCalls gets all the calls that were made to ExchangeCode.
+// Check the length with:
+//
+//	len(mockedGoogle.ExchangeCodeCalls())
+func (mock *MockGoogle) ExchangeCodeCalls() []struct {
+	Ctx    context.Context
+	Code   string
+	Origin string
+} {
+	var calls []struct {
+		Ctx    context.Context
+		Code   string
+		Origin string
+	}
+	mock.lockExchangeCode.RLock()
+	calls = mock.calls.ExchangeCode
+	mock.lockExchangeCode.RUnlock()
 	return calls
 }
 

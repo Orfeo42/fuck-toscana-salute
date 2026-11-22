@@ -245,11 +245,16 @@ function Harness(): JSX.Element {
     >
       <GoogleContext.Provider
         value={{
-          status: { configured: true, connected: true },
+          status: {
+            configured: true,
+            connected: true,
+            clientId: "123456789012-abc.apps.googleusercontent.com",
+            drive: false,
+          },
           loading: false,
           error: undefined,
           refresh: vi.fn(),
-          connect: vi.fn(),
+          signIn: vi.fn(),
           disconnect: vi.fn(),
           openSettings: vi.fn(),
         }}

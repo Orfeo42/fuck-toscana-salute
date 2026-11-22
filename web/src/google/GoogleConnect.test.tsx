@@ -8,11 +8,20 @@ import { render } from "../test/render";
 import { GoogleConnect } from "./GoogleConnect";
 import { GoogleContext } from "./useGoogle";
 
+function status(configured: boolean, connected: boolean): GoogleStatusBody {
+  return {
+    configured,
+    connected,
+    clientId: "123456789012-abc.apps.googleusercontent.com",
+    drive: false,
+  };
+}
+
 function renderConnect(
-  status: GoogleStatusBody | undefined,
+  current: GoogleStatusBody | undefined,
   options: {
     error?: string;
-    connect?: () => Promise<void>;
+    signIn?: () => Promise<boolean>;
     disconnect?: () => Promise<void>;
     openSettings?: () => void;
   } = {},
@@ -20,11 +29,11 @@ function renderConnect(
   render(
     <GoogleContext
       value={{
-        status,
+        status: current,
         loading: false,
         error: options.error,
         refresh: vi.fn(),
-        connect: options.connect ?? vi.fn(),
+        signIn: options.signIn ?? vi.fn(),
         disconnect: options.disconnect ?? vi.fn(),
         openSettings: options.openSettings ?? vi.fn(),
       }}
@@ -58,7 +67,7 @@ describe("GoogleConnect", () => {
   it("shows the not configured text with a configure button", async () => {
     const user = userEvent.setup();
     const openSettings = vi.fn();
-    renderConnect({ configured: false, connected: false }, { openSettings });
+    renderConnect(status(false, false), { openSettings });
 
     expect(screen.getByText("Google non è configurato")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Configura" }));
@@ -66,20 +75,20 @@ describe("GoogleConnect", () => {
     expect(openSettings).toHaveBeenCalled();
   });
 
-  it("connects from the connect button", async () => {
+  it("signs in from the Accedi con Google item", async () => {
     const user = userEvent.setup();
-    const connect = vi.fn().mockResolvedValue(undefined);
-    renderConnect({ configured: true, connected: false }, { connect });
+    const signIn = vi.fn().mockResolvedValue(true);
+    renderConnect(status(true, false), { signIn });
 
     await user.click(
-      screen.getByRole("menuitem", { name: "Collega Google Calendar" }),
+      screen.getByRole("menuitem", { name: "Accedi con Google" }),
     );
 
-    expect(connect).toHaveBeenCalled();
+    expect(signIn).toHaveBeenCalled();
   });
 
   it("shows the error next to the connect button", () => {
-    renderConnect({ configured: true, connected: false }, { error: "boom" });
+    renderConnect(status(true, false), { error: "boom" });
 
     expect(screen.getByRole("alert")).toHaveTextContent("boom");
   });
@@ -87,12 +96,10 @@ describe("GoogleConnect", () => {
   it("disconnects when connected", async () => {
     const user = userEvent.setup();
     const disconnect = vi.fn().mockResolvedValue(undefined);
-    renderConnect({ configured: true, connected: true }, { disconnect });
+    renderConnect(status(true, true), { disconnect });
 
     expect(screen.getByText("Collegato")).toBeVisible();
-    await user.click(
-      screen.getByRole("menuitem", { name: "Scollega Google Calendar" }),
-    );
+    await user.click(screen.getByRole("menuitem", { name: "Scollega Google" }));
 
     expect(disconnect).toHaveBeenCalled();
   });

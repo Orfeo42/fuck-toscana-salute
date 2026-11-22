@@ -711,14 +711,14 @@ func TestRegisterGetBookingPDF(t *testing.T) {
 func TestRegisterGoogleStatus(t *testing.T) {
 	t.Run("returns configured and connected", func(t *testing.T) {
 		g := &MockGoogle{StatusFunc: func(context.Context) (google.Status, error) {
-			return google.Status{Configured: true, Connected: true}, nil
+			return google.Status{Configured: true, Connected: true, ClientID: "123456789012-abc.apps.googleusercontent.com", Drive: true}, nil
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
 		resp := api.Get("/api/google")
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.JSONEq(t, `{"configured":true,"connected":true}`, resp.Body.String())
+		assert.JSONEq(t, `{"configured":true,"connected":true,"clientId":"123456789012-abc.apps.googleusercontent.com","drive":true}`, resp.Body.String())
 	})
 
 	t.Run("store failure is 500", func(t *testing.T) {
@@ -730,27 +730,103 @@ func TestRegisterGoogleStatus(t *testing.T) {
 	})
 }
 
-func TestRegisterGoogleConnect(t *testing.T) {
-	t.Run("returns the authorization url", func(t *testing.T) {
-		g := &MockGoogle{AuthURLFunc: func(context.Context, string) (string, error) {
-			return "https://accounts.example.test/auth?state=s", nil
-		}}
+func TestRegisterExchangeGoogleCode(t *testing.T) {
+	const (
+		origin = "Origin: http://example.com"
+		host   = "Host: example.com"
+		xhr    = "X-Requested-With: XmlHttpRequest"
+	)
+	body := map[string]string{"code": "auth-code"}
+
+	t.Run("exchanges the code with the page origin and returns 204", func(t *testing.T) {
+		g := &MockGoogle{ExchangeCodeFunc: func(context.Context, string, string) error { return nil }}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
-		resp := api.Post("/api/google/connect")
-		require.Equal(t, http.StatusOK, resp.Code)
-		assert.JSONEq(t, `{"authUrl":"https://accounts.example.test/auth?state=s"}`, resp.Body.String())
+		resp := api.Post("/api/google/code", host, origin, xhr, body)
+
+		require.Equal(t, http.StatusNoContent, resp.Code)
+		require.Len(t, g.ExchangeCodeCalls(), 1)
+		assert.Equal(t, "auth-code", g.ExchangeCodeCalls()[0].Code)
+		assert.Equal(t, "http://example.com", g.ExchangeCodeCalls()[0].Origin)
+	})
+
+	t.Run("origin honours forwarded proto", func(t *testing.T) {
+		g := &MockGoogle{ExchangeCodeFunc: func(context.Context, string, string) error { return nil }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", "Host: fts.example.test", "Origin: https://fts.example.test", "X-Forwarded-Proto: https", xhr, body)
+
+		require.Equal(t, http.StatusNoContent, resp.Code)
+		require.Len(t, g.ExchangeCodeCalls(), 1)
+		assert.Equal(t, "https://fts.example.test", g.ExchangeCodeCalls()[0].Origin)
+	})
+
+	t.Run("missing requested-with header is 422", func(t *testing.T) {
+		g := &MockGoogle{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", host, origin, body)
+
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Empty(t, g.ExchangeCodeCalls())
+	})
+
+	t.Run("empty code is 422", func(t *testing.T) {
+		g := &MockGoogle{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", host, origin, xhr, map[string]string{"code": ""})
+
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		assert.Empty(t, g.ExchangeCodeCalls())
+	})
+
+	t.Run("foreign origin is forbidden", func(t *testing.T) {
+		g := &MockGoogle{}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", host, "Origin: http://evil.test", xhr, body)
+
+		assert.Equal(t, http.StatusForbidden, resp.Code)
+		assert.Empty(t, g.ExchangeCodeCalls())
 	})
 
 	t.Run("not configured is 409", func(t *testing.T) {
-		g := &MockGoogle{AuthURLFunc: func(context.Context, string) (string, error) { return "", google.ErrNotConfigured }}
+		g := &MockGoogle{ExchangeCodeFunc: func(context.Context, string, string) error { return google.ErrNotConfigured }}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
-		resp := api.Post("/api/google/connect")
+		resp := api.Post("/api/google/code", host, origin, xhr, body)
+
 		assert.Equal(t, http.StatusConflict, resp.Code)
 		assert.Contains(t, resp.Body.String(), "google_not_configured")
+	})
+
+	t.Run("no refresh token is 409 grant reset", func(t *testing.T) {
+		g := &MockGoogle{ExchangeCodeFunc: func(context.Context, string, string) error { return google.ErrNoRefreshToken }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", host, origin, xhr, body)
+
+		assert.Equal(t, http.StatusConflict, resp.Code)
+		assert.Contains(t, resp.Body.String(), "google_grant_reset")
+	})
+
+	t.Run("missing scopes is 403", func(t *testing.T) {
+		g := &MockGoogle{ExchangeCodeFunc: func(context.Context, string, string) error { return google.ErrScopesMissing }}
+		_, api := humatest.New(t)
+		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
+
+		resp := api.Post("/api/google/code", host, origin, xhr, body)
+
+		assert.Equal(t, http.StatusForbidden, resp.Code)
+		assert.Contains(t, resp.Body.String(), "google_scopes_missing")
 	})
 }
 
@@ -1126,9 +1202,9 @@ func TestRegisterRefresh(t *testing.T) {
 }
 
 func TestRegisterGoogleSettings(t *testing.T) {
-	t.Run("returns settings and a redirect built from the request", func(t *testing.T) {
+	t.Run("returns settings and the javascript origin built from the request", func(t *testing.T) {
 		g := &MockGoogle{SettingsFunc: func(context.Context) (google.Settings, error) {
-			return google.Settings{ClientID: "id.apps.googleusercontent.com", CalendarID: "primary", DriveFolderID: "folder-1234567", APIKey: "key-abc", AppID: "123456789", HasSecret: true}, nil
+			return google.Settings{ClientID: "id.apps.googleusercontent.com", CalendarID: "primary", DriveFolderID: "folder-1234567", APIKey: "key-abc", HasSecret: true}, nil
 		}}
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
@@ -1136,7 +1212,7 @@ func TestRegisterGoogleSettings(t *testing.T) {
 		resp := api.Get("/api/google/settings", "Host: fts.example.test", "X-Forwarded-Proto: https")
 
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","apiKey":"key-abc","appId":"123456789","hasSecret":true,"redirectUri":"https://fts.example.test/api/google/callback"}`, resp.Body.String())
+		assert.JSONEq(t, `{"clientId":"id.apps.googleusercontent.com","calendarId":"primary","driveFolderId":"folder-1234567","apiKey":"key-abc","hasSecret":true,"javascriptOrigin":"https://fts.example.test"}`, resp.Body.String())
 	})
 
 	t.Run("scheme defaults to http", func(t *testing.T) {
@@ -1147,7 +1223,7 @@ func TestRegisterGoogleSettings(t *testing.T) {
 		resp := api.Get("/api/google/settings", "Host: localhost")
 
 		require.Equal(t, http.StatusOK, resp.Code)
-		assert.Contains(t, resp.Body.String(), `"redirectUri":"http://localhost/api/google/callback"`)
+		assert.Contains(t, resp.Body.String(), `"javascriptOrigin":"http://localhost"`)
 	})
 
 	t.Run("store failure is 500", func(t *testing.T) {
@@ -1170,11 +1246,11 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 		_, api := humatest.New(t)
 		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
 
-		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": "id.apps.googleusercontent.com", "clientSecret": "s", "calendarId": "cal", "driveFolderId": "folder-1234567", "apiKey": "key-abc", "appId": "123456789"})
+		resp := api.Put("/api/google/settings", host, origin, map[string]string{"clientId": "id.apps.googleusercontent.com", "clientSecret": "s", "calendarId": "cal", "driveFolderId": "folder-1234567", "apiKey": "key-abc"})
 
 		require.Equal(t, http.StatusNoContent, resp.Code)
 		require.Len(t, g.SaveSettingsCalls(), 1)
-		assert.Equal(t, google.Settings{ClientID: "id.apps.googleusercontent.com", ClientSecret: "s", CalendarID: "cal", DriveFolderID: "folder-1234567", APIKey: "key-abc", AppID: "123456789"}, g.SaveSettingsCalls()[0].S)
+		assert.Equal(t, google.Settings{ClientID: "id.apps.googleusercontent.com", ClientSecret: "s", CalendarID: "cal", DriveFolderID: "folder-1234567", APIKey: "key-abc"}, g.SaveSettingsCalls()[0].S)
 	})
 
 	t.Run("validation error is 422 with the message", func(t *testing.T) {
@@ -1208,19 +1284,5 @@ func TestRegisterSaveGoogleSettings(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, resp.Code)
 		assert.Empty(t, g.SaveSettingsCalls())
-	})
-}
-
-func TestRegisterGoogleConnectRedirect(t *testing.T) {
-	t.Run("redirect is built from host and forwarded proto", func(t *testing.T) {
-		g := &MockGoogle{AuthURLFunc: func(context.Context, string) (string, error) { return "https://accounts.example.test/auth", nil }}
-		_, api := humatest.New(t)
-		register(api, &MockSessionStore{}, &MockLoginFlow{}, &MockAgenda{}, &MockDocuments{}, g, &MockReports{}, &MockLocalRecords{}, emptyFreshness(), "window", false)
-
-		resp := api.Post("/api/google/connect", "Host: fts.example.test", "X-Forwarded-Proto: https")
-
-		require.Equal(t, http.StatusOK, resp.Code)
-		require.Len(t, g.AuthURLCalls(), 1)
-		assert.Equal(t, "https://fts.example.test/api/google/callback", g.AuthURLCalls()[0].RedirectURL)
 	})
 }

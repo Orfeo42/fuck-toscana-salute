@@ -18,7 +18,7 @@ import (
 
 const (
 	ErrClientIDRequired     googleError = "google: client id is required"
-	ErrClientIDInvalid      googleError = "google: client id must end with .apps.googleusercontent.com"
+	ErrClientIDInvalid      googleError = "google: client id must look like <project number>-<id>.apps.googleusercontent.com"
 	ErrClientSecretRequired googleError = "google: client secret is required"
 	ErrDriveFolderInvalid   googleError = "google: drive folder id is invalid"
 )
@@ -26,14 +26,13 @@ const (
 const (
 	settingsService = "fuck-toscana-salute"
 	settingsUser    = "google-settings"
-	clientIDSuffix  = ".apps.googleusercontent.com"
 	defaultCalendar = "primary"
 )
 
 var (
 	driveFolderPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{10,}$`)
 	apiKeyPattern      = regexp.MustCompile(`^AIza[0-9A-Za-z_-]{35}$`)
-	appIDPattern       = regexp.MustCompile(`^[0-9]{6,20}$`)
+	clientIDPattern    = regexp.MustCompile(`^[0-9]{6,20}-[0-9A-Za-z_]+\.apps\.googleusercontent\.com$`)
 )
 
 type Settings struct {
@@ -42,7 +41,6 @@ type Settings struct {
 	CalendarID    string `json:"calendarId"`
 	DriveFolderID string `json:"driveFolderId"`
 	APIKey        string `json:"apiKey"`
-	AppID         string `json:"appId"`
 	HasSecret     bool   `json:"-"`
 }
 
@@ -50,7 +48,7 @@ func (s Settings) Validate() error {
 	if s.ClientID == "" {
 		return ErrClientIDRequired
 	}
-	if !strings.HasSuffix(s.ClientID, clientIDSuffix) {
+	if !clientIDPattern.MatchString(s.ClientID) {
 		return ErrClientIDInvalid
 	}
 	if s.ClientSecret == "" {
@@ -62,10 +60,12 @@ func (s Settings) Validate() error {
 	if s.APIKey != "" && !apiKeyPattern.MatchString(s.APIKey) {
 		return ErrAPIKeyInvalid
 	}
-	if s.AppID != "" && !appIDPattern.MatchString(s.AppID) {
-		return ErrAppIDInvalid
-	}
 	return nil
+}
+
+func (s Settings) AppID() string {
+	appID, _, _ := strings.Cut(s.ClientID, "-")
+	return appID
 }
 
 //go:generate moq -out settingsstore_mock.go . SettingsStore:MockSettingsStore

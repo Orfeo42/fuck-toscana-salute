@@ -63,8 +63,13 @@ func toHTTPError(ctx context.Context, op string, err error) error {
 	if errors.Is(err, google.ErrAPIKeyInvalid) {
 		return huma.Error422UnprocessableEntity("Chiave API Google non valida")
 	}
-	if errors.Is(err, google.ErrAppIDInvalid) {
-		return huma.Error422UnprocessableEntity("L'ID app deve essere il numero del progetto Google")
+	if errors.Is(err, google.ErrNoRefreshToken) {
+		slog.WarnContext(ctx, "google grant reset", slog.String("op", op), slog.String("error", err.Error()))
+		return huma.Error409Conflict("google_grant_reset")
+	}
+	if errors.Is(err, google.ErrScopesMissing) {
+		slog.WarnContext(ctx, "google scopes missing", slog.String("op", op), slog.String("error", err.Error()))
+		return huma.Error403Forbidden("google_scopes_missing")
 	}
 	if errors.Is(err, localrecords.ErrTooLarge) || errors.Is(err, google.ErrDriveFileTooLarge) {
 		return huma.Error413RequestEntityTooLarge("Il file supera la dimensione massima di 20 MB")

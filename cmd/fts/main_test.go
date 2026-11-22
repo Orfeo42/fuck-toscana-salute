@@ -166,7 +166,7 @@ func TestServe(t *testing.T) {
 		stopServe(t, cancel, done)
 	})
 
-	t.Run("mounts google status, settings and callback", func(t *testing.T) {
+	t.Run("mounts google status and settings", func(t *testing.T) {
 		setEnv(t)
 		cfg, err := config.Load()
 		require.NoError(t, err)
@@ -180,15 +180,10 @@ func TestServe(t *testing.T) {
 		settings, err := client.Get(base + "/api/google/settings")
 		require.NoError(t, err)
 		require.NoError(t, settings.Body.Close())
-		callback, err := client.Get(base + "/api/google/callback?state=unknown&code=x")
-		require.NoError(t, err)
-		require.NoError(t, callback.Body.Close())
 
 		assert.Equal(t, http.StatusOK, status.StatusCode)
 		assert.Contains(t, string(body), `"connected":false`)
 		assert.Equal(t, http.StatusOK, settings.StatusCode)
-		assert.Equal(t, http.StatusBadRequest, callback.StatusCode)
-		assert.Equal(t, "default-src 'none'", callback.Header.Get("Content-Security-Policy"))
 		stopServe(t, cancel, done)
 	})
 

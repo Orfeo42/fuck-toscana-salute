@@ -312,24 +312,26 @@
         ],
         "type": "object"
       },
-      "GoogleConnectBody": {
+      "GoogleCodeRequest": {
         "additionalProperties": false,
         "properties": {
           "$schema": {
             "description": "A URL to the JSON Schema for this object.",
             "examples": [
-              "https://example.com/schemas/GoogleConnectBody.json"
+              "https://example.com/schemas/GoogleCodeRequest.json"
             ],
             "format": "uri",
             "readOnly": true,
             "type": "string"
           },
-          "authUrl": {
+          "code": {
+            "maxLength": 2048,
+            "minLength": 1,
             "type": "string"
           }
         },
         "required": [
-          "authUrl"
+          "code"
         ],
         "type": "object"
       },
@@ -348,9 +350,6 @@
           "apiKey": {
             "type": "string"
           },
-          "appId": {
-            "type": "string"
-          },
           "calendarId": {
             "type": "string"
           },
@@ -363,7 +362,7 @@
           "hasSecret": {
             "type": "boolean"
           },
-          "redirectUri": {
+          "javascriptOrigin": {
             "type": "string"
           }
         },
@@ -372,9 +371,8 @@
           "calendarId",
           "driveFolderId",
           "apiKey",
-          "appId",
           "hasSecret",
-          "redirectUri"
+          "javascriptOrigin"
         ],
         "type": "object"
       },
@@ -392,10 +390,6 @@
           },
           "apiKey": {
             "maxLength": 100,
-            "type": "string"
-          },
-          "appId": {
-            "maxLength": 30,
             "type": "string"
           },
           "calendarId": {
@@ -432,16 +426,24 @@
             "readOnly": true,
             "type": "string"
           },
+          "clientId": {
+            "type": "string"
+          },
           "configured": {
             "type": "boolean"
           },
           "connected": {
             "type": "boolean"
+          },
+          "drive": {
+            "type": "boolean"
           }
         },
         "required": [
           "configured",
-          "connected"
+          "connected",
+          "clientId",
+          "drive"
         ],
         "type": "object"
       },
@@ -1548,19 +1550,35 @@
         }
       }
     },
-    "/api/google/connect": {
+    "/api/google/code": {
       "post": {
-        "operationId": "start-google-connect",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoogleConnectBody"
-                }
+        "operationId": "exchange-google-code",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Requested-With",
+            "required": true,
+            "schema": {
+              "enum": [
+                "XmlHttpRequest"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCodeRequest"
               }
-            },
-            "description": "OK"
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {

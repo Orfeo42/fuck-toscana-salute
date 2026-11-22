@@ -150,7 +150,7 @@ export function SessionMenu(): JSX.Element | null {
           </Badge>
         </Group>
         <Menu.Divider />
-        <Menu.Label>Google Calendar</Menu.Label>
+        <Menu.Label>Google</Menu.Label>
         <GoogleConnect />
         <Menu.Item leftSection={<Settings size={16} />} onClick={openSettings}>
           Impostazioni Google

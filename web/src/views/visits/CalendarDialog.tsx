@@ -27,7 +27,6 @@ interface Props {
 
 interface Failure {
   message: string;
-  reconnect: boolean;
   configure: boolean;
 }
 
@@ -35,7 +34,6 @@ const notConfiguredMessage = "Google non è configurato";
 
 const genericFailure: Failure = {
   message: "Google o il portale regionale non rispondono. Riprova tra poco.",
-  reconnect: false,
   configure: false,
 };
 
@@ -45,29 +43,25 @@ function failureFor(
 ): Failure {
   if (status === 401) {
     return {
-      message: "Collegamento Google scaduto: ricollega.",
-      reconnect: true,
+      message: "Accesso a Google scaduto: premi di nuovo Aggiungi",
       configure: false,
     };
   }
   if (status === 404) {
     return {
       message: "Promemoria non disponibile: riprova senza allegato.",
-      reconnect: false,
       configure: false,
     };
   }
   if (status === 409 && detail === "google_not_configured") {
     return {
       message: notConfiguredMessage,
-      reconnect: false,
       configure: true,
     };
   }
   if (status === 409) {
     return {
       message: "Serve l'accesso a Gestione Prenotazioni: premi Accedi.",
-      reconnect: false,
       configure: false,
     };
   }
@@ -79,7 +73,13 @@ export function CalendarDialog({
   title,
   onClose,
 }: Props): JSX.Element {
-  const { status, connect, openSettings } = useGoogle();
+  const {
+    status,
+    error: googleError,
+    signIn,
+    refresh,
+    openSettings,
+  } = useGoogle();
   const [attach, setAttach] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | undefined>(undefined);
@@ -93,16 +93,19 @@ export function CalendarDialog({
   const configured = status?.configured === true;
   const connected = configured && status.connected;
 
-  const handleConnect = (): void => {
-    void connect();
-  };
-
   const handleAdd = async (): Promise<void> => {
     if (at === undefined) {
       return;
     }
     setBusy(true);
     setFailure(undefined);
+    if (!connected) {
+      const signedIn = await signIn();
+      if (!signedIn) {
+        setBusy(false);
+        return;
+      }
+    }
     try {
       const { data, error, response } = await api.POST("/api/calendar/events", {
         body: {
@@ -117,6 +120,9 @@ export function CalendarDialog({
         },
       });
       if (data === undefined) {
+        if (response.status === 401) {
+          refresh();
+        }
         setFailure(failureFor(response.status, error.detail));
         return;
       }
@@ -131,12 +137,6 @@ export function CalendarDialog({
   const configureButton = (
     <Button variant="default" size="compact-sm" onClick={openSettings}>
       Configura
-    </Button>
-  );
-
-  const connectButton = (
-    <Button variant="default" size="compact-sm" onClick={handleConnect}>
-      Collega Google Calendar
     </Button>
   );
 
@@ -165,12 +165,17 @@ export function CalendarDialog({
             {configureButton}
           </Group>
         ) : null}
-        {configured && !connected ? <Group>{connectButton}</Group> : null}
+        {googleError === undefined ||
+        connected ||
+        failure !== undefined ? null : (
+          <Alert color="red" role="alert">
+            <Text size="sm">{googleError}</Text>
+          </Alert>
+        )}
         {failure === undefined ? null : (
           <Alert color="red" role="alert">
             <Group gap="xs">
               <Text size="sm">{failure.message}</Text>
-              {failure.reconnect ? connectButton : null}
               {failure.configure ? configureButton : null}
             </Group>
           </Alert>
@@ -198,7 +203,7 @@ export function CalendarDialog({
                 Annulla
               </Button>
               <Button
-                disabled={!connected}
+                disabled={!configured}
                 loading={busy}
                 onClick={() => {
                   void handleAdd();

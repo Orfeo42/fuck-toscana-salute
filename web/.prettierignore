@@ -2,3 +2,4 @@ src/api/schema.d.ts
 package-lock.json
 node_modules
 dist
+openapi.json

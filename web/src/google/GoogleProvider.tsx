@@ -9,6 +9,11 @@ import {
 } from "react";
 
 import { api, type GoogleStatusBody } from "../api/client";
+import {
+  createCodeRequester,
+  loadGoogleIdentity,
+  type CodeRequester,
+} from "../lib/googleSignIn";
 import { GoogleSettingsModal } from "./GoogleSettingsModal";
 import { GoogleContext, type GoogleValue } from "./useGoogle";
 
@@ -16,15 +21,27 @@ interface Props {
   children: ReactNode;
 }
 
-const connectPollMs = 3000;
-const connectPollMaxMs = 2 * 60 * 1000;
+function codeFailureMessage(
+  status: number,
+  detail: string | undefined,
+): string {
+  if (status === 409 && detail === "google_grant_reset") {
+    return "Google non ha concesso l'accesso permanente: riprova";
+  }
+  if (status === 403) {
+    return "Consenti l'accesso a Calendar e Drive per continuare";
+  }
+  if (status === 409 && detail === "google_not_configured") {
+    return "Google non è configurato";
+  }
+  return "Accesso a Google non riuscito";
+}
 
 export function GoogleProvider({ children }: Props): JSX.Element {
   const [status, setStatus] = useState<GoogleStatusBody | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const pollRef = useRef<number | undefined>(undefined);
-  const deadlineRef = useRef<number | undefined>(undefined);
+  const requesterRef = useRef<CodeRequester | undefined>(undefined);
 
   const load = useCallback(async (): Promise<GoogleStatusBody | undefined> => {
     try {
@@ -46,39 +63,41 @@ export function GoogleProvider({ children }: Props): JSX.Element {
     void load();
   }, [load]);
 
-  const stopPolling = useCallback((): void => {
-    window.clearInterval(pollRef.current);
-    window.clearTimeout(deadlineRef.current);
-    pollRef.current = undefined;
-    deadlineRef.current = undefined;
-  }, []);
-
-  const startPolling = useCallback((): void => {
-    stopPolling();
-    pollRef.current = window.setInterval(() => {
-      void load().then((next) => {
-        if (next?.connected === true) {
-          stopPolling();
-        }
-      });
-    }, connectPollMs);
-    deadlineRef.current = window.setTimeout(stopPolling, connectPollMaxMs);
-  }, [load, stopPolling]);
-
-  const connect = useCallback(async (): Promise<void> => {
-    try {
-      const { data } = await api.POST("/api/google/connect");
-      if (data === undefined) {
-        setError("Impossibile avviare il collegamento a Google Calendar");
-        return;
-      }
-      setError(undefined);
-      window.open(data.authUrl, "_blank", "noopener");
-      startPolling();
-    } catch {
-      setError("Impossibile avviare il collegamento a Google Calendar");
+  const signIn = useCallback(async (): Promise<boolean> => {
+    const requester = requesterRef.current;
+    if (requester === undefined) {
+      setError("Accesso Google non ancora pronto, riprova");
+      return false;
     }
-  }, [startPolling]);
+    let code: string | null;
+    try {
+      code = await requester();
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error ? e.message : "Accesso a Google non riuscito",
+      );
+      return false;
+    }
+    if (code === null) {
+      return false;
+    }
+    try {
+      const { error, response } = await api.POST("/api/google/code", {
+        params: { header: { "X-Requested-With": "XmlHttpRequest" } },
+        body: { code },
+      });
+      if (error !== undefined) {
+        setError(codeFailureMessage(response.status, error.detail));
+        return false;
+      }
+    } catch {
+      setError("Accesso a Google non riuscito");
+      return false;
+    }
+    setError(undefined);
+    await load();
+    return true;
+  }, [load]);
 
   const disconnect = useCallback(async (): Promise<void> => {
     try {
@@ -103,9 +122,32 @@ export function GoogleProvider({ children }: Props): JSX.Element {
     return () => {
       clearTimeout(first);
       window.removeEventListener("focus", refresh);
-      stopPolling();
     };
-  }, [refresh, stopPolling]);
+  }, [refresh]);
+
+  const clientId = status?.configured === true ? status.clientId : "";
+
+  useEffect(() => {
+    requesterRef.current = undefined;
+    if (clientId === "") {
+      return;
+    }
+    let cancelled = false;
+    loadGoogleIdentity()
+      .then((oauth2) => {
+        if (!cancelled) {
+          requesterRef.current = createCodeRequester(oauth2, clientId);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("Impossibile caricare l'accesso Google");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
 
   const loading = status === undefined && error === undefined;
 
@@ -115,11 +157,11 @@ export function GoogleProvider({ children }: Props): JSX.Element {
       loading,
       error,
       refresh,
-      connect,
+      signIn,
       disconnect,
       openSettings,
     }),
-    [status, loading, error, refresh, connect, disconnect, openSettings],
+    [status, loading, error, refresh, signIn, disconnect, openSettings],
   );
 
   return (

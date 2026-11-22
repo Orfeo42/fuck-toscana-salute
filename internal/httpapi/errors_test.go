@@ -179,9 +179,14 @@ func TestToHTTPError(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
 	})
 
-	t.Run("app id invalid is 422", func(t *testing.T) {
-		err := toHTTPError(ctx, "op", google.ErrAppIDInvalid)
-		assert.Equal(t, http.StatusUnprocessableEntity, statusOf(t, err))
+	t.Run("no refresh token is 409", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrNoRefreshToken)
+		assert.Equal(t, http.StatusConflict, statusOf(t, err))
+	})
+
+	t.Run("scopes missing is 403", func(t *testing.T) {
+		err := toHTTPError(ctx, "op", google.ErrScopesMissing)
+		assert.Equal(t, http.StatusForbidden, statusOf(t, err))
 	})
 
 	t.Run("too large is 413", func(t *testing.T) {

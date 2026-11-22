@@ -154,7 +154,6 @@ func serve(ctx context.Context, cfg config.Config, ln net.Listener) error {
 	for _, pattern := range []string{"/api/", "/openapi.json", "/openapi.yaml", "/docs", "/schemas/"} {
 		mux.Handle(pattern, api)
 	}
-	mux.Handle(google.CallbackPath, googleClient.CallbackHandler())
 	if cfg.ViewerAddr != "" {
 		mux.Handle("/viewer/", viewer.Handler(cfg.ViewerAddr))
 	}

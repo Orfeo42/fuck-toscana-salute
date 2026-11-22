@@ -10,11 +10,10 @@ import (
 )
 
 const (
-	ErrPickerNotConfigured googleError = "google: picker api key or app id missing"
+	ErrPickerNotConfigured googleError = "google: picker api key missing"
 	ErrDriveFileType       googleError = "google: drive file type not supported"
 	ErrDriveFileTooLarge   googleError = "google: drive file too large"
 	ErrAPIKeyInvalid       googleError = "google: api key is invalid"
-	ErrAppIDInvalid        googleError = "google: app id must be the numeric project number"
 )
 
 const (
@@ -53,7 +52,7 @@ func (c *Client) PickerConfig(ctx context.Context) (PickerConfig, error) {
 	if err != nil {
 		return PickerConfig{}, err
 	}
-	if settings.APIKey == "" || settings.AppID == "" {
+	if settings.APIKey == "" {
 		return PickerConfig{}, ErrPickerNotConfigured
 	}
 	ts, err := c.savingTokenSource(ctx, settings)
@@ -65,7 +64,7 @@ func (c *Client) PickerConfig(ctx context.Context) (PickerConfig, error) {
 		return PickerConfig{}, c.classify(ctx, err)
 	}
 	slog.InfoContext(ctx, "google picker config issued")
-	return PickerConfig{AccessToken: token.AccessToken, APIKey: settings.APIKey, AppID: settings.AppID}, nil
+	return PickerConfig{AccessToken: token.AccessToken, APIKey: settings.APIKey, AppID: settings.AppID()}, nil
 }
 
 func (c *Client) DownloadFile(ctx context.Context, fileID string) (DriveFile, error) {

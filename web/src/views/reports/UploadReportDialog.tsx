@@ -35,9 +35,9 @@ const maxBytes = 20 * 1024 * 1024;
 const tooLargeMessage = "Il file supera i 20 MB";
 const unsupportedMessage = "Formato non supportato o file non valido";
 const failedMessage = "Caricamento non riuscito";
-const pickerNotConfiguredMessage =
-  "Configura API key e App ID in Impostazioni Google";
-const pickerNotConnectedMessage = "Collega Google per usare Drive";
+const pickerNotConfiguredMessage = "Aggiungi la API key in Impostazioni Google";
+const pickerExpiredMessage =
+  "Accesso a Google scaduto: premi di nuovo Scegli da Google Drive";
 const pickerFailedMessage = "Impossibile aprire Google Drive";
 
 function uploadErrorMessage(status: number): string {
@@ -55,7 +55,7 @@ function pickerErrorMessage(status: number): string {
     return pickerNotConfiguredMessage;
   }
   if (status === 401) {
-    return pickerNotConnectedMessage;
+    return pickerExpiredMessage;
   }
   return pickerFailedMessage;
 }
@@ -75,6 +75,7 @@ function FormBody({
   const [provider, setProvider] = useState(defaultProvider ?? "");
   const [error, setError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const shownError = error ?? google?.error;
 
   const metadata: Metadata = {
     ...(title.trim() === "" ? {} : { title: title.trim() }),
@@ -129,8 +130,17 @@ function FormBody({
     setBusy(true);
     setError(undefined);
     try {
+      if (google?.status?.connected !== true) {
+        const signedIn = (await google?.signIn()) ?? false;
+        if (!signedIn) {
+          return;
+        }
+      }
       const picker = await api.POST("/api/google/picker");
       if (picker.data === undefined) {
+        if (picker.response.status === 401) {
+          google?.refresh();
+        }
         setError(pickerErrorMessage(picker.response.status));
         return;
       }
@@ -191,13 +201,13 @@ function FormBody({
             setProvider(event.currentTarget.value);
           }}
         />
-        {error === undefined ? null : (
+        {shownError === undefined ? null : (
           <Text size="sm" c="red" role="alert">
-            {error}
+            {shownError}
           </Text>
         )}
         <Group justify="flex-end">
-          {google?.status?.connected === true ? (
+          {google?.status?.configured === true && google.status.drive ? (
             <Button
               variant="light"
               disabled={busy}

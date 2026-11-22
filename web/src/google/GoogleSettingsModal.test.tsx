@@ -21,9 +21,8 @@ const savedSettings: GoogleSettingsBody = {
   calendarId: "primary",
   driveFolderId: "",
   apiKey: "key-1",
-  appId: "123456",
   hasSecret: true,
-  redirectUri: "http://localhost:8080/api/google/callback",
+  javascriptOrigin: "http://localhost:8800",
 };
 
 const emptySettings: GoogleSettingsBody = {
@@ -31,9 +30,8 @@ const emptySettings: GoogleSettingsBody = {
   calendarId: "",
   driveFolderId: "",
   apiKey: "",
-  appId: "",
   hasSecret: false,
-  redirectUri: "http://localhost:8080/api/google/callback",
+  javascriptOrigin: "http://localhost:8800",
 };
 
 function renderModal(): { refresh: () => void; onClose: () => void } {
@@ -46,7 +44,7 @@ function renderModal(): { refresh: () => void; onClose: () => void } {
         loading: false,
         error: undefined,
         refresh,
-        connect: vi.fn(),
+        signIn: vi.fn(),
         disconnect: vi.fn(),
         openSettings: vi.fn(),
       }}
@@ -79,9 +77,6 @@ describe("GoogleSettingsModal", () => {
     expect(screen.getByLabelText("Calendario")).toHaveValue("primary");
     expect(screen.getByLabelText("Cartella Drive")).toHaveValue("");
     expect(screen.getByLabelText("API key (Picker)")).toHaveValue("key-1");
-    expect(screen.getByLabelText("App ID (numero progetto)")).toHaveValue(
-      "123456",
-    );
   });
 
   it("defaults the calendar to primary", async () => {
@@ -94,13 +89,22 @@ describe("GoogleSettingsModal", () => {
     );
   });
 
-  it("shows the redirect URI with a copy button", async () => {
+  it("has no App ID field", async () => {
+    mocks.get.mockResolvedValue({ data: savedSettings });
+    renderModal();
+
+    await screen.findByLabelText("Client ID");
+
+    expect(screen.queryByLabelText("App ID (numero progetto)")).toBeNull();
+  });
+
+  it("shows the JavaScript origin with a copy button", async () => {
     mocks.get.mockResolvedValue({ data: savedSettings });
     renderModal();
 
     expect(
       await screen.findByRole("button", {
-        name: `Copia redirect URI ${savedSettings.redirectUri}`,
+        name: `Copia origine JavaScript ${savedSettings.javascriptOrigin}`,
       }),
     ).toBeVisible();
   });
@@ -136,10 +140,10 @@ describe("GoogleSettingsModal", () => {
     expect(mocks.put).toHaveBeenCalled();
   });
 
-  it("omits the empty secret, drive folder, api key and app id from the body", async () => {
+  it("omits the empty secret, drive folder, and api key from the body", async () => {
     const user = userEvent.setup();
     mocks.get.mockResolvedValue({
-      data: { ...savedSettings, apiKey: "", appId: "" },
+      data: { ...savedSettings, apiKey: "" },
     });
     renderModal();
 
@@ -165,7 +169,6 @@ describe("GoogleSettingsModal", () => {
     await user.type(screen.getByLabelText("Client secret"), "s3cret");
     await user.type(screen.getByLabelText("Cartella Drive"), "folder-1");
     await user.type(screen.getByLabelText("API key (Picker)"), "key-2");
-    await user.type(screen.getByLabelText("App ID (numero progetto)"), "987");
     await user.click(screen.getByRole("button", { name: "Salva" }));
 
     expect(mocks.put).toHaveBeenCalledWith("/api/google/settings", {
@@ -175,7 +178,6 @@ describe("GoogleSettingsModal", () => {
         calendarId: "primary",
         driveFolderId: "folder-1",
         apiKey: "key-2",
-        appId: "987",
       },
     });
   });

@@ -36,6 +36,9 @@ const created: ReportBody = {
 
 interface Options {
   connected?: boolean;
+  drive?: boolean;
+  signIn?: () => Promise<boolean>;
+  refresh?: () => void;
   nre?: string;
   defaults?: boolean;
 }
@@ -49,11 +52,16 @@ function renderDialog(options: Options = {}): {
   render(
     <GoogleContext
       value={{
-        status: { configured: true, connected: options.connected ?? false },
+        status: {
+          configured: true,
+          connected: options.connected ?? false,
+          clientId: "123456789012-abc.apps.googleusercontent.com",
+          drive: options.drive ?? true,
+        },
         loading: false,
         error: undefined,
-        refresh: vi.fn(),
-        connect: vi.fn(),
+        refresh: options.refresh ?? vi.fn(),
+        signIn: options.signIn ?? vi.fn().mockResolvedValue(true),
         disconnect: vi.fn(),
         openSettings: vi.fn(),
       }}
@@ -212,8 +220,51 @@ describe("UploadReportDialog", () => {
     expect(await screen.findByText("Caricamento non riuscito")).toBeVisible();
   });
 
-  it("hides the Drive button when Google is not connected", () => {
-    renderDialog({ connected: false });
+  it("shows the Drive button when configured with drive and disconnected", () => {
+    renderDialog({ connected: false, drive: true });
+
+    expect(
+      screen.getByRole("button", { name: "Scegli da Google Drive" }),
+    ).toBeVisible();
+  });
+
+  it("signs in before the picker request when disconnected", async () => {
+    const order: string[] = [];
+    const signIn = vi.fn().mockImplementation(() => {
+      order.push("signIn");
+      return Promise.resolve(true);
+    });
+    mocks.post.mockImplementation((path: string) => {
+      order.push(path);
+      return Promise.resolve({ data: undefined, response: { status: 409 } });
+    });
+    renderDialog({ connected: false, signIn });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scegli da Google Drive" }),
+    );
+
+    await waitFor(() => {
+      expect(order).toEqual(["signIn", "/api/google/picker"]);
+    });
+  });
+
+  it("does not request the picker when the sign-in fails", async () => {
+    const signIn = vi.fn().mockResolvedValue(false);
+    renderDialog({ connected: false, signIn });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Scegli da Google Drive" }),
+    );
+
+    await waitFor(() => {
+      expect(signIn).toHaveBeenCalled();
+    });
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
+
+  it("hides the Drive button when the Picker API key is missing", () => {
+    renderDialog({ connected: false, drive: false });
 
     expect(
       screen.queryByRole("button", { name: "Scegli da Google Drive" }),
@@ -281,27 +332,29 @@ describe("UploadReportDialog", () => {
     );
 
     expect(
-      await screen.findByText(
-        "Configura API key e App ID in Impostazioni Google",
-      ),
+      await screen.findByText("Aggiungi la API key in Impostazioni Google"),
     ).toBeVisible();
     expect(mocks.pick).not.toHaveBeenCalled();
   });
 
-  it("asks to connect Google on 401", async () => {
+  it("refreshes and asks to retry on 401", async () => {
+    const refresh = vi.fn();
     mocks.post.mockResolvedValue({
       data: undefined,
       response: { status: 401 },
     });
-    renderDialog({ connected: true });
+    renderDialog({ connected: true, refresh });
 
     await userEvent.click(
       screen.getByRole("button", { name: "Scegli da Google Drive" }),
     );
 
     expect(
-      await screen.findByText("Collega Google per usare Drive"),
+      await screen.findByText(
+        "Accesso a Google scaduto: premi di nuovo Scegli da Google Drive",
+      ),
     ).toBeVisible();
+    expect(refresh).toHaveBeenCalled();
   });
 
   it("shows the import error when the Drive import fails", async () => {

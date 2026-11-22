@@ -7,7 +7,7 @@ export interface GoogleValue {
   loading: boolean;
   error: string | undefined;
   refresh: () => void;
-  connect: () => Promise<void>;
+  signIn: () => Promise<boolean>;
   disconnect: () => Promise<void>;
   openSettings: () => void;
 }

@@ -58,7 +58,6 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
   );
   const [driveFolderId, setDriveFolderId] = useState(settings.driveFolderId);
   const [apiKey, setApiKey] = useState(settings.apiKey);
-  const [appId, setAppId] = useState(settings.appId);
   const [clientIdError, setClientIdError] = useState<string | undefined>(
     undefined,
   );
@@ -84,14 +83,12 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
     const trimmedCalendarId = calendarId.trim();
     const trimmedFolder = driveFolderId.trim();
     const trimmedApiKey = apiKey.trim();
-    const trimmedAppId = appId.trim();
     const body: GoogleSettingsRequest = {
       clientId: trimmedClientId,
       ...(trimmedSecret === "" ? {} : { clientSecret: trimmedSecret }),
       ...(trimmedCalendarId === "" ? {} : { calendarId: trimmedCalendarId }),
       ...(trimmedFolder === "" ? {} : { driveFolderId: trimmedFolder }),
       ...(trimmedApiKey === "" ? {} : { apiKey: trimmedApiKey }),
-      ...(trimmedAppId === "" ? {} : { appId: trimmedAppId }),
     };
     setSaving(true);
     try {
@@ -122,16 +119,15 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
   return (
     <form onSubmit={handleSubmit} noValidate>
       <Stack gap="sm">
-        <Text size="sm" c="dimmed">
-          Su Google Cloud Console crea un client OAuth di tipo
-          &quot;Applicazione web&quot;, abilita le API Calendar e Drive e
-          aggiungi il redirect URI indicato qui sotto.
-        </Text>
         <Stack gap={4}>
-          <Text size="sm" fw={500}>
-            Redirect URI da registrare su Google Cloud
+          <Text size="sm">
+            Su Google Cloud crea un client OAuth di tipo Applicazione web e
+            aggiungi questa origine JavaScript autorizzata:
           </Text>
-          <CopyButton value={settings.redirectUri} label="Copia redirect URI" />
+          <CopyButton
+            value={settings.javascriptOrigin}
+            label="Copia origine JavaScript"
+          />
         </Stack>
         <TextInput
           label="Client ID"
@@ -169,19 +165,11 @@ function GoogleSettingsForm({ settings, onClose }: FormProps): JSX.Element {
         />
         <TextInput
           label="API key (Picker)"
-          description="Chiave API di Google Cloud per scegliere i referti da Drive; vedi il README"
+          description="Chiave API di Google Cloud per scegliere i referti da Drive (facoltativa); vedi il README"
           autoComplete="off"
           value={apiKey}
           onChange={(event) => {
             setApiKey(event.currentTarget.value);
-          }}
-        />
-        <TextInput
-          label="App ID (numero progetto)"
-          description="Numero del progetto Google Cloud, vedi il README"
-          value={appId}
-          onChange={(event) => {
-            setAppId(event.currentTarget.value);
           }}
         />
         {formError === undefined ? null : (
