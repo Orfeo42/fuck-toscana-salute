@@ -60,7 +60,9 @@ function PdfPageCanvas({ doc, pageNumber }: PageProps): JSX.Element {
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const task = page.render({ canvas, viewport });
-        cancelRender = task.cancel;
+        cancelRender = () => {
+          task.cancel();
+        };
         return task.promise;
       })
       .catch(() => {

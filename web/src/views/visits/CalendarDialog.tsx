@@ -93,6 +93,11 @@ export function CalendarDialog({
   const configured = status?.configured === true;
   const connected = configured && status.connected;
 
+  const handleConfigure = (): void => {
+    onClose();
+    openSettings();
+  };
+
   const handleAdd = async (): Promise<void> => {
     if (at === undefined) {
       return;
@@ -135,7 +140,7 @@ export function CalendarDialog({
   };
 
   const configureButton = (
-    <Button variant="default" size="compact-sm" onClick={openSettings}>
+    <Button variant="default" size="compact-sm" onClick={handleConfigure}>
       Configura
     </Button>
   );

@@ -45,6 +45,39 @@ describe("PdfViewerModal", () => {
     expect(screen.getByRole("dialog", { name: "Ricetta" })).toBeInTheDocument();
   });
 
+  it("cancels the render task bound to itself when closed", async () => {
+    const cancelled = vi.fn();
+    class RenderTask {
+      promise = new Promise<void>(() => undefined);
+      private readonly internal = { cancel: cancelled };
+      cancel(): void {
+        this.internal.cancel();
+      }
+    }
+    mocks.loadPdf.mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: () =>
+          Promise.resolve({
+            getViewport: () => ({ width: 100, height: 200 }),
+            render: () => new RenderTask(),
+          }),
+      }),
+      destroy: mocks.destroy,
+    });
+    const view = render(
+      <PdfViewerModal url="/x.pdf" title="Ricetta" opened onClose={vi.fn()} />,
+    );
+    await screen.findByLabelText("Pagina 1 di 1");
+    await waitFor(() => {
+      expect(mocks.loadPdf).toHaveBeenCalled();
+    });
+
+    view.unmount();
+
+    expect(cancelled).toHaveBeenCalled();
+  });
+
   it("shows an error with a new tab link when loading fails", async () => {
     mocks.loadPdf.mockReturnValue({
       promise: Promise.reject(new Error("401")),

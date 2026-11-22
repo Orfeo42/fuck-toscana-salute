@@ -329,13 +329,16 @@ describe("CalendarDialog", () => {
   it("shows Configura and disables Aggiungi when not configured", async () => {
     const user = userEvent.setup();
     const openSettings = vi.fn();
+    const onClose = vi.fn();
     renderDialog({
       status: { ...connected, configured: false, connected: false },
       openSettings,
+      onClose,
     });
 
     expect(screen.getByText("Google non è configurato")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Configura" }));
+    expect(onClose).toHaveBeenCalled();
     expect(openSettings).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Aggiungi" })).toBeDisabled();
   });
