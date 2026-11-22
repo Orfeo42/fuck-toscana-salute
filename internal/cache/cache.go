@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ const (
 	appointmentsTTL = time.Hour
 	verdictsTTL     = 24 * time.Hour
 	statusOK        = 200
+	keptTTL         = time.Duration(math.MaxInt64)
 )
 
 //go:generate moq -out store_mock.go . Store:MockStore
@@ -223,6 +225,14 @@ func (c *CUP) Prescriptions(ctx context.Context) ([]cup.Prescription, error) {
 func (c *CUP) Appointments(ctx context.Context, nre string) ([]cup.Appointment, error) {
 	nre = strings.ToUpper(nre)
 	q := query{source: SourceCUPAppointments, subject: nre, ttl: c.policy.Appointments, forced: forced(ctx, nre)}
+	return readThrough(ctx, c.st, c.now, q, func(ctx context.Context) ([]cup.Appointment, error) {
+		return c.src.Appointments(ctx, nre)
+	})
+}
+
+func (c *CUP) KeptAppointments(ctx context.Context, nre string) ([]cup.Appointment, error) {
+	nre = strings.ToUpper(nre)
+	q := query{source: SourceCUPAppointments, subject: nre, ttl: keptTTL, forced: forced(ctx, nre)}
 	return readThrough(ctx, c.st, c.now, q, func(ctx context.Context) ([]cup.Appointment, error) {
 		return c.src.Appointments(ctx, nre)
 	})

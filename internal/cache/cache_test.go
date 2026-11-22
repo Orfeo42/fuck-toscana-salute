@@ -230,6 +230,52 @@ func TestCUPPrescriptions(t *testing.T) {
 	})
 }
 
+func TestCUPKeptAppointments(t *testing.T) {
+	want := fakeAppointments()
+	old := testNow.Add(-1000 * time.Hour)
+
+	t.Run("an old record is served without refetching", func(t *testing.T) {
+		st := &MockStore{LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+			return record(t, source, subject, old, want), nil
+		}}
+		src := &MockCUPSource{}
+		got, err := newCUP(src, st).KeptAppointments(context.Background(), "0900a0000000001")
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+		assert.Empty(t, src.AppointmentsCalls())
+		assert.Equal(t, testNRE, st.LatestCalls()[0].Subject)
+	})
+
+	t.Run("a missing record is fetched and stored", func(t *testing.T) {
+		st := &MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				return store.Record{}, store.ErrNotFound
+			},
+			PutFunc: func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		src := &MockCUPSource{AppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) { return want, nil }}
+		got, err := newCUP(src, st).KeptAppointments(context.Background(), testNRE)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+		assert.Len(t, st.PutCalls(), 1)
+	})
+
+	t.Run("a forced NRE refetches an old record", func(t *testing.T) {
+		st := &MockStore{
+			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
+				return record(t, source, subject, old, []cup.Appointment{}), nil
+			},
+			PutFunc: func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		src := &MockCUPSource{AppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) { return want, nil }}
+		ctx := WithRefresh(context.Background(), Scope{NREs: []string{testNRE}})
+		got, err := newCUP(src, st).KeptAppointments(ctx, testNRE)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+		assert.Len(t, src.AppointmentsCalls(), 1)
+	})
+}
+
 func TestCUPAppointments(t *testing.T) {
 	want := fakeAppointments()
 

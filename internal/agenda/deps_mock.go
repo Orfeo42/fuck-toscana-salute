@@ -33,6 +33,9 @@ var _ CUP = &MockCUP{}
 //			CachedVerdictsFunc: func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error) {
 //				panic("mock out the CachedVerdicts method")
 //			},
+//			KeptAppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+//				panic("mock out the KeptAppointments method")
+//			},
 //			PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) {
 //				panic("mock out the Prescriptions method")
 //			},
@@ -57,6 +60,9 @@ type MockCUP struct {
 
 	// CachedVerdictsFunc mocks the CachedVerdicts method.
 	CachedVerdictsFunc func(ctx context.Context) (map[string]cache.Entry[cup.Verdict], error)
+
+	// KeptAppointmentsFunc mocks the KeptAppointments method.
+	KeptAppointmentsFunc func(ctx context.Context, nre string) ([]cup.Appointment, error)
 
 	// PrescriptionsFunc mocks the Prescriptions method.
 	PrescriptionsFunc func(ctx context.Context) ([]cup.Prescription, error)
@@ -88,6 +94,13 @@ type MockCUP struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 		}
+		// KeptAppointments holds details about calls to the KeptAppointments method.
+		KeptAppointments []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// Nre is the nre argument value.
+			Nre string
+		}
 		// Prescriptions holds details about calls to the Prescriptions method.
 		Prescriptions []struct {
 			// Ctx is the ctx argument value.
@@ -105,6 +118,7 @@ type MockCUP struct {
 	lockCachedAppointments  sync.RWMutex
 	lockCachedPrescriptions sync.RWMutex
 	lockCachedVerdicts      sync.RWMutex
+	lockKeptAppointments    sync.RWMutex
 	lockPrescriptions       sync.RWMutex
 	lockVerdict             sync.RWMutex
 }
@@ -238,6 +252,42 @@ func (mock *MockCUP) CachedVerdictsCalls() []struct {
 	mock.lockCachedVerdicts.RLock()
 	calls = mock.calls.CachedVerdicts
 	mock.lockCachedVerdicts.RUnlock()
+	return calls
+}
+
+// KeptAppointments calls KeptAppointmentsFunc.
+func (mock *MockCUP) KeptAppointments(ctx context.Context, nre string) ([]cup.Appointment, error) {
+	if mock.KeptAppointmentsFunc == nil {
+		panic("MockCUP.KeptAppointmentsFunc: method is nil but CUP.KeptAppointments was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+		Nre string
+	}{
+		Ctx: ctx,
+		Nre: nre,
+	}
+	mock.lockKeptAppointments.Lock()
+	mock.calls.KeptAppointments = append(mock.calls.KeptAppointments, callInfo)
+	mock.lockKeptAppointments.Unlock()
+	return mock.KeptAppointmentsFunc(ctx, nre)
+}
+
+// KeptAppointmentsCalls gets all the calls that were made to KeptAppointments.
+// Check the length with:
+//
+//	len(mockedCUP.KeptAppointmentsCalls())
+func (mock *MockCUP) KeptAppointmentsCalls() []struct {
+	Ctx context.Context
+	Nre string
+} {
+	var calls []struct {
+		Ctx context.Context
+		Nre string
+	}
+	mock.lockKeptAppointments.RLock()
+	calls = mock.calls.KeptAppointments
+	mock.lockKeptAppointments.RUnlock()
 	return calls
 }
 

@@ -39,6 +39,7 @@ const (
 type CUP interface {
 	Prescriptions(ctx context.Context) ([]cup.Prescription, error)
 	Appointments(ctx context.Context, nre string) ([]cup.Appointment, error)
+	KeptAppointments(ctx context.Context, nre string) ([]cup.Appointment, error)
 	Verdict(ctx context.Context, nre string) (cup.Verdict, error)
 	CachedPrescriptions(ctx context.Context) (cache.Entry[[]cup.Prescription], error)
 	CachedAppointments(ctx context.Context) (map[string]cache.Entry[[]cup.Appointment], error)
@@ -65,8 +66,9 @@ type Failure struct {
 }
 
 type candidate struct {
-	nre string
-	fse *fse.Prescription
+	nre    string
+	fse    *fse.Prescription
+	closed bool
 }
 
 type Result struct {
@@ -107,6 +109,7 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 	result := Result{Entries: []Entry{}, Failed: []Failure{}, Unbooked: []string{}, Verdicts: map[string]cup.Verdict{}}
+	toVerdict := []string{}
 	for i, c := range candidates {
 		if errs[i] != nil {
 			result.Failed = append(result.Failed, Failure{NRE: c.nre, FSE: c.fse, Err: errs[i]})
@@ -114,13 +117,16 @@ func (a *Agenda) Appointments(ctx context.Context) (Result, error) {
 		}
 		if len(results[i]) == 0 {
 			result.Unbooked = append(result.Unbooked, c.nre)
+			if !c.closed {
+				toVerdict = append(toVerdict, c.nre)
+			}
 		}
 		for _, appointment := range results[i] {
 			result.Entries = append(result.Entries, Entry{Appointment: appointment, NRE: c.nre, FSE: c.fse})
 		}
 	}
 	slices.SortStableFunc(result.Entries, compareEntries)
-	result.Verdicts = a.lookupVerdicts(ctx, result.Unbooked)
+	result.Verdicts = a.lookupVerdicts(ctx, toVerdict)
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
@@ -183,7 +189,11 @@ func (a *Agenda) candidates(cupPrescriptions []cup.Prescription, fsePrescription
 	index := map[string]int{}
 	for i := range fsePrescriptions {
 		p := &fsePrescriptions[i]
-		if p.Kind != fse.KindVisit || p.NRE == "" || isClosed(p.Status) || (!p.Date.IsZero() && p.Date.Before(limit)) {
+		if p.Kind != fse.KindVisit || p.NRE == "" {
+			continue
+		}
+		closed := IsClosed(p.Status)
+		if !closed && !p.Date.IsZero() && p.Date.Before(limit) {
 			continue
 		}
 		key := strings.ToUpper(p.NRE)
@@ -195,12 +205,12 @@ func (a *Agenda) candidates(cupPrescriptions []cup.Prescription, fsePrescription
 			continue
 		}
 		index[key] = len(candidates)
-		candidates = append(candidates, candidate{nre: p.NRE, fse: p})
+		candidates = append(candidates, candidate{nre: p.NRE, fse: p, closed: closed})
 	}
 	return candidates
 }
 
-func isClosed(status int) bool {
+func IsClosed(status int) bool {
 	switch cup.Status(status) {
 	case cup.StatusCancelled, cup.StatusDone, cup.StatusDoneAfterCancel:
 		return true
@@ -217,6 +227,10 @@ func (a *Agenda) lookupAppointments(ctx context.Context, candidates []candidate)
 		semaphore <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-semaphore }()
+			if candidates[i].closed {
+				results[i], errs[i] = a.cup.KeptAppointments(ctx, candidates[i].nre)
+				return
+			}
 			results[i], errs[i] = a.cup.Appointments(ctx, candidates[i].nre)
 		})
 	}
@@ -314,6 +328,7 @@ type VerdictEntry struct {
 
 type Lookup struct {
 	Candidate    bool
+	Closed       bool
 	Checked      bool
 	CheckedAt    time.Time
 	Stale        bool
@@ -372,23 +387,24 @@ func (a *Agenda) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	for _, c := range a.candidates(cupList.Value, fseList.Value) {
 		key := strings.ToUpper(c.nre)
-		snapshot.Lookups[key] = buildLookup(appointments[key], verdicts[key])
+		snapshot.Lookups[key] = buildLookup(appointments[key], verdicts[key], c.closed)
 	}
 	return snapshot, nil
 }
 
-func buildLookup(appointments cache.Entry[[]cup.Appointment], verdict cache.Entry[cup.Verdict]) Lookup {
+func buildLookup(appointments cache.Entry[[]cup.Appointment], verdict cache.Entry[cup.Verdict], closed bool) Lookup {
 	if appointments.FetchedAt.IsZero() {
-		return Lookup{Candidate: true}
+		return Lookup{Candidate: true, Closed: closed}
 	}
 	lookup := Lookup{
 		Candidate:    true,
+		Closed:       closed,
 		Checked:      true,
 		CheckedAt:    appointments.FetchedAt,
-		Stale:        appointments.Stale,
+		Stale:        appointments.Stale && !closed,
 		Appointments: appointments.Value,
 	}
-	if len(appointments.Value) == 0 && !verdict.FetchedAt.IsZero() {
+	if !closed && len(appointments.Value) == 0 && !verdict.FetchedAt.IsZero() {
 		lookup.Verdict = &VerdictEntry{Verdict: verdict.Value, VerifiedAt: verdict.FetchedAt, Stale: verdict.Stale}
 	}
 	return lookup
@@ -400,10 +416,21 @@ func (a *Agenda) Lists(ctx context.Context) error {
 }
 
 func (a *Agenda) RefreshNREs(ctx context.Context, nres []string) error {
+	fseList, err := a.fse.CachedPrescriptions(ctx)
+	if err != nil && !errors.Is(err, cache.ErrNotCached) {
+		return fmt.Errorf("%w: %w", ErrFSEPrescriptions, err)
+	}
+	closed := map[string]struct{}{}
+	for _, p := range fseList.Value {
+		if p.Kind == fse.KindVisit && IsClosed(p.Status) {
+			closed[strings.ToUpper(p.NRE)] = struct{}{}
+		}
+	}
 	ctx = cache.WithRefresh(ctx, cache.Scope{NREs: nres})
 	candidates := make([]candidate, 0, len(nres))
 	for _, nre := range nres {
-		candidates = append(candidates, candidate{nre: nre})
+		_, isClosed := closed[strings.ToUpper(nre)]
+		candidates = append(candidates, candidate{nre: nre, closed: isClosed})
 	}
 	results, errs := a.lookupAppointments(ctx, candidates)
 	if err := ctx.Err(); err != nil {
@@ -411,7 +438,7 @@ func (a *Agenda) RefreshNREs(ctx context.Context, nres []string) error {
 	}
 	unbooked := []string{}
 	for i, c := range candidates {
-		if errs[i] == nil && len(results[i]) == 0 {
+		if errs[i] == nil && len(results[i]) == 0 && !c.closed {
 			unbooked = append(unbooked, c.nre)
 		}
 	}

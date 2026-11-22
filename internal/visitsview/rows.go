@@ -56,12 +56,13 @@ func (in inputs) build(r agenda.Row) Row {
 	title := r.Title()
 	booking, hasBooking := agenda.BestBooking(lookup.Appointments)
 	live := hasBooking && booking.Status != cancelledBooking
+	closed := r.FSE != nil && agenda.IsClosed(r.FSE.Status)
 
 	st := statusInput{
 		status:   statusToBook,
 		unbooked: lookup.Candidate && lookup.Checked && len(lookup.Appointments) == 0,
 		verdict:  lookup.Verdict,
-		booked:   live,
+		booked:   live && !closed,
 		now:      in.now,
 	}
 	row := Row{NRE: r.NRE, Title: title, PrescribedOn: r.PrescribedOn(), Reports: in.linked[key]}
@@ -80,7 +81,7 @@ func (in inputs) build(r agenda.Row) Row {
 	row.Status = derive(st)
 
 	row.Upload = UploadDefaults{Title: title, Date: itfmt.Day(in.now)}
-	if live {
+	if live || (closed && hasBooking) {
 		row.Appointment = toAppointment(booking, title, in.now)
 		row.Upload.Provider = row.Appointment.Unit.DisplayName
 		if !booking.At.IsZero() {

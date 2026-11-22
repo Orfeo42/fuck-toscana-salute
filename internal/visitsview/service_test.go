@@ -210,22 +210,29 @@ func TestQueryExcludeAndCounts(t *testing.T) {
 		assert.ElementsMatch(t, []string{n2, n3, n4}, nres(page.Rows))
 	})
 
-	t.Run("a booked row with a done fse status is not hidden", func(t *testing.T) {
+	t.Run("a done row with a live booking keeps Erogata, shows the appointment and stays hidden", func(t *testing.T) {
 		lookups := map[string]agenda.Lookup{n3: checked(booking(n3, "PRENOTATO", "2026-12-01T09:00:00Z", "U"))}
 		f := newFixture(freshSnapshot(baseRows(), lookups))
 
-		page := query(t, f, Query{Search: n3})
+		hidden := query(t, f, Query{Search: n3})
+		shown := query(t, f, Query{Search: n3, ExcludeStatuses: []string{}})
 
-		assert.Equal(t, []string{n3}, nres(page.Rows))
+		assert.Empty(t, hidden.Rows)
+		require.Len(t, shown.Rows, 1)
+		assert.Equal(t, "Erogata", shown.Rows[0].Status.Label)
+		require.NotNil(t, shown.Rows[0].Appointment)
+		assert.Equal(t, LookupDone, shown.Rows[0].AppointmentLookup)
 	})
 
-	t.Run("a DISDETTO booking on a done row stays hidden", func(t *testing.T) {
-		lookups := map[string]agenda.Lookup{n3: checked(booking(n3, "DISDETTO", "2026-12-01T09:00:00Z", "U"))}
+	t.Run("a cancelled row with a DISDETTO booking still shows the appointment", func(t *testing.T) {
+		lookups := map[string]agenda.Lookup{n4: checked(booking(n4, "DISDETTO", "2026-12-01T09:00:00Z", "U"))}
 		f := newFixture(freshSnapshot(baseRows(), lookups))
 
-		page := query(t, f, Query{Search: n3})
+		page := query(t, f, Query{Search: n4, ExcludeStatuses: []string{}})
 
-		assert.Empty(t, page.Rows)
+		require.Len(t, page.Rows, 1)
+		assert.Equal(t, "Annullata", page.Rows[0].Status.Label)
+		assert.NotNil(t, page.Rows[0].Appointment)
 	})
 
 	t.Run("counts follow the display order and flag excluded options", func(t *testing.T) {
@@ -560,6 +567,25 @@ func TestQueryRefreshing(t *testing.T) {
 		f := newFixture(freshSnapshot(baseRows()[:1], map[string]agenda.Lookup{n1: {Candidate: true}}))
 
 		page := query(t, f, Query{})
+
+		assert.Len(t, f.refresher.KickCalls(), 1)
+		assert.Equal(t, LookupChecking, page.Rows[0].AppointmentLookup)
+	})
+
+	t.Run("a cached closed lookup never kicks", func(t *testing.T) {
+		lookup := checked()
+		lookup.Closed = true
+		f := newFixture(freshSnapshot(baseRows()[2:3], map[string]agenda.Lookup{n3: lookup}))
+
+		query(t, f, Query{ExcludeStatuses: []string{}})
+
+		assert.Empty(t, f.refresher.KickCalls())
+	})
+
+	t.Run("a missing closed lookup kicks and reads as checking", func(t *testing.T) {
+		f := newFixture(freshSnapshot(baseRows()[2:3], map[string]agenda.Lookup{n3: {Candidate: true, Closed: true}}))
+
+		page := query(t, f, Query{ExcludeStatuses: []string{}})
 
 		assert.Len(t, f.refresher.KickCalls(), 1)
 		assert.Equal(t, LookupChecking, page.Rows[0].AppointmentLookup)

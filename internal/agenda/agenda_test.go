@@ -43,7 +43,12 @@ func TestNew(t *testing.T) {
 }
 
 func emptyFSE() *MockFSE {
-	return &MockFSE{PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) { return nil, nil }}
+	return &MockFSE{
+		PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) { return nil, nil },
+		CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]fse.Prescription], error) {
+			return cache.Entry[[]fse.Prescription]{}, cache.ErrNotCached
+		},
+	}
 }
 
 func noCUP() *MockCUP {
@@ -57,18 +62,68 @@ func noCUP() *MockCUP {
 }
 
 func visits(nres ...string) *MockFSE {
-	return &MockFSE{PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) {
-		out := []fse.Prescription{}
-		for _, nre := range nres {
-			out = append(out, fse.Prescription{ID: "id-" + nre, NRE: nre, Kind: fse.KindVisit, Status: 3})
-		}
-		return out, nil
-	}}
+	list := []fse.Prescription{}
+	for _, nre := range nres {
+		list = append(list, fse.Prescription{ID: "id-" + nre, NRE: nre, Kind: fse.KindVisit, Status: 3})
+	}
+	return fseWith(list)
+}
+
+func fseWith(list []fse.Prescription) *MockFSE {
+	return &MockFSE{
+		PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) { return list, nil },
+		CachedPrescriptionsFunc: func(ctx context.Context) (cache.Entry[[]fse.Prescription], error) {
+			return cache.Entry[[]fse.Prescription]{Value: list, FetchedAt: fixedNow}, nil
+		},
+	}
+}
+
+func noKept() func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+	return func(ctx context.Context, nre string) ([]cup.Appointment, error) { return nil, nil }
 }
 
 func TestAppointments(t *testing.T) {
-	t.Run("filters by kind, empty NRE, closed status and age", func(t *testing.T) {
+	t.Run("closed visits are looked up once through the kept path regardless of age, no verdict", func(t *testing.T) {
 		c := noCUP()
+		c.KeptAppointmentsFunc = noKept()
+		f := fseWith([]fse.Prescription{
+			{ID: "f1", NRE: "DONE", Kind: fse.KindVisit, Status: 8, Date: fixedNow.AddDate(-3, 0, 0)},
+			{ID: "f2", NRE: "CANC", Kind: fse.KindVisit, Status: 4},
+			{ID: "f3", NRE: "OPEN", Kind: fse.KindVisit, Status: 3, Date: fixedNow.AddDate(-3, 0, 0)},
+			{ID: "f4", NRE: "DRUG", Kind: fse.KindDrug, Status: 8},
+		})
+		result, err := newAgenda(c, f, 2).Appointments(context.Background())
+		require.NoError(t, err)
+		kept := []string{}
+		for _, call := range c.KeptAppointmentsCalls() {
+			kept = append(kept, call.Nre)
+		}
+		assert.ElementsMatch(t, []string{"DONE", "CANC"}, kept)
+		assert.Empty(t, c.AppointmentsCalls())
+		assert.ElementsMatch(t, []string{"DONE", "CANC"}, result.Unbooked)
+		assert.Empty(t, c.VerdictCalls())
+	})
+
+	t.Run("open visit keeps age limit and verdict while closed one with booking is an entry", func(t *testing.T) {
+		c := noCUP()
+		c.KeptAppointmentsFunc = func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			return []cup.Appointment{{ID: "x"}}, nil
+		}
+		f := fseWith([]fse.Prescription{
+			{ID: "f1", NRE: "DONE", Kind: fse.KindVisit, Status: 8},
+			{ID: "f2", NRE: "OPEN", Kind: fse.KindVisit, Status: 3},
+		})
+		result, err := newAgenda(c, f, 1).Appointments(context.Background())
+		require.NoError(t, err)
+		require.Len(t, result.Entries, 1)
+		assert.Equal(t, "DONE", result.Entries[0].NRE)
+		require.Len(t, c.VerdictCalls(), 1)
+		assert.Equal(t, "OPEN", c.VerdictCalls()[0].Nre)
+	})
+
+	t.Run("filters by kind, empty NRE, cancelled status and age", func(t *testing.T) {
+		c := noCUP()
+		c.KeptAppointmentsFunc = noKept()
 		f := &MockFSE{PrescriptionsFunc: func(ctx context.Context) ([]fse.Prescription, error) {
 			return []fse.Prescription{
 				{ID: "f1", NRE: "OK1", Kind: fse.KindVisit, Status: 30, Date: fixedNow.AddDate(0, -1, 0)},
@@ -84,6 +139,7 @@ func TestAppointments(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, c.AppointmentsCalls(), 1)
 		assert.Equal(t, "OK1", c.AppointmentsCalls()[0].Nre)
+		assert.Len(t, c.KeptAppointmentsCalls(), 3)
 	})
 
 	t.Run("cup-listed NRE also in fse is not looked up", func(t *testing.T) {
@@ -546,7 +602,33 @@ func TestSnapshot(t *testing.T) {
 			assert.True(t, lookup.Candidate)
 		}
 		assert.Equal(t, expected, got)
-		assert.Equal(t, map[string]bool{"OK1": true}, got)
+		assert.Equal(t, map[string]bool{"OK1": true, "CANC": true, "DONE": true, "DONE9": true}, got)
+		assert.True(t, snapshot.Lookups["DONE"].Closed)
+		assert.False(t, snapshot.Lookups["OK1"].Closed)
+	})
+
+	t.Run("closed lookup is never stale and carries no verdict", func(t *testing.T) {
+		appointments := map[string]cache.Entry[[]cup.Appointment]{
+			"DONE": {FetchedAt: at.Add(-5 * time.Hour), Stale: true},
+			"OPEN": {FetchedAt: at.Add(-5 * time.Hour), Stale: true},
+		}
+		verdicts := map[string]cache.Entry[cup.Verdict]{"DONE": {Value: cup.Verdict{Reason: cup.VerdictHandled}, FetchedAt: at}}
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, appointments, verdicts)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("DONE", 8), visit("OPEN", 3)}, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.True(t, snapshot.Lookups["DONE"].Checked)
+		assert.False(t, snapshot.Lookups["DONE"].Stale)
+		assert.Nil(t, snapshot.Lookups["DONE"].Verdict)
+		assert.True(t, snapshot.Lookups["OPEN"].Stale)
+	})
+
+	t.Run("missing closed lookup is a candidate without check", func(t *testing.T) {
+		c := cachedCUP(cache.Entry[[]cup.Prescription]{}, nil, nil, nil)
+		f := cachedFSE(cache.Entry[[]fse.Prescription]{Value: []fse.Prescription{visit("DONE", 8)}, FetchedAt: at}, nil)
+		snapshot, err := newAgenda(c, f, 1).Snapshot(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, Lookup{Candidate: true, Closed: true}, snapshot.Lookups["DONE"])
 	})
 
 	t.Run("lookup carries appointments, check time and stale flag", func(t *testing.T) {
@@ -644,6 +726,20 @@ func TestRefreshNREs(t *testing.T) {
 		assert.Empty(t, f.PrescriptionsCalls())
 	})
 
+	t.Run("closed visit is refetched through the kept path without verdict", func(t *testing.T) {
+		c := noCUP()
+		c.KeptAppointmentsFunc = noKept()
+		f := fseWith([]fse.Prescription{
+			{ID: "f1", NRE: "DONE", Kind: fse.KindVisit, Status: 8},
+			{ID: "f2", NRE: "OPEN", Kind: fse.KindVisit, Status: 3},
+		})
+		require.NoError(t, newAgenda(c, f, 2).RefreshNREs(context.Background(), []string{"done", "OPEN"}))
+		require.Len(t, c.KeptAppointmentsCalls(), 1)
+		require.Len(t, c.AppointmentsCalls(), 1)
+		require.Len(t, c.VerdictCalls(), 1)
+		assert.Equal(t, "OPEN", c.VerdictCalls()[0].Nre)
+	})
+
 	t.Run("forces the real cache for the given NRE only", func(t *testing.T) {
 		st := &cache.MockStore{
 			LatestFunc: func(ctx context.Context, source, subject string) (store.Record, error) {
@@ -677,6 +773,37 @@ func TestRefreshNREs(t *testing.T) {
 		require.ErrorIs(t, err, session.ErrSessionExpired)
 		require.ErrorIs(t, err, ErrRefreshNREs)
 		assert.Empty(t, c.VerdictCalls())
+	})
+}
+
+func TestKeptAppointmentsThroughAgenda(t *testing.T) {
+	staleRecord := func(ctx context.Context, source, subject string) (store.Record, error) {
+		payload, err := json.Marshal([]cup.Appointment{{ID: "old"}})
+		require.NoError(t, err)
+		return store.Record{Source: source, Subject: subject, FetchedAt: fixedNow.Add(-1000 * time.Hour), Payload: payload}, nil
+	}
+	newCached := func(src *cache.MockCUPSource) *Agenda {
+		st := &cache.MockStore{
+			LatestFunc: staleRecord,
+			PutFunc:    func(ctx context.Context, rec store.Record) error { return nil },
+		}
+		f := fseWith([]fse.Prescription{{ID: "f1", NRE: "DONE", Kind: fse.KindVisit, Status: 8}})
+		return newAgenda(cache.NewCUP(src, st, cache.DefaultPolicy()), f, 1)
+	}
+
+	t.Run("bulk job does not refetch a cached closed lookup", func(t *testing.T) {
+		src := &cache.MockCUPSource{PrescriptionsFunc: func(ctx context.Context) ([]cup.Prescription, error) { return nil, nil }}
+		_, err := newCached(src).Appointments(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, src.AppointmentsCalls())
+	})
+
+	t.Run("forced scope refetches it", func(t *testing.T) {
+		src := &cache.MockCUPSource{AppointmentsFunc: func(ctx context.Context, nre string) ([]cup.Appointment, error) {
+			return []cup.Appointment{{ID: "new"}}, nil
+		}}
+		require.NoError(t, newCached(src).RefreshNREs(context.Background(), []string{"DONE"}))
+		assert.Len(t, src.AppointmentsCalls(), 1)
 	})
 }
 

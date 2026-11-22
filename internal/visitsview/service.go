@@ -84,7 +84,7 @@ func needsRefresh(snap agenda.Snapshot) bool {
 		if !l.Checked || l.Stale {
 			return true
 		}
-		if len(l.Appointments) == 0 && (l.Verdict == nil || l.Verdict.Stale) {
+		if !l.Closed && len(l.Appointments) == 0 && (l.Verdict == nil || l.Verdict.Stale) {
 			return true
 		}
 	}
