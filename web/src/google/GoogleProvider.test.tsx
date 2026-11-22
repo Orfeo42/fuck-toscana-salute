@@ -1,12 +1,21 @@
-import { Menu } from "@mantine/core";
-import { act, screen, waitFor } from "@testing-library/react";
+import { MantineProvider, Menu, Modal } from "@mantine/core";
+import {
+  act,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import type { JSX } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GoogleStatusBody } from "../api/client";
 import { render } from "../test/render";
+import { theme } from "../theme";
 import { GoogleConnect } from "./GoogleConnect";
 import { GoogleProvider } from "./GoogleProvider";
+import { useGoogle } from "./useGoogle";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -40,6 +49,36 @@ function renderConnect(): void {
         </Menu.Dropdown>
       </Menu>
     </GoogleProvider>,
+  );
+}
+
+function SettingsOpener(): JSX.Element {
+  const { openSettings } = useGoogle();
+  return (
+    <button type="button" onClick={openSettings}>
+      Apri impostazioni
+    </button>
+  );
+}
+
+function LateModal(): JSX.Element {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Apri sotto
+      </button>
+    );
+  }
+  return (
+    <Modal opened onClose={() => undefined} title="Sotto">
+      <SettingsOpener />
+    </Modal>
   );
 }
 
@@ -102,6 +141,46 @@ describe("GoogleProvider", () => {
       await screen.findByRole("dialog", { name: "Configura Google" }),
     ).toBeVisible();
     expect(mocks.loadIdentity).not.toHaveBeenCalled();
+  });
+
+  it("stacks the settings modal above a modal that opened it", async () => {
+    const user = userEvent.setup();
+    mocks.get.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/google/settings"
+          ? {
+              data: {
+                clientId: "",
+                calendarId: "primary",
+                driveFolderId: "",
+                apiKey: "",
+                hasSecret: false,
+                javascriptOrigin: "http://localhost:8800",
+              },
+            }
+          : { data: { ...status(false, false), clientId: "" } },
+      ),
+    );
+    rtlRender(
+      <MantineProvider theme={theme}>
+        <GoogleProvider>
+          <LateModal />
+        </GoogleProvider>
+      </MantineProvider>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Apri sotto" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Configura Google" }),
+    ).toBeNull();
+    await user.click(
+      await screen.findByRole("button", { name: "Apri impostazioni" }),
+    );
+
+    await screen.findByRole("dialog", { name: "Configura Google" });
+    expect(screen.getAllByRole("dialog").at(-1)).toHaveAccessibleName(
+      "Configura Google",
+    );
   });
 
   it("prepares the code requester when configured", async () => {

@@ -69,6 +69,19 @@ describe("LoginViewer", () => {
     expect(screen.getByTestId("remote-target")).toBeInTheDocument();
   });
 
+  it("removes the dialog from the DOM after dismissing", async () => {
+    const user = userEvent.setup();
+    mocks.get.mockResolvedValue({ data: waitingSession });
+    renderViewer();
+    await screen.findByRole("dialog", { name: "Accesso ai portali" });
+
+    await user.click(screen.getByRole("button", { name: "Chiudi" }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
   it("stays hidden when the viewer is not available", async () => {
     mocks.get.mockResolvedValue({
       data: { ...waitingSession, viewer: false },

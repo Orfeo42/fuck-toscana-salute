@@ -1,11 +1,12 @@
-import { Button, Group, Modal, Stack, Text } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
+import { Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { MapPinned, Navigation, RefreshCw } from "lucide-react";
 import type { JSX } from "react";
 
 import type { AppointmentBody, ReportBody, RowBody } from "../../api/client";
 import { CopyButton } from "../../components/CopyButton";
+import { DetailDrawer, type DetailTab } from "../../components/DetailDrawer";
 import { DetailField, DetailSection } from "../../components/DetailSection";
+import { IconAction } from "../../components/IconAction";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
   formatDate,
@@ -15,6 +16,7 @@ import {
 import { rowDate, rowTitle, unitName, type EffectiveState } from "./filter";
 import { fullAddress, mapsDirectionsUrl, mapsSearchUrl } from "./mapsUrl";
 import { relativeDay } from "./relativeDay";
+import { linkedReports } from "./reportLinks";
 import { statusDetails } from "./statusDetails";
 import { ActionsCell } from "./VisitCells";
 import { VisitReportsSection } from "./VisitReportsSection";
@@ -45,7 +47,6 @@ export function VisitDetailModal({
   onRefresh,
   onClose,
 }: Props): JSX.Element {
-  const fullScreen = useMediaQuery("(max-width: 48em)");
   const details = statusDetails(row, state);
   const bookedUnit = state.kind === "booked" ? booking?.unit : undefined;
   const place = bookedUnit?.place ?? "";
@@ -61,99 +62,129 @@ export function VisitDetailModal({
       : `Verifica CUP: ${formatShortDateTime(verifiedAt)}`,
   ].filter((item) => item !== undefined);
 
-  return (
-    <Modal
-      opened
-      onClose={onClose}
-      title={rowTitle(row)}
-      fullScreen={fullScreen}
-      centered
-    >
-      <Stack gap="lg">
-        <DetailSection title="Stato">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
-            <StatusBadge tone={state.tone} manual={state.manual}>
-              {state.label}
-            </StatusBadge>
-            <Stack gap={4}>
-              {details.map((detail) => (
-                <Text key={detail} size="sm">
-                  {detail}
-                </Text>
-              ))}
-            </Stack>
-          </Group>
-          <VisitStatusSection row={row} onChanged={onChanged} />
-        </DetailSection>
-        <DetailSection title="Referti">
-          <VisitReportsSection
-            row={row}
-            state={state}
-            booking={booking}
-            now={now}
-            reports={reports}
-            onChanged={onChanged}
-          />
-        </DetailSection>
-        {bookedUnit === undefined ? null : (
-          <DetailSection title="Appuntamento">
-            {at === undefined ? null : (
-              <DetailField label="Data e ora">
-                <>
-                  <Text>{formatLongDateTime(at)}</Text>
-                  <Text size="sm" c="dimmed">
-                    {relativeDay(at, now)}
+  const tabs: DetailTab[] = [
+    {
+      value: "panoramica",
+      label: "Panoramica",
+      content: (
+        <>
+          <Paper withBorder p="sm" radius="md">
+            <DetailSection title="Stato">
+              <Stack gap={4}>
+                {details.map((detail) => (
+                  <Text key={detail} size="sm">
+                    {detail}
                   </Text>
-                </>
-              </DetailField>
-            )}
-            <DetailField label="Struttura">
-              <>
-                <Text>{unitName(bookedUnit)}</Text>
-                {bookedUnit.description !== "" &&
-                bookedUnit.description !== bookedUnit.name ? (
-                  <Text size="sm" c="dimmed">
-                    {bookedUnit.name}
-                  </Text>
-                ) : null}
-                {place === "" ? null : <Text size="sm">{place}</Text>}
-                {address === "" ? null : <Text size="sm">{address}</Text>}
-              </>
+                ))}
+              </Stack>
+              <VisitStatusSection row={row} onChanged={onChanged} />
+            </DetailSection>
+          </Paper>
+          {bookedUnit === undefined ? null : (
+            <Paper withBorder p="sm" radius="md">
+              <DetailSection title="Appuntamento">
+                {at === undefined ? null : (
+                  <DetailField label="Data e ora">
+                    <>
+                      <Text>{formatLongDateTime(at)}</Text>
+                      <Text size="sm" c="dimmed">
+                        {relativeDay(at, now)}
+                      </Text>
+                    </>
+                  </DetailField>
+                )}
+                <DetailField label="Struttura">
+                  <>
+                    <Text>{unitName(bookedUnit)}</Text>
+                    {bookedUnit.description !== "" &&
+                    bookedUnit.description !== bookedUnit.name ? (
+                      <Text size="sm" c="dimmed">
+                        {bookedUnit.name}
+                      </Text>
+                    ) : null}
+                    {place === "" ? null : <Text size="sm">{place}</Text>}
+                    {address === "" ? null : <Text size="sm">{address}</Text>}
+                  </>
+                </DetailField>
+              </DetailSection>
+            </Paper>
+          )}
+        </>
+      ),
+    },
+    {
+      value: "referti",
+      label: "Referti",
+      count: linkedReports(row, reports).length,
+      content: (
+        <VisitReportsSection
+          row={row}
+          state={state}
+          booking={booking}
+          now={now}
+          reports={reports}
+          onChanged={onChanged}
+        />
+      ),
+    },
+    {
+      value: "prescrizione",
+      label: "Prescrizione",
+      content: (
+        <Paper withBorder p="sm" radius="md">
+          <DetailSection title="Prescrizione">
+            <DetailField label="Data prescrizione">
+              {formatDate(rowDate(row))}
             </DetailField>
-            {bookedUnit.address === "" ? null : (
-              <Group gap="sm">
-                <Button
-                  component="a"
-                  href={mapsDirectionsUrl(bookedUnit)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  leftSection={<Navigation size={16} aria-hidden="true" />}
-                >
-                  Indicazioni stradali
-                </Button>
-                <Button
-                  component="a"
-                  variant="light"
-                  href={mapsSearchUrl(bookedUnit)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  leftSection={<MapPinned size={16} aria-hidden="true" />}
-                >
-                  Apri in Google Maps
-                </Button>
-              </Group>
-            )}
+            <DetailField label="NRE">
+              <CopyButton value={row.nre} label="Copia NRE" />
+            </DetailField>
           </DetailSection>
-        )}
-        <DetailSection title="Prescrizione">
-          <DetailField label="Data prescrizione">
-            {formatDate(rowDate(row))}
-          </DetailField>
-          <DetailField label="NRE">
-            <CopyButton value={row.nre} label="Copia NRE" />
-          </DetailField>
-        </DetailSection>
-        <DetailSection title="Azioni">
+        </Paper>
+      ),
+    },
+  ];
+
+  return (
+    <DetailDrawer
+      title={rowTitle(row)}
+      badge={
+        <StatusBadge tone={state.tone} manual={state.manual}>
+          {state.label}
+        </StatusBadge>
+      }
+      summary={
+        at === undefined || bookedUnit === undefined ? (
+          <Text size="sm">{`Prescritta il ${formatDate(rowDate(row))}`}</Text>
+        ) : (
+          <>
+            <Text size="sm">
+              {`${formatLongDateTime(at)} · ${relativeDay(at, now)}`}
+            </Text>
+            <Group gap={4} wrap="nowrap">
+              <Text size="sm">{unitName(bookedUnit)}</Text>
+              {bookedUnit.address === "" ? null : (
+                <>
+                  <IconAction
+                    label="Indicazioni stradali"
+                    icon={Navigation}
+                    href={mapsDirectionsUrl(bookedUnit)}
+                    external
+                  />
+                  <IconAction
+                    label="Apri in Google Maps"
+                    icon={MapPinned}
+                    href={mapsSearchUrl(bookedUnit)}
+                    external
+                  />
+                </>
+              )}
+            </Group>
+          </>
+        )
+      }
+      actions={
+        <>
           <ActionsCell
             row={row}
             state={state}
@@ -163,20 +194,22 @@ export function VisitDetailModal({
           />
           <Button
             variant="light"
-            w="fit-content"
+            size="xs"
             loading={refreshing}
-            leftSection={<RefreshCw size={16} aria-hidden="true" />}
+            leftSection={<RefreshCw size={14} aria-hidden="true" />}
             onClick={onRefresh}
           >
             Aggiorna
           </Button>
-        </DetailSection>
-        {updates.length === 0 ? null : (
-          <Text size="xs" c="dimmed">
-            {`Aggiornamenti — ${updates.join(" · ")}`}
-          </Text>
-        )}
-      </Stack>
-    </Modal>
+        </>
+      }
+      tabs={tabs}
+      footer={
+        updates.length === 0
+          ? undefined
+          : `Aggiornamenti — ${updates.join(" · ")}`
+      }
+      onClose={onClose}
+    />
   );
 }

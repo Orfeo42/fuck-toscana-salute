@@ -1,4 +1,12 @@
-import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import {
+  Button,
+  Divider,
+  Group,
+  Modal,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { useState } from "react";
 import type { JSX, SubmitEvent as FormSubmitEvent } from "react";
 
@@ -107,10 +115,18 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
             {error}
           </Text>
         )}
-        <Group justify="space-between">
+        <Button type="submit" loading={busy}>
+          Salva modifiche
+        </Button>
+        <Divider mt="md" />
+        <Stack gap="xs">
+          <Text size="sm" c="dimmed">
+            Elimina il referto caricato e i suoi collegamenti.
+          </Text>
           <Button
-            variant="light"
+            variant="outline"
             color="red"
+            w="fit-content"
             disabled={busy}
             onClick={() => {
               setConfirming(true);
@@ -118,42 +134,41 @@ export function LocalReportEditor({ report, onChanged }: Props): JSX.Element {
           >
             Elimina referto
           </Button>
-          <Button type="submit" loading={busy}>
-            Salva modifiche
-          </Button>
-        </Group>
-      </Stack>
-      <Modal
-        opened={confirming}
-        onClose={() => {
-          setConfirming(false);
-        }}
-        title="Eliminare il referto?"
-        centered
-      >
-        <Stack gap="sm">
-          <Text>Il referto caricato verrà eliminato definitivamente.</Text>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => {
-                setConfirming(false);
-              }}
-            >
-              Annulla
-            </Button>
-            <Button
-              color="red"
-              loading={busy}
-              onClick={() => {
-                void remove();
-              }}
-            >
-              Elimina
-            </Button>
-          </Group>
         </Stack>
-      </Modal>
+      </Stack>
+      {confirming ? (
+        <Modal
+          opened
+          onClose={() => {
+            setConfirming(false);
+          }}
+          title="Eliminare il referto?"
+          centered
+        >
+          <Stack gap="sm">
+            <Text>Il referto caricato verrà eliminato definitivamente.</Text>
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setConfirming(false);
+                }}
+              >
+                Annulla
+              </Button>
+              <Button
+                color="red"
+                loading={busy}
+                onClick={() => {
+                  void remove();
+                }}
+              >
+                Elimina
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+      ) : null}
     </form>
   );
 }

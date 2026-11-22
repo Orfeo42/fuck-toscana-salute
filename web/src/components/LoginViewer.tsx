@@ -22,13 +22,13 @@ export function LoginViewer(): JSX.Element | null {
     setDismissed(false);
   }
 
-  if (!waiting) {
+  if (!waiting || dismissed) {
     return null;
   }
 
   return (
     <Modal
-      opened={!dismissed}
+      opened
       onClose={() => {
         setDismissed(true);
       }}

@@ -464,12 +464,15 @@ describe("VisitsView", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Visita esempio",
     });
-    expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
+    expect(
+      within(dialog).getAllByText(/giovedì 12 novembre 2026/),
+    ).toHaveLength(2);
     expect(within(dialog).getByText("tra 2 giorni")).toBeVisible();
-    expect(within(dialog).getByText("Unita esempio")).toBeVisible();
+    expect(within(dialog).getAllByText("Unita esempio")).toHaveLength(2);
     expect(
       within(dialog).getByText("Via A&B 1/c, 50100 Firenze FI"),
     ).toBeVisible();
+    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
     expect(
       within(dialog).getByRole("button", {
         name: "Copia NRE 0900A0000000001",
@@ -623,11 +626,15 @@ describe("VisitsView", () => {
     expect(
       within(dialog).getByText(/FSE la segna come prenotata/),
     ).toBeVisible();
-    expect(within(dialog).getByText("Prescrizione")).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        `Prescritta il ${formatDate("2026-10-15T09:00:00Z")}`,
+      ),
+    ).toBeVisible();
+    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
     expect(
       within(dialog).getByText(formatDate("2026-10-15T09:00:00Z")),
     ).toBeVisible();
-    expect(within(dialog).getByText("Azioni")).toBeVisible();
     expect(within(dialog).queryByText("Appuntamento")).not.toBeInTheDocument();
     expect(
       within(dialog).queryByRole("link", { name: "Apri in Google Maps" }),
@@ -649,7 +656,9 @@ describe("VisitsView", () => {
       name: "Visita esempio",
     });
     expect(within(dialog).getByText("Appuntamento")).toBeVisible();
-    expect(within(dialog).getByText(/giovedì 12 novembre 2026/)).toBeVisible();
+    expect(
+      within(dialog).getAllByText(/giovedì 12 novembre 2026/),
+    ).toHaveLength(2);
     expect(
       within(dialog).getByRole("link", { name: "Indicazioni stradali" }),
     ).toBeVisible();
@@ -689,6 +698,7 @@ describe("VisitsView", () => {
       name: "Visita esempio",
     });
 
+    await user.click(within(dialog).getByRole("tab", { name: "Prescrizione" }));
     await user.click(
       within(dialog).getByRole("button", { name: "Copia NRE 0900A0000000001" }),
     );
@@ -1633,6 +1643,7 @@ describe("VisitsView manual status and linked reports", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Visita esempio",
     });
+    await user.click(within(dialog).getByRole("tab", { name: /^Referti/ }));
     expect(
       within(dialog).getAllByRole("button", { name: /^Apri referto/ }),
     ).toHaveLength(2);

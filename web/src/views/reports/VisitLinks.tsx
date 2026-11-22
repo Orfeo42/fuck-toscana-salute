@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import { api, type ReportRefBody } from "../../api/client";
+import { CappedList } from "../../components/CappedList";
 import { IconAction } from "../../components/IconAction";
 import { useHealthData } from "../../data/useHealthData";
 import { buildRows, rowTitle } from "../visits/filter";
@@ -70,23 +71,27 @@ export function VisitLinks({
   return (
     <Stack gap="xs">
       {linked.length === 0 ? <Text>Nessuna visita collegata.</Text> : null}
-      {linked.map(({ nre, row }) => (
-        <Group key={nre} justify="space-between" wrap="nowrap">
-          <Stack gap={0}>
-            <Text>{row === undefined ? nre : rowTitle(row)}</Text>
-            <Text size="xs" c="dimmed">
-              {nre}
-            </Text>
-          </Stack>
-          <IconAction
-            label={`Scollega ${nre}`}
-            icon={Unlink}
-            onClick={() => {
-              void change(nre, false);
-            }}
-          />
-        </Group>
-      ))}
+      <CappedList
+        items={linked}
+        getKey={({ nre }) => nre}
+        renderItem={({ nre, row }) => (
+          <Group justify="space-between" wrap="nowrap">
+            <Stack gap={0}>
+              <Text>{row === undefined ? nre : rowTitle(row)}</Text>
+              <Text size="xs" c="dimmed">
+                {nre}
+              </Text>
+            </Stack>
+            <IconAction
+              label={`Scollega ${nre}`}
+              icon={Unlink}
+              onClick={() => {
+                void change(nre, false);
+              }}
+            />
+          </Group>
+        )}
+      />
       <Select
         label="Collega a visita"
         placeholder="Cerca una visita"

@@ -200,6 +200,10 @@ describe("VisitDetailModal status", () => {
   });
 });
 
+async function openReports(): Promise<void> {
+  await userEvent.click(screen.getByRole("tab", { name: /Referti/ }));
+}
+
 describe("VisitDetailModal reports", () => {
   const linkedRef = {
     kind: "lab",
@@ -208,7 +212,7 @@ describe("VisitDetailModal reports", () => {
     repCode: "r1",
   };
 
-  it("lists linked reports and marks local ones", () => {
+  it("lists linked reports and marks local ones", async () => {
     const localRef = {
       kind: "local",
       abstractId: "l1",
@@ -222,6 +226,7 @@ describe("VisitDetailModal reports", () => {
         report("l1", "local"),
       ],
     });
+    await openReports();
     expect(screen.getByText(/Esami del sangue/)).toBeVisible();
     expect(screen.getAllByRole("img", { name: "Caricato da te" })).toHaveLength(
       1,
@@ -234,6 +239,7 @@ describe("VisitDetailModal reports", () => {
       row: visit({ reports: [linkedRef] }),
       reports: [report("a1")],
     });
+    await openReports();
     await user.click(
       screen.getByRole("button", { name: "Apri referto Laboratorio" }),
     );
@@ -246,6 +252,7 @@ describe("VisitDetailModal reports", () => {
       row: visit({ reports: [linkedRef] }),
       reports: [report("a1")],
     });
+    await openReports();
     await user.click(
       screen.getByRole("button", { name: "Scollega referto Laboratorio" }),
     );
@@ -265,6 +272,7 @@ describe("VisitDetailModal reports", () => {
       row: visit({ reports: [linkedRef] }),
       reports: [report("a1"), report("a2", "remote", "Radiografia")],
     });
+    await openReports();
     await user.click(screen.getByRole("combobox", { name: "Collega referto" }));
     expect(screen.queryByRole("option", { name: /Laboratorio/ })).toBeNull();
     await user.click(
@@ -286,6 +294,7 @@ describe("VisitDetailModal reports", () => {
   it("opens the upload dialog with today's date when not booked", async () => {
     const user = userEvent.setup();
     renderModal();
+    await openReports();
     await user.click(screen.getByRole("button", { name: "Carica referto" }));
     expect(await screen.findByText("upload aperto")).toBeVisible();
     expect(mocks.upload).toHaveBeenLastCalledWith(
@@ -304,6 +313,7 @@ describe("VisitDetailModal reports", () => {
   it("defaults the upload date and provider from the appointment", async () => {
     const user = userEvent.setup();
     renderModal({ booked: true });
+    await openReports();
     await user.click(screen.getByRole("button", { name: "Carica referto" }));
     expect(mocks.upload).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -311,5 +321,92 @@ describe("VisitDetailModal reports", () => {
         defaultProvider: "Unita esempio",
       }),
     );
+  });
+});
+
+describe("VisitDetailModal reports tab", () => {
+  const refs = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({
+    kind: "lab",
+    abstractId: id,
+    detailId: "d1",
+    repCode: "r1",
+  }));
+
+  it("caps the linked list and shows the count", async () => {
+    renderModal({
+      row: visit({ reports: refs }),
+      reports: refs.map((ref) => report(ref.abstractId)),
+    });
+    expect(screen.getByRole("tab", { name: /Referti/ })).toHaveTextContent("7");
+    await openReports();
+    expect(
+      screen.getAllByRole("button", { name: /Apri referto/ }),
+    ).toHaveLength(5);
+    expect(
+      screen.getByRole("button", { name: "Mostra altri 2" }),
+    ).toBeVisible();
+  });
+
+  it("does not mount the upload dialog until opened", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await openReports();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Carica referto" }));
+    expect(mocks.upload).toHaveBeenCalled();
+  });
+});
+
+describe("VisitDetailModal layout", () => {
+  it("shows title, badge and the prescription date when not booked", () => {
+    renderModal();
+    expect(
+      screen.getByRole("dialog", { name: "Visita esempio" }),
+    ).toBeVisible();
+    expect(screen.getByText("Prescritta il", { exact: false })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Aggiorna" })).toBeVisible();
+  });
+
+  it("calls onRefresh from the actions", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    const row = visit();
+    render(
+      <VisitDetailModal
+        row={row}
+        state={effectiveState(row, new Map(), new Set(), now)}
+        booking={undefined}
+        now={now}
+        appointmentCheckedAt={undefined}
+        refreshing={false}
+        reports={[]}
+        onChanged={vi.fn()}
+        onRefresh={onRefresh}
+        onClose={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Aggiorna" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the booked summary with map links", () => {
+    renderModal({ booked: true });
+    expect(screen.getByText(/· tra \d+ giorni|· domani|· oggi/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Indicazioni stradali" }),
+    ).toHaveAttribute("href", expect.stringContaining("google"));
+    expect(
+      screen.getByRole("link", { name: "Apri in Google Maps" }),
+    ).toHaveAttribute("target", "_blank");
+    expect(screen.getAllByText("Unita esempio").length).toBeGreaterThan(0);
+  });
+
+  it("shows the NRE copy button on the prescription tab", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await user.click(screen.getByRole("tab", { name: "Prescrizione" }));
+    expect(
+      screen.getByRole("button", { name: `Copia NRE ${nre}` }),
+    ).toBeVisible();
   });
 });

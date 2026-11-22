@@ -123,6 +123,23 @@ function mockDocuments(blob: Blob, label = "Documento"): void {
   );
 }
 
+function mockDocumentList(count: number): void {
+  const documents = Array.from({ length: count }, (_, index) => ({
+    position: String(index + 1),
+    label: `Documento ${String(index + 1)}`,
+  }));
+  mocks.post.mockResolvedValue({
+    data: { documents },
+    response: { status: 200 },
+  });
+}
+
+async function openTab(name: string): Promise<void> {
+  await userEvent.click(
+    await screen.findByRole("tab", { name: new RegExp(name) }),
+  );
+}
+
 describe("ReportDetailModal", () => {
   beforeEach(() => {
     mocks.post.mockReset();
@@ -133,6 +150,92 @@ describe("ReportDetailModal", () => {
     createUrl.mockClear();
     URL.createObjectURL = createUrl;
     URL.revokeObjectURL = vi.fn();
+  });
+
+  describe("layout", () => {
+    it("names the drawer by the title and shows provider and date", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(remote);
+
+      expect(
+        await screen.findByRole("dialog", { name: "Laboratorio" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("Ospedale Esempio · gio 1 ott 2026"),
+      ).toBeVisible();
+      expect(screen.queryByText("Caricato")).toBeNull();
+    });
+
+    it("shows the Caricato badge and the title for a local report", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(local);
+
+      expect(
+        await screen.findByRole("dialog", { name: "Ecografia addome" }),
+      ).toBeVisible();
+      expect(screen.getByText("Caricato")).toBeVisible();
+    });
+
+    it("has the open button in the header for a single document", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(local);
+
+      expect(
+        await screen.findByRole("button", { name: "Apri documento" }),
+      ).toBeVisible();
+      expect(screen.getByRole("tab", { name: /Documenti/ })).toHaveTextContent(
+        "1",
+      );
+    });
+
+    it("lists several documents in the tab without a header button", async () => {
+      mockDocumentList(2);
+      render(local);
+
+      expect(await screen.findByText("Documento 1")).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Apri documento" }),
+      ).toBeNull();
+      expect(screen.getAllByRole("button", { name: "Apri" })).toHaveLength(2);
+      expect(screen.getByRole("tab", { name: /Documenti/ })).toHaveTextContent(
+        "2",
+      );
+    });
+
+    it("caps long document lists", async () => {
+      mockDocumentList(7);
+      render(remote);
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Mostra altri 2" }),
+      );
+
+      expect(screen.getByText("Documento 7")).toBeVisible();
+    });
+
+    it("shows the linked visits tab with its count", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(local);
+
+      expect(
+        await screen.findByRole("tab", { name: /Visite collegate/ }),
+      ).toHaveTextContent("1");
+    });
+
+    it("shows the edit tab only for local reports", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(local);
+      expect(
+        await screen.findByRole("tab", { name: "Modifica" }),
+      ).toBeVisible();
+    });
+
+    it("has no edit tab for remote reports", async () => {
+      mockDocuments(new Blob(["pdf"]));
+      render(remote);
+      await screen.findByRole("button", { name: "Apri PDF" });
+      expect(screen.queryByRole("tab", { name: "Modifica" })).toBeNull();
+    });
   });
 
   describe("viewer selection", () => {
@@ -155,7 +258,7 @@ describe("ReportDetailModal", () => {
       render(local);
 
       await userEvent.click(
-        await screen.findByRole("button", { name: "Apri" }),
+        await screen.findByRole("button", { name: "Apri documento" }),
       );
 
       const image = await screen.findByRole("img", { name: "Radiografia" });
@@ -167,25 +270,26 @@ describe("ReportDetailModal", () => {
     });
   });
 
-  describe("remote report", () => {
-    it("has no edit section", async () => {
-      mockDocuments(new Blob(["pdf"]));
-      render(remote);
-      await screen.findByRole("button", { name: "Apri PDF" });
-
-      expect(
-        screen.queryByRole("button", { name: "Elimina referto" }),
-      ).toBeNull();
-    });
-  });
-
   describe("local report", () => {
     beforeEach(() => {
       mockDocuments(new Blob(["pdf"], { type: "application/pdf" }));
     });
 
+    it("mounts the confirmation only once deletion is requested", async () => {
+      render(local);
+      await openTab("Modifica");
+
+      expect(screen.queryByText("Eliminare il referto?")).toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Elimina referto" }),
+      );
+
+      expect(await screen.findByText("Eliminare il referto?")).toBeVisible();
+    });
+
     it("prefills the editor and saves the changes", async () => {
       const { onChanged, onClose } = render(local);
+      await openTab("Modifica");
 
       expect(await screen.findByLabelText("Titolo")).toHaveValue(
         "Ecografia addome",
@@ -215,6 +319,7 @@ describe("ReportDetailModal", () => {
 
     it("requires a title", async () => {
       render(local);
+      await openTab("Modifica");
 
       await userEvent.clear(await screen.findByLabelText("Titolo"));
       await userEvent.click(
@@ -228,6 +333,7 @@ describe("ReportDetailModal", () => {
     it("shows an error when saving fails", async () => {
       mocks.put.mockResolvedValue({ response: { ok: false } });
       const { onChanged } = render(local);
+      await openTab("Modifica");
 
       await userEvent.click(
         await screen.findByRole("button", { name: "Salva modifiche" }),
@@ -240,6 +346,7 @@ describe("ReportDetailModal", () => {
     it("asks for an in-app confirmation before deleting", async () => {
       const confirm = vi.spyOn(window, "confirm");
       const { onChanged, onClose } = render(local);
+      await openTab("Modifica");
 
       await userEvent.click(
         await screen.findByRole("button", { name: "Elimina referto" }),
@@ -264,6 +371,7 @@ describe("ReportDetailModal", () => {
 
     it("does not delete when the confirmation is dismissed", async () => {
       render(local);
+      await openTab("Modifica");
 
       await userEvent.click(
         await screen.findByRole("button", { name: "Elimina referto" }),
@@ -278,6 +386,7 @@ describe("ReportDetailModal", () => {
     it("shows an error when deleting fails", async () => {
       mocks.del.mockResolvedValue({ response: { ok: false } });
       const { onChanged } = render(local);
+      await openTab("Modifica");
 
       await userEvent.click(
         await screen.findByRole("button", { name: "Elimina referto" }),
@@ -300,19 +409,28 @@ describe("ReportDetailModal", () => {
 
     it("lists the linked visits resolved to their description", async () => {
       render(local);
+      await openTab("Visite collegate");
 
-      const section = (await screen.findByText("Visite collegate")).closest(
-        "section",
-      );
-      expect(section).not.toBeNull();
       expect(screen.getAllByText("0123A").length).toBeGreaterThan(0);
       expect(
         screen.getByRole("button", { name: "Scollega 0123A" }),
       ).toBeVisible();
     });
 
+    it("caps long lists of linked visits", async () => {
+      const many = Array.from({ length: 7 }, (_, i) => `0${String(i)}Z`);
+      render({ ...local, nres: many });
+      await openTab("Visite collegate");
+
+      expect(
+        await screen.findByRole("button", { name: "Mostra altri 2" }),
+      ).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Scollega 06Z" })).toBeNull();
+    });
+
     it("says when there are no linked visits", async () => {
       render(remote);
+      await openTab("Visite collegate");
 
       expect(
         await screen.findByText("Nessuna visita collegata."),
@@ -322,6 +440,7 @@ describe("ReportDetailModal", () => {
     it("unlinks a visit", async () => {
       mocks.del.mockResolvedValue({ response: { ok: true } });
       const { onChanged } = render(local);
+      await openTab("Visite collegate");
 
       await userEvent.click(
         await screen.findByRole("button", { name: "Scollega 0123A" }),
@@ -348,6 +467,7 @@ describe("ReportDetailModal", () => {
 
     it("links a visit not yet linked and offers only unlinked ones", async () => {
       const { onChanged } = render(local);
+      await openTab("Visite collegate");
 
       await userEvent.click(
         await screen.findByRole("combobox", { name: "Collega a visita" }),
@@ -383,6 +503,7 @@ describe("ReportDetailModal", () => {
     it("shows an error when linking fails", async () => {
       mocks.put.mockResolvedValue({ response: { ok: false } });
       const { onChanged } = render(remote);
+      await openTab("Visite collegate");
 
       await userEvent.click(
         await screen.findByRole("combobox", { name: "Collega a visita" }),

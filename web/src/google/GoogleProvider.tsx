@@ -167,7 +167,9 @@ export function GoogleProvider({ children }: Props): JSX.Element {
   return (
     <GoogleContext value={value}>
       {children}
-      <GoogleSettingsModal opened={settingsOpen} onClose={closeSettings} />
+      {settingsOpen ? (
+        <GoogleSettingsModal opened onClose={closeSettings} />
+      ) : null}
     </GoogleContext>
   );
 }

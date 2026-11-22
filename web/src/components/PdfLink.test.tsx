@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -30,6 +30,21 @@ describe("PdfLink", () => {
       "href",
       "/api/documents/prescription?ref=a%2Fb+c%26d%3D1",
     );
+  });
+
+  it("removes the viewer dialog from the DOM after closing", async () => {
+    const user = userEvent.setup();
+    render(<PdfLink documentRef="ref1" />);
+    await user.click(
+      screen.getByRole("button", { name: "Apri ricetta (PDF)" }),
+    );
+    await screen.findByRole("dialog", { name: "Ricetta" });
+
+    await user.click(screen.getByRole("button", { name: "Chiudi" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("is not a link anymore", () => {

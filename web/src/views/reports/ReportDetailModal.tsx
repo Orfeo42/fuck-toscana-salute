@@ -1,6 +1,14 @@
-import { Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
-import { FileText } from "lucide-react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { FileText, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
@@ -9,7 +17,8 @@ import {
   type ReportBody,
   type ReportDocumentBody,
 } from "../../api/client";
-import { DetailField, DetailSection } from "../../components/DetailSection";
+import { CappedList } from "../../components/CappedList";
+import { DetailDrawer } from "../../components/DetailDrawer";
 import { ImageViewerModal } from "../../components/ImageViewerModal";
 import { PdfViewerModal } from "../../components/PdfViewerModal";
 import { blobToDataUrl } from "../../lib/blob";
@@ -47,7 +56,6 @@ export function ReportDetailModal({
   onClose,
   onChanged,
 }: Props): JSX.Element {
-  const fullScreen = useMediaQuery("(max-width: 48em)");
   const [result, setResult] = useState<DocumentsResult | undefined>(undefined);
   const [viewer, setViewer] = useState<Viewer | undefined>(undefined);
   const [nres, setNres] = useState<readonly string[]>(report.nres ?? []);
@@ -135,95 +143,155 @@ export function ReportDetailModal({
     }
   };
 
-  return (
-    <Modal
-      opened
-      onClose={onClose}
-      title={`${local ? (report.title ?? report.kindLabel) : report.kindLabel} · ${formatDate(report.date)}`}
-      fullScreen={fullScreen}
-      centered
-    >
-      <Stack gap="lg">
-        <DetailSection title="Struttura">
-          <DetailField label="Struttura">{report.provider}</DetailField>
-        </DetailSection>
-        <DetailSection title="Documenti">
-          {result === undefined ? (
-            <Group gap="xs">
-              <Loader size="sm" />
-              <Text>Carico i documenti…</Text>
-            </Group>
-          ) : null}
-          {result?.error === undefined ? null : (
-            <Text c="red" role="alert">
-              {result.error}
-            </Text>
-          )}
-          {result !== undefined &&
-          result.error === undefined &&
-          result.documents.length === 0 ? (
-            <Text>Nessun documento disponibile.</Text>
-          ) : null}
-          {result?.documents.map((document) => (
-            <Group
-              key={`${document.position}|${document.label}`}
-              justify="space-between"
-              wrap="nowrap"
-            >
-              <Stack gap={0}>
-                <Text>{document.label}</Text>
-                {document.acceptedAt === undefined ? null : (
-                  <Text size="xs" c="dimmed">
-                    {formatDateTime(document.acceptedAt)}
-                  </Text>
+  const documents = result?.documents;
+  const singleDocument = documents?.length === 1 ? documents[0] : undefined;
+  const summary = [report.provider, report.date ? formatDate(report.date) : ""]
+    .filter((part) => part !== "")
+    .join(" · ");
+  const openLabel = local ? "Apri documento" : "Apri PDF";
+
+  const documentsTab = (
+    <>
+      {result === undefined ? (
+        <Group gap="xs">
+          <Loader size="sm" />
+          <Text>Carico i documenti…</Text>
+        </Group>
+      ) : null}
+      {result?.error === undefined ? null : (
+        <Text c="red" role="alert">
+          {result.error}
+        </Text>
+      )}
+      {result !== undefined &&
+      result.error === undefined &&
+      result.documents.length === 0 ? (
+        <Text>Nessun documento disponibile.</Text>
+      ) : null}
+      {documents === undefined ? null : (
+        <CappedList
+          items={documents}
+          getKey={(document) => `${document.position}|${document.label}`}
+          renderItem={(document) => (
+            <Paper withBorder p="xs">
+              <Group justify="space-between" wrap="nowrap">
+                <Stack gap={0}>
+                  <Text>{document.label}</Text>
+                  {document.acceptedAt === undefined ? null : (
+                    <Text size="xs" c="dimmed">
+                      {formatDateTime(document.acceptedAt)}
+                    </Text>
+                  )}
+                </Stack>
+                {documents.length === 1 ? null : (
+                  <Button
+                    variant="light"
+                    size="compact-sm"
+                    leftSection={<FileText size={16} aria-hidden="true" />}
+                    loading={opening === document.position}
+                    disabled={opening !== undefined}
+                    onClick={() => {
+                      void openPdf(document);
+                    }}
+                  >
+                    {local ? "Apri" : "Apri PDF"}
+                  </Button>
                 )}
-              </Stack>
-              <Button
-                variant="light"
-                size="compact-sm"
-                leftSection={<FileText size={16} aria-hidden="true" />}
-                loading={opening === document.position}
-                disabled={opening !== undefined}
-                onClick={() => {
-                  void openPdf(document);
-                }}
-              >
-                {local ? "Apri" : "Apri PDF"}
-              </Button>
-            </Group>
-          ))}
-          {pdfError === undefined ? null : (
-            <Text c="red" role="alert">
-              {pdfError}
-            </Text>
+              </Group>
+            </Paper>
           )}
-        </DetailSection>
-        <DetailSection title="Visite collegate">
-          <VisitLinks
-            reportRef={reportRef}
-            nres={nres}
-            onLinked={(nre) => {
-              setNres([...nres, nre]);
-              notifyChanged();
-            }}
-            onUnlinked={(nre) => {
-              setNres(nres.filter((item) => item !== nre));
-              notifyChanged();
-            }}
-          />
-        </DetailSection>
-        {local ? (
-          <DetailSection title="Modifica">
-            <LocalReportEditor
-              report={report}
-              onChanged={() => {
-                notifyChanged();
-                onClose();
+        />
+      )}
+      {pdfError === undefined ? null : (
+        <Alert color="red" role="alert">
+          {pdfError}
+        </Alert>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <DetailDrawer
+        title={local ? (report.title ?? report.kindLabel) : report.kindLabel}
+        badge={
+          local ? (
+            <Badge
+              variant="light"
+              leftSection={<Upload size={12} aria-hidden="true" />}
+            >
+              Caricato
+            </Badge>
+          ) : undefined
+        }
+        summary={
+          summary === "" ? undefined : (
+            <Text size="sm" c="dimmed">
+              {summary}
+            </Text>
+          )
+        }
+        actions={
+          singleDocument === undefined ? undefined : (
+            <Button
+              size="compact-md"
+              leftSection={<FileText size={16} aria-hidden="true" />}
+              loading={opening === singleDocument.position}
+              disabled={opening !== undefined}
+              onClick={() => {
+                void openPdf(singleDocument);
               }}
-            />
-          </DetailSection>
-        ) : null}
-      </Stack>
+            >
+              {openLabel}
+            </Button>
+          )
+        }
+        tabs={[
+          {
+            value: "documenti",
+            label: "Documenti",
+            ...(documents === undefined ? {} : { count: documents.length }),
+            content: documentsTab,
+          },
+          {
+            value: "visite",
+            label: "Visite collegate",
+            count: nres.length,
+            content: (
+              <VisitLinks
+                reportRef={reportRef}
+                nres={nres}
+                onLinked={(nre) => {
+                  setNres([...nres, nre]);
+                  notifyChanged();
+                }}
+                onUnlinked={(nre) => {
+                  setNres(nres.filter((item) => item !== nre));
+                  notifyChanged();
+                }}
+              />
+            ),
+          },
+          ...(local
+            ? [
+                {
+                  value: "modifica",
+                  label: "Modifica",
+                  content: (
+                    <LocalReportEditor
+                      report={report}
+                      onChanged={() => {
+                        notifyChanged();
+                        onClose();
+                      }}
+                    />
+                  ),
+                },
+              ]
+            : []),
+        ]}
+        onClose={onClose}
+      />
       {viewer?.kind === "pdf" ? (
         <PdfViewerModal
           url={viewer.url}
@@ -244,6 +312,6 @@ export function ReportDetailModal({
           }}
         />
       ) : null}
-    </Modal>
+    </>
   );
 }

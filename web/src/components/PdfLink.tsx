@@ -31,14 +31,16 @@ export function PdfLink({
           setOpened(true);
         }}
       />
-      <PdfViewerModal
-        url={prescriptionPdfUrl(documentRef)}
-        title="Ricetta"
-        opened={opened}
-        onClose={() => {
-          setOpened(false);
-        }}
-      />
+      {opened ? (
+        <PdfViewerModal
+          url={prescriptionPdfUrl(documentRef)}
+          title="Ricetta"
+          opened
+          onClose={() => {
+            setOpened(false);
+          }}
+        />
+      ) : null}
     </>
   );
 }

@@ -29,14 +29,16 @@ export function PromemoriaLink({
           setOpened(true);
         }}
       />
-      <PdfViewerModal
-        url={bookingPdfUrl(bookingId)}
-        title="Promemoria"
-        opened={opened}
-        onClose={() => {
-          setOpened(false);
-        }}
-      />
+      {opened ? (
+        <PdfViewerModal
+          url={bookingPdfUrl(bookingId)}
+          title="Promemoria"
+          opened
+          onClose={() => {
+            setOpened(false);
+          }}
+        />
+      ) : null}
     </>
   );
 }

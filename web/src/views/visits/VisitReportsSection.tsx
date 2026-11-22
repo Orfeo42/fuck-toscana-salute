@@ -18,6 +18,7 @@ import {
   type ReportBody,
   type RowBody,
 } from "../../api/client";
+import { CappedList } from "../../components/CappedList";
 import { formatDate } from "../../lib/format";
 import { ReportDetailModal } from "../reports/ReportDetailModal";
 import { UploadReportDialog } from "../reports/UploadReportDialog";
@@ -119,36 +120,40 @@ export function VisitReportsSection({
           Nessun referto collegato.
         </Text>
       ) : null}
-      {linked.map((report) => (
-        <Group key={reportKey(report)} gap="xs" wrap="nowrap">
-          {report.origin === "local" ? (
-            <Tooltip label="Caricato da te" withArrow openDelay={150}>
-              <Upload size={16} role="img" aria-label="Caricato da te" />
-            </Tooltip>
-          ) : null}
-          <UnstyledButton
-            aria-label={`Apri referto ${reportLabel(report)}`}
-            onClick={() => {
-              setOpenReport(report);
-            }}
-          >
-            <Text size="sm" span>
-              {`${reportLabel(report)} · ${formatDate(report.date)} · ${report.provider}`}
-            </Text>
-          </UnstyledButton>
-          <Tooltip label="Scollega referto" withArrow openDelay={150}>
-            <ActionIcon
-              variant="subtle"
-              aria-label={`Scollega referto ${reportLabel(report)}`}
+      <CappedList
+        items={linked}
+        getKey={reportKey}
+        renderItem={(report) => (
+          <Group gap="xs" wrap="nowrap">
+            {report.origin === "local" ? (
+              <Tooltip label="Caricato da te" withArrow openDelay={150}>
+                <Upload size={16} role="img" aria-label="Caricato da te" />
+              </Tooltip>
+            ) : null}
+            <UnstyledButton
+              aria-label={`Apri referto ${reportLabel(report)}`}
               onClick={() => {
-                void unlink(report);
+                setOpenReport(report);
               }}
             >
-              <Unlink size={16} aria-hidden="true" />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      ))}
+              <Text size="sm" span>
+                {`${reportLabel(report)} · ${formatDate(report.date)} · ${report.provider}`}
+              </Text>
+            </UnstyledButton>
+            <Tooltip label="Scollega referto" withArrow openDelay={150}>
+              <ActionIcon
+                variant="subtle"
+                aria-label={`Scollega referto ${reportLabel(report)}`}
+                onClick={() => {
+                  void unlink(report);
+                }}
+              >
+                <Unlink size={16} aria-hidden="true" />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        )}
+      />
       <Select
         label="Collega referto"
         placeholder="Cerca un referto"
@@ -172,20 +177,22 @@ export function VisitReportsSection({
       >
         Carica referto
       </Button>
-      <UploadReportDialog
-        opened={uploading}
-        onClose={() => {
-          setUploading(false);
-        }}
-        onUploaded={() => {
-          setUploading(false);
-          onChanged();
-        }}
-        nre={row.nre}
-        defaultTitle={rowTitle(row)}
-        defaultDate={defaultDate}
-        {...(unit === undefined ? {} : { defaultProvider: unitName(unit) })}
-      />
+      {uploading ? (
+        <UploadReportDialog
+          opened
+          onClose={() => {
+            setUploading(false);
+          }}
+          onUploaded={() => {
+            setUploading(false);
+            onChanged();
+          }}
+          nre={row.nre}
+          defaultTitle={rowTitle(row)}
+          defaultDate={defaultDate}
+          {...(unit === undefined ? {} : { defaultProvider: unitName(unit) })}
+        />
+      ) : null}
       {openReport === undefined ? null : (
         <ReportDetailModal
           report={openReport}

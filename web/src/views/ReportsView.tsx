@@ -287,13 +287,15 @@ export function ReportsView({ now }: Props = {}): JSX.Element {
           onChanged={reports.reload}
         />
       )}
-      <UploadReportDialog
-        opened={uploadOpen}
-        onClose={() => {
-          setUploadOpen(false);
-        }}
-        onUploaded={reports.reload}
-      />
+      {uploadOpen ? (
+        <UploadReportDialog
+          opened
+          onClose={() => {
+            setUploadOpen(false);
+          }}
+          onUploaded={reports.reload}
+        />
+      ) : null}
     </section>
   );
 }

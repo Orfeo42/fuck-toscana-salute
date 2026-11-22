@@ -34,20 +34,27 @@ vi.mock("../api/client", () => ({
 vi.mock("./reports/UploadReportDialog", () => ({
   UploadReportDialog: ({
     opened,
+    onClose,
     onUploaded,
   }: {
     opened: boolean;
+    onClose: () => void;
     onUploaded: (report: ReportBody) => void;
   }) =>
     opened ? (
-      <button
-        type="button"
-        onClick={() => {
-          onUploaded(lab);
-        }}
-      >
-        Simula caricamento
-      </button>
+      <div role="dialog" aria-label="Carica referto">
+        <button
+          type="button"
+          onClick={() => {
+            onUploaded(lab);
+          }}
+        >
+          Simula caricamento
+        </button>
+        <button type="button" onClick={onClose}>
+          Chiudi finestra
+        </button>
+      </div>
     ) : null,
 }));
 
@@ -321,6 +328,25 @@ describe("ReportsView", () => {
       expect(mocks.get).toHaveBeenCalledTimes(2);
     });
     expect(screen.getByText("Clinica Prova")).toBeVisible();
+  });
+
+  it("mounts the upload dialog only while open", async () => {
+    mockList(body());
+    render(<ReportsView now={now} />);
+    await screen.findByText("Clinica Prova");
+    expect(screen.queryByRole("dialog", { name: "Carica referto" })).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Carica referto" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Carica referto" }),
+    ).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Chiudi finestra" }),
+    );
+    expect(screen.queryByRole("dialog", { name: "Carica referto" })).toBeNull();
   });
 
   it("shows the empty state", async () => {
